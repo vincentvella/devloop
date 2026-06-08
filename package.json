@@ -1,0 +1,25 @@
+{
+  "name": "devloop-mcp",
+  "version": "0.0.1",
+  "description": "Unified dev-loop: one MCP server exposing browser control + dev-server logs on a correlated timeline. Headless (stdio) or Electron cockpit (HTTP).",
+  "type": "module",
+  "bin": {
+    "devloop-mcp": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "app:build": "bun run cockpit/build.ts",
+    "app": "bun run app:build && electron out/main.cjs",
+    "app:selftest": "bun run app:build && DEVLOOP_SELFTEST=1 electron out/main.cjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "puppeteer": "^25.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "electron": "^42.3.3",
+    "typescript": "^5.6.0"
+  }
+}
