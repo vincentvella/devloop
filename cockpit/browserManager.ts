@@ -33,6 +33,15 @@ export class BrowserManager implements IBrowserManager {
     await this.newPane(); // always have one pane
   }
 
+  /** Fire onChange, but never let a listener error (e.g. a destroyed window) break teardown. */
+  private notify(): void {
+    try {
+      this.onChange?.();
+    } catch {
+      /* ignore */
+    }
+  }
+
   private active(): ElectronBrowserController {
     const p = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (!p) throw new Error("no active browser pane");
@@ -52,7 +61,7 @@ export class BrowserManager implements IBrowserManager {
     win.on("closed", () => {
       this.panes.delete(id);
       if (this.activeId === id) this.activeId = this.panes.keys().next().value;
-      this.onChange?.();
+      this.notify();
     });
     await win.loadURL("about:blank");
     const ctl = new ElectronBrowserController(this.buffer, win.webContents, this.opts, id);
@@ -60,7 +69,7 @@ export class BrowserManager implements IBrowserManager {
     this.panes.set(id, { id, win, ctl });
     this.activeId = id;
     if (url) await ctl.navigate(url);
-    this.onChange?.();
+    this.notify();
     return this.info(id);
   }
 
@@ -72,7 +81,7 @@ export class BrowserManager implements IBrowserManager {
     if (!this.panes.has(id)) throw new Error(`no pane "${id}"`);
     this.activeId = id;
     if (!this.offscreen) this.panes.get(id)!.win.focus();
-    this.onChange?.();
+    this.notify();
     return this.info(id);
   }
 

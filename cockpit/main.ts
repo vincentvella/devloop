@@ -250,7 +250,9 @@ async function main() {
     },
     SELFTEST,
   );
-  manager.onChange = () => timelineWin?.webContents.send("devloop:panesChanged");
+  manager.onChange = () => {
+    if (timelineWin && !timelineWin.isDestroyed()) timelineWin.webContents.send("devloop:panesChanged");
+  };
   await manager.start();
   log("manager started");
   configureTools({ buffer, browser: manager, devServer });
@@ -361,13 +363,16 @@ async function runSelfTest() {
     taggedRight &&
     builderOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
-  app.quit();
+  // Exit via the real user path — close the control window with panes still open.
+  // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").
+  timelineWin!.close();
 }
 
 /** Kill everything we started: dev-server process group, browser panes, HTTP server. */
 function cleanup(): void {
   if (cleanedUp) return;
   cleanedUp = true;
+  if (manager) manager.onChange = undefined; // stop notifying a window that's tearing down
   try {
     devServer.stop();
   } catch (e) {
