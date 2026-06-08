@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("devloop", {
   paneSelect: (id: string) => ipcRenderer.invoke("devloop:paneSelect", id),
   paneClose: (id: string) => ipcRenderer.invoke("devloop:paneClose", id),
   repro: (args: unknown) => ipcRenderer.invoke("devloop:repro", args),
+  session: () => ipcRenderer.invoke("devloop:session"),
+  sessionSave: (s: unknown) => ipcRenderer.invoke("devloop:sessionSave", s),
   onPanesChanged: (cb: () => void) => {
     const handler = () => cb();
     ipcRenderer.on("devloop:panesChanged", handler);

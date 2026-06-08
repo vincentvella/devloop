@@ -58,8 +58,8 @@ bunx puppeteer browsers install chrome   # headless mode, if no bundled Chromium
   - `continueOnError` (default false) — otherwise stops at the failing step (`stoppedAtStep`).
 
 **Project registry** — saved projects, persisted to `~/.devloop/projects.json`
-- `project_list()` — list saved projects (name, cwd, cmd, url).
-- `project_add({ name, cwd, cmd?, url? })` — save/replace a project, so you can `dev_start({ project })` by name.
+- `project_list()` — list saved projects (name, cwd, cmd, url, steps).
+- `project_add({ name, cwd, cmd?, url?, steps? })` — save/replace a project (incl. a saved repro `steps` sequence), so you can `dev_start({ project })` by name.
 - `project_remove({ name })`.
 
 **Panes** — multi-target (cockpit only; stdio mode is single-pane and reports so)
@@ -105,9 +105,11 @@ Two windows open:
 - **app pane(s)** — the embedded browser (a real Chromium `webContents` driven via CDP). Multiple panes = multiple targets.
 - **timeline** — the control surface:
   - **pane tabs** — `all | pane-1 | … | + pane`; click to select (also filters the timeline to that pane), `×` to close. Updates live whether panes change from the UI or from Claude.
-  - **project picker** — dropdown of saved projects + **open** (dev_start + navigate to its URL) + **📁 browse** (native folder dialog → fills cwd) + **save as**.
-  - **repro builder** — `+ step` / `run ▶`; assemble an action sequence and run it through the same `repro` tool.
-  - **dev server** start/stop + status, a **URL bar**, and the live event list with per-source coloring, target tags, substring filter, and **errors only**.
+  - **project picker** — dropdown of saved projects; selecting one fills the whole form (cmd/cwd/url **and** repro steps), **open** runs it (dev_start + navigate), **📁 browse** opens a native folder dialog → fills cwd, **save** snapshots the current form (including the builder steps) as a named project.
+  - **repro builder** — `+ step` / `run ▶`; assemble an action sequence and run it through the same `repro` tool. Results render **inline in the timeline** (per-step ✓/✗ plus the correlated error list).
+  - **dev server** start/stop + status, a **URL bar** (accepts a bare port like `3000` → `http://localhost:3000`, or any `http(s)://` URL / host), and the live event list with per-source coloring, target tags, substring filter, and **errors only**.
+
+**Session persistence:** the last-used setup — dev cmd/cwd, URL, and repro steps — is saved to `~/.devloop/session.json` and **restored when the cockpit reopens**, so you pick up where you left off even without a named project.
 
 The cockpit serves the same tools over **MCP-over-HTTP** (stateful sessions). It auto-picks a free port starting at `DEVLOOP_HTTP_PORT` (default 7333) and logs the URL. Point Claude at the running cockpit:
 
@@ -159,7 +161,6 @@ bun run app:selftest    # headless Electron: 8-stage check — substrate→buffe
 ## Where to take it next
 
 - **Network bodies** — capture request/response payloads via `Network.*` CDP events (currently method/status/url).
-- **Render `repro` results inline** in the timeline (currently a one-line summary).
 - **Self-healing re-acquire for Electron panes** (the Puppeteer substrate already recovers from target loss).
 
-_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer) · project registry · Electron cockpit with multi-pane targets, project picker, folder browse, and visual repro builder · MCP-over-HTTP · clean process-group teardown._
+_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer) · project registry (with saved repro steps) · session persistence (restored on relaunch) · Electron cockpit with multi-pane targets, project picker, folder browse, port/URL bar, and visual repro builder · MCP-over-HTTP · clean process-group teardown._

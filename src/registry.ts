@@ -8,6 +8,14 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
+export interface ReproStep {
+  kind: string;
+  url?: string;
+  selector?: string;
+  text?: string;
+  expression?: string;
+}
+
 export interface Project {
   name: string;
   cwd: string;
@@ -15,10 +23,21 @@ export interface Project {
   cmd?: string;
   /** Default URL to open in the browser pane. */
   url?: string;
+  /** Saved repro action sequence for this project. */
+  steps?: ReproStep[];
+}
+
+/** Last-used setup, restored when the cockpit reopens (no name required). */
+export interface Session {
+  cmd?: string;
+  cwd?: string;
+  url?: string;
+  steps?: ReproStep[];
 }
 
 const DIR = process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop");
 const FILE = join(DIR, "projects.json");
+const SESSION_FILE = join(DIR, "session.json");
 
 export function listProjects(): Project[] {
   try {
@@ -52,4 +71,17 @@ export function removeProject(name: string): Project[] {
   const projects = listProjects().filter((x) => x.name !== name);
   saveAll(projects);
   return projects;
+}
+
+export function getSession(): Session {
+  try {
+    return JSON.parse(readFileSync(SESSION_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export function setSession(s: Session): void {
+  mkdirSync(DIR, { recursive: true });
+  writeFileSync(SESSION_FILE, JSON.stringify(s, null, 2));
 }

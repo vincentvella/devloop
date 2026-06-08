@@ -32,7 +32,7 @@ import {
 import { LogBuffer } from "../src/logBuffer.ts";
 import { DevServer, detectDevCommand } from "../src/devServer.ts";
 import { TOOLS, handleTool, configureTools } from "../src/toolLayer.ts";
-import { listProjects, addProject, getProject } from "../src/registry.ts";
+import { listProjects, addProject, getProject, getSession, setSession } from "../src/registry.ts";
 import { BrowserManager } from "./browserManager.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
@@ -196,6 +196,10 @@ function wireIpc(): void {
   ipcMain.handle("devloop:paneSelect", (_e, id: string) => manager.selectPane(id));
   ipcMain.handle("devloop:paneClose", (_e, id: string) => manager.closePane(id));
 
+  // Session: last-used setup, restored on relaunch.
+  ipcMain.handle("devloop:session", () => getSession());
+  ipcMain.handle("devloop:sessionSave", (_e, s) => setSession(s));
+
   // Repro builder — run an action sequence through the shared tool layer.
   ipcMain.handle("devloop:repro", async (_e, args) => {
     const res = await handleTool("repro", args ?? {});
@@ -325,17 +329,21 @@ async function runSelfTest() {
   const taggedRight = p2Event?.target === pane2.id;
   console.log(`SELFTEST panes: count=${paneList.panes.length} pane2=${pane2.id} eventTarget=${p2Event?.target} tagged=${taggedRight}`);
 
-  // 7) repro builder: drive it from the renderer (add a step, run) and confirm a result
+  // 7) repro builder: drive the real "run ▶" button, confirm inline render + session persistence
   const builder = (await tl.executeJavaScript(`(async () => {
     const steps = document.getElementById('steps');
     const sel = steps.querySelector('select'); const inp = steps.querySelector('input');
     sel.value = 'navigate'; sel.dispatchEvent(new Event('change'));
-    inp.value = "data:text/html,<script>console.log('builder-ran')</script>";
-    const r = await window.devloop.repro({ actions: [{kind:'navigate', url: inp.value}], clear: false });
-    return JSON.stringify({ steps: r.stepCount, builderEl: !!document.getElementById('runrepro') });
+    inp.value = "data:text/html,<title>x</title>";
+    document.getElementById('runrepro').click();
+    await new Promise(r=>setTimeout(r,2000));
+    const listText = document.getElementById('list').textContent || '';
+    const sess = await window.devloop.session();
+    return JSON.stringify({ inlineRendered: listText.includes('▶ repro'), sessionSteps: (sess.steps||[]).length });
   })()`)) as string;
   console.log(`SELFTEST repro builder -> ${builder}`);
-  const builderOk = JSON.parse(builder).builderEl === true && JSON.parse(builder).steps >= 1;
+  const b = JSON.parse(builder);
+  const builderOk = b.inlineRendered === true && b.sessionSteps >= 1;
 
   // 8) start a sentinel dev server; app.quit() (below) must kill its whole group.
   const ds = JSON.parse(

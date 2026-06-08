@@ -3,7 +3,7 @@
 interface Entry {
   seq: number;
   ts: number;
-  source: "server" | "browser";
+  source: "server" | "browser" | "repro";
   stream: string;
   line: string;
   target?: string;
@@ -13,6 +13,29 @@ interface Pane {
   id: string;
   url: string;
   active: boolean;
+}
+
+interface Step {
+  kind: string;
+  url?: string;
+  selector?: string;
+  text?: string;
+  expression?: string;
+}
+
+interface ReproResult {
+  stepCount: number;
+  errorCount: number;
+  stoppedAtStep: number | null;
+  steps: { index: number; action: { kind: string }; error?: string }[];
+  errors: { source: string; stream: string; line: string }[];
+}
+
+interface Session {
+  cmd?: string;
+  cwd?: string;
+  url?: string;
+  steps?: Step[];
 }
 
 interface DevStatus {
@@ -26,6 +49,7 @@ interface Project {
   cwd: string;
   cmd?: string;
   url?: string;
+  steps?: Step[];
 }
 
 declare global {
@@ -46,7 +70,9 @@ declare global {
       paneSelect: (id: string) => Promise<Pane>;
       paneClose: (id: string) => Promise<boolean>;
       onPanesChanged: (cb: () => void) => () => void;
-      repro: (args: unknown) => Promise<{ stepCount: number; errorCount: number; stoppedAtStep: number | null }>;
+      repro: (args: unknown) => Promise<ReproResult>;
+      session: () => Promise<Session>;
+      sessionSave: (s: Session) => Promise<void>;
       onPush: (cb: (e: Entry) => void) => () => void;
     };
   }
@@ -75,14 +101,25 @@ const reproStatus = document.getElementById("reprostatus")!;
 
 let entries: Entry[] = [];
 let filterTarget: string | null = null; // null = all panes
+let projectsCache: Project[] = [];
 
 function isErr(e: Entry): boolean {
   return (
     e.stream === "pageerror" ||
     e.stream === "network" ||
     (e.stream === "console" && /\[error\]/.test(e.line)) ||
-    (e.source === "server" && /error|exception|traceback|unhandled/i.test(e.line))
+    (e.source === "server" && /error|exception|traceback|unhandled/i.test(e.line)) ||
+    (e.source === "repro" && e.line.includes("✗"))
   );
+}
+
+/** Accept a bare port ("3000" → http://localhost:3000) or any http(s) URL or host. */
+function normalizeUrl(input: string): string {
+  const v = input.trim();
+  if (!v) return v;
+  if (/^\d+$/.test(v)) return `http://localhost:${v}`;
+  if (/^https?:\/\//i.test(v)) return v;
+  return `http://${v}`;
 }
 
 function render(): void {
@@ -166,26 +203,51 @@ async function refreshDevStatus(): Promise<void> {
 }
 
 async function refreshProjects(selected?: string): Promise<void> {
-  const projects = await window.devloop.projects();
+  projectsCache = await window.devloop.projects();
   projectSel.replaceChildren(new Option("— project —", ""));
-  for (const p of projects) projectSel.add(new Option(p.name, p.name));
+  for (const p of projectsCache) projectSel.add(new Option(p.name, p.name));
   if (selected) projectSel.value = selected;
 }
 
+/** Fill the form (cmd/cwd/url/steps) from a saved project without starting it. */
+function fillFromProject(name: string): void {
+  const p = projectsCache.find((x) => x.name === name);
+  if (!p) return;
+  devCwd.value = p.cwd;
+  devCmd.value = p.cmd ?? "";
+  urlInput.value = p.url ?? "";
+  pname.value = p.name;
+  loadSteps(p.steps);
+}
+
 async function navigate(): Promise<void> {
-  const url = urlInput.value.trim();
-  if (url) await window.devloop.navigate(url);
+  const url = normalizeUrl(urlInput.value);
+  if (url) {
+    await window.devloop.navigate(url);
+    saveSession();
+  }
+}
+
+function saveSession(): void {
+  void window.devloop.sessionSave({
+    cmd: devCmd.value.trim(),
+    cwd: devCwd.value.trim(),
+    url: urlInput.value.trim(),
+    steps: collectActions() as Step[],
+  });
 }
 
 // --- repro builder ---
-function addStep(kind = "navigate"): void {
+function addStep(step?: Step): void {
   const row = document.createElement("div");
   row.className = "step";
   const sel = document.createElement("select");
   for (const k of ["navigate", "click", "type", "eval", "none"]) sel.add(new Option(k, k));
-  sel.value = kind;
+  sel.value = step?.kind ?? "navigate";
   const a1 = document.createElement("input");
   const a2 = document.createElement("input");
+  a1.value = step?.url ?? step?.selector ?? step?.expression ?? "";
+  a2.value = step?.text ?? "";
   const sync = () => {
     a1.placeholder = { navigate: "url", click: "selector", type: "selector", eval: "expression", none: "" }[sel.value]!;
     a1.style.display = sel.value === "none" ? "none" : "";
@@ -202,6 +264,12 @@ function addStep(kind = "navigate"): void {
   stepsEl.appendChild(row);
 }
 
+function loadSteps(steps?: Step[]): void {
+  stepsEl.replaceChildren();
+  if (steps && steps.length) steps.forEach((s) => addStep(s));
+  else addStep();
+}
+
 function collectActions(): Record<string, string>[] {
   return [...stepsEl.querySelectorAll(".step")].map((row) => {
     const kind = (row.querySelector("select") as HTMLSelectElement).value;
@@ -216,6 +284,10 @@ function collectActions(): Record<string, string>[] {
   });
 }
 
+function reproRow(stream: string, line: string): void {
+  entries.push({ seq: -1, ts: Date.now(), source: "repro", stream, line });
+}
+
 async function runRepro(): Promise<void> {
   const actions = collectActions();
   if (!actions.length) {
@@ -224,8 +296,15 @@ async function runRepro(): Promise<void> {
   }
   reproStatus.textContent = "running…";
   const r = await window.devloop.repro({ actions, clear: false });
-  const stopped = r.stoppedAtStep === null ? "" : ` stopped@${r.stoppedAtStep}`;
+  const stopped = r.stoppedAtStep === null ? "" : ` · stopped@${r.stoppedAtStep}`;
   reproStatus.textContent = `${r.stepCount} steps · ${r.errorCount} errors${stopped}`;
+
+  // Render the result inline in the timeline.
+  reproRow("summary", `▶ repro · ${r.stepCount} steps · ${r.errorCount} errors${stopped}`);
+  for (const s of r.steps) reproRow("step", `   ${s.index}. ${s.action.kind} ${s.error ? "✗ " + s.error : "✓"}`);
+  for (const e of r.errors) reproRow("error", `   ✗ [${e.source}:${e.stream}] ${e.line}`);
+  render();
+  saveSession();
 }
 
 async function init(): Promise<void> {
@@ -254,6 +333,7 @@ async function init(): Promise<void> {
       await window.devloop.devStop();
     } else {
       await window.devloop.devStart({ cmd: devCmd.value.trim() || undefined, cwd: devCwd.value.trim() || undefined });
+      saveSession();
     }
     await refreshDevStatus();
   });
@@ -265,10 +345,15 @@ async function init(): Promise<void> {
     if (!pname.value.trim()) pname.value = dir.split("/").filter(Boolean).pop() ?? ""; // prefill save-as name
   });
 
-  // Project registry: open a saved project (dev_start + navigate), or save the current fields.
+  // Project registry: pick fills the form; open runs it; save snapshots the form (incl. steps).
+  projectSel.addEventListener("change", () => {
+    if (projectSel.value) fillFromProject(projectSel.value);
+  });
   openBtn.addEventListener("click", async () => {
     if (!projectSel.value) return;
+    fillFromProject(projectSel.value);
     await window.devloop.openProject(projectSel.value);
+    saveSession();
     await refreshDevStatus();
   });
   saveBtn.addEventListener("click", async () => {
@@ -280,8 +365,8 @@ async function init(): Promise<void> {
       cwd,
       cmd: devCmd.value.trim() || undefined,
       url: urlInput.value.trim() || undefined,
+      steps: collectActions() as Step[],
     });
-    pname.value = "";
     await refreshProjects(name);
   });
 
@@ -289,7 +374,13 @@ async function init(): Promise<void> {
 
   addStepBtn.addEventListener("click", () => addStep());
   runReproBtn.addEventListener("click", runRepro);
-  addStep("navigate"); // start with one step
+
+  // Restore last-used setup (dev cmd/cwd, url, repro steps).
+  const session = await window.devloop.session();
+  devCmd.value = session.cmd ?? "";
+  devCwd.value = session.cwd ?? "";
+  urlInput.value = session.url ?? "";
+  loadSteps(session.steps);
 
   await refreshDevStatus();
   await refreshProjects();

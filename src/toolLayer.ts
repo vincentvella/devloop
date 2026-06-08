@@ -366,6 +366,7 @@ export async function handleTool(name: string, args: Record<string, unknown>): P
           cwd: args.cwd as string,
           cmd: args.cmd as string | undefined,
           url: args.url as string | undefined,
+          steps: args.steps as { kind: string }[] | undefined,
         }),
       });
     case "project_remove":
