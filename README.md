@@ -3,7 +3,7 @@
 A unified dev-loop tool: it drives a **browser** and your **dev server**, pushing both sides into one timestamped buffer so you can correlate a browser console error with the backend stack trace from the same moment. It runs two ways from a shared core:
 
 - **Headless (stdio)** — drives Chrome via Puppeteer, served over stdio. The lightweight mode Claude Code spawns per session.
-- **Cockpit (Electron)** — a desktop app whose windows *are* the browser (embedded panes driven via CDP), with a live timeline UI, a project picker, multi-pane targets, and a visual repro builder. Serves the same tools over HTTP.
+- **Cockpit (Electron)** — a single desktop window: tabbed browser panes (embedded `WebContentsView`s driven via CDP) beside a collapsible live timeline, with a project picker, auto-navigate, pop-out targets, and a visual repro builder. Serves the same tools over HTTP.
 
 Because every event (browser console/network/page-errors **and** server stdout/stderr) shares one monotonic clock, `get_logs_around` / `repro` return a correlated, cross-source slice of the timeline.
 
@@ -34,7 +34,7 @@ bunx puppeteer browsers install chrome   # headless mode, if no bundled Chromium
 # Electron's binary downloads on install; the cockpit needs it.
 ```
 
-## Tools (19)
+## Tools (20)
 
 **Dev server** — runtime, no per-project registration needed
 - `dev_start({ project?, cmd?, cwd? })` — start a dev server and tee its logs. Specify it three ways: a saved registry `project`; explicit `cmd`+`cwd`; or neither (`cwd` defaults to the server's dir, `cmd` auto-detected from `package.json` scripts: `dev`/`develop`/`web`/`start`/`serve`).
@@ -63,10 +63,11 @@ bunx puppeteer browsers install chrome   # headless mode, if no bundled Chromium
 - `project_remove({ name })`.
 
 **Panes** — multi-target (cockpit only; stdio mode is single-pane and reports so)
-- `pane_list()` — each pane: `{ id, url, active }`. The active pane is what `browser_*`/`repro` target; events are tagged with their pane `id`.
+- `pane_list()` — each pane: `{ id, url, active, popped }`. The active pane is what `browser_*`/`repro` target; events are tagged with their pane `id`.
 - `pane_new({ url? })` — open a new pane and make it active.
 - `pane_select({ id })` — make a pane active.
 - `pane_close({ id })`.
+- `pane_pop({ id })` — detach a pane into its own standalone window (side-by-side targets).
 
 ### Console arguments
 
@@ -101,13 +102,16 @@ bun run app          # build + launch the cockpit
 bun run app:selftest # headless integration test (no visible windows)
 ```
 
-Two windows open:
-- **app pane(s)** — the embedded browser (a real Chromium `webContents` driven via CDP). Multiple panes = multiple targets.
-- **timeline** — the control surface:
-  - **pane tabs** — `all | pane-1 | … | + pane`; click to select (also filters the timeline to that pane), `×` to close. Updates live whether panes change from the UI or from Claude.
-  - **project picker** — dropdown of saved projects; selecting one fills the whole form (cmd/cwd/url **and** repro steps), **open** runs it (dev_start + navigate), **📁 browse** opens a native folder dialog → fills cwd, **save** snapshots the current form (including the builder steps) as a named project.
-  - **repro builder** — `+ step` / `run ▶`; assemble an action sequence and run it through the same `repro` tool. Results render **inline in the timeline** (per-step ✓/✗ plus the correlated error list).
-  - **dev server** start/stop + status, a **URL bar** (accepts a bare port like `3000` → `http://localhost:3000`, or any `http(s)://` URL / host), and the live event list with per-source coloring, target tags, substring filter, and **errors only**.
+**One window**, laid out as:
+- **Top bar** — the **pane tabs** plus `⚙` (controls), `⤢` (pop out the active pane), and `⟨ timeline` (collapse the sidebar). Tabs are auto-named from the project (`package.json` `name`, else folder basename) and show `⤢` when popped; click to switch (also filters the timeline to that pane), `×` to close. Updates live whether panes change from the UI or from Claude.
+- **Browser area** — the active pane: a real Chromium `WebContentsView` driven via CDP. Other panes keep running in the background (their logs keep flowing); the active one is positioned over this region and reflows when you collapse panels or resize.
+- **Controls** (behind `⚙`, collapsed by default so the top bar stays clean):
+  - **URL bar** — accepts a bare port (`3000` → `http://localhost:3000`) or any `http(s)://` URL / host. Usually unnecessary: see auto-navigate below.
+  - **project picker** — dropdown of saved projects; selecting one fills the whole form (cmd/cwd/url **and** repro steps), **open** runs it, **📁 browse** opens a native folder dialog → fills cwd, **save** snapshots the current form (including builder steps) as a named project.
+  - **dev server** start/stop + status.
+- **Timeline sidebar** (collapsible) — the **repro builder** (`+ step` / `run ▶`, results render **inline** with per-step ✓/✗ and the correlated error list) above the live event list with per-source coloring, target tags, substring filter, and **errors only**.
+
+**Auto-navigate:** on dev-start (or opening a project), the cockpit watches the server output and opens the first `http://localhost:PORT` it announces in the active pane — no port-typing, no "go".
 
 **Session persistence:** the last-used setup — dev cmd/cwd, URL, and repro steps — is saved to `~/.devloop/session.json` and **restored when the cockpit reopens**, so you pick up where you left off even without a named project.
 
@@ -118,7 +122,7 @@ claude mcp add --transport http devloop-cockpit http://localhost:7333/mcp
 ```
 (Only connected while `bun run app` is running.)
 
-**Clean teardown:** closing the timeline window (or quit / SIGTERM / SIGINT) tears down everything — the dev-server process group, all browser panes, and the HTTP server — so no orphaned `next dev` and no held ports.
+**Clean teardown:** closing the window (or quit / SIGTERM / SIGINT) tears down everything — the dev-server process group, all browser panes, and the HTTP server — with a hard-exit fallback if graceful quit stalls. And the dev server runs under a **parent-pid watchdog**, so even a crash/SIGKILL of the cockpit can't orphan it (no `next dev` left holding `:3000`).
 
 Cockpit-only env: `DEVLOOP_HTTP_PORT` (default 7333), plus the shared `DEVLOOP_NET_THRESHOLD` / `DEVLOOP_ACTION_TIMEOUT` / `DEVLOOP_LOG_CAPACITY` / `DEVLOOP_HOME`.
 
@@ -138,7 +142,7 @@ cockpit/
   main.ts               Electron main: windows, BrowserManager, MCP-over-HTTP, lifecycle
   browserManager.ts     multi-pane manager (IBrowserManager)
   preload.ts            contextBridge IPC surface
-  renderer/             timeline window (index.html + timeline.ts)
+  renderer/             shell UI — toolbar + browser area + timeline (index.html + timeline.ts)
   build.ts              Bun build for main/preload/renderer
 ```
 
@@ -147,9 +151,9 @@ cockpit/
 ```sh
 bun run typecheck
 bun run test-smoke.ts   # headless Puppeteer: structured args, networkidle, repro sequence, abort
-bun run app:selftest    # headless Electron: 8-stage check — substrate→buffer, tool layer,
-                        # MCP-over-HTTP, renderer IPC, registry, multi-target panes, repro
-                        # builder, and process-group cleanup on quit
+bun run app:selftest    # headless Electron: substrate→buffer, tool layer, MCP-over-HTTP,
+                        # renderer IPC, registry, multi-target panes + pop-out, auto-navigate,
+                        # derived project name, inline repro builder, and clean teardown
 ```
 
 ## Gotchas learned in the field
@@ -163,4 +167,4 @@ bun run app:selftest    # headless Electron: 8-stage check — substrate→buffe
 - **Network bodies** — capture request/response payloads via `Network.*` CDP events (currently method/status/url).
 - **Self-healing re-acquire for Electron panes** (the Puppeteer substrate already recovers from target loss).
 
-_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer) · project registry (with saved repro steps) · session persistence (restored on relaunch) · Electron cockpit with multi-pane targets, project picker, folder browse, port/URL bar, and visual repro builder · MCP-over-HTTP · clean process-group teardown._
+_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer) · project registry (with saved repro steps) · session persistence (restored on relaunch) · single-window Electron cockpit — tabbed panes, collapsible toolbar + timeline, pop-out, project-named tabs, auto-navigate from logs, project picker, folder browse, port/URL bar, visual repro builder · MCP-over-HTTP · clean process-group teardown + crash watchdog · Electron security-warning suppression._
