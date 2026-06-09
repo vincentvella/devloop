@@ -176,6 +176,11 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
   },
   {
+    name: "pane_pop",
+    description: "Detach a pane into its own standalone window (so you can view targets side-by-side).",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  },
+  {
     name: "dev_status",
     description: "Report whether the dev server is running, plus its cmd/cwd/pid.",
     inputSchema: { type: "object", properties: {} },
@@ -379,6 +384,8 @@ export async function handleTool(name: string, args: Record<string, unknown>): P
       return json(asManager().selectPane(args.id as string));
     case "pane_close":
       return json({ closed: asManager().closePane(args.id as string) });
+    case "pane_pop":
+      return json(asManager().popPane(args.id as string));
     case "repro": {
       const waitFor = (args.waitFor as "settle" | "networkidle" | undefined) ?? "settle";
       const settleMs = (args.settleMs as number | undefined) ?? 1000;

@@ -12,6 +12,11 @@
  * Headless self-check (no visible windows): `bun run app:selftest`
  */
 
+// Silence Electron's dev-only "Insecure Content-Security-Policy" warning that it
+// injects into every renderer — it's about the dev target's page, not our app,
+// and it just spams the timeline. (Set before any window/view is created.)
+process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
+
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { createServer, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
@@ -30,7 +35,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { LogBuffer } from "../src/logBuffer.ts";
-import { DevServer, detectDevCommand } from "../src/devServer.ts";
+import { DevServer, detectDevCommand, projectName } from "../src/devServer.ts";
 import { TOOLS, handleTool, configureTools } from "../src/toolLayer.ts";
 import { listProjects, addProject, getProject, getSession, setSession } from "../src/registry.ts";
 import { BrowserManager } from "./browserManager.ts";
@@ -42,10 +47,11 @@ let chosenPort = PORT;
 const buffer = new LogBuffer(Number(process.env.DEVLOOP_LOG_CAPACITY ?? 5000));
 const devServer = new DevServer(buffer);
 
-let timelineWin: BrowserWindow | undefined;
+let shellWin: BrowserWindow | undefined;
 let manager: BrowserManager;
 let httpServer: ReturnType<typeof createServer> | undefined;
 let cleanedUp = false;
+let awaitingDevUrl = false; // set on dev_start; auto-navigate the active pane to the first server URL we see
 
 // --- MCP over HTTP (stateful sessions) ------------------------------------
 function buildMcpServer(): Server {
@@ -140,12 +146,12 @@ async function startHttp(): Promise<void> {
 
 // --- windows ---------------------------------------------------------------
 function createWindows(): void {
-  // Pane windows are owned by the BrowserManager; here we only create the timeline.
-  timelineWin = new BrowserWindow({
-    width: 560,
-    height: 720,
+  // One shell window: the renderer (toolbar + timeline) plus embedded pane views.
+  shellWin = new BrowserWindow({
+    width: 1280,
+    height: 820,
     show: !SELFTEST,
-    title: "devloop — timeline",
+    title: "devloop",
     webPreferences: {
       preload: join(BASE, "preload.cjs"),
       contextIsolation: true,
@@ -154,17 +160,17 @@ function createWindows(): void {
     },
   });
   // Surface renderer console + preload errors to the terminal (handy for debugging the UI).
-  timelineWin.webContents.on("console-message", (...args: unknown[]) => {
+  shellWin.webContents.on("console-message", (...args: unknown[]) => {
     const msg = (args[2] as string) ?? (args[0] as { message?: string })?.message;
     log(`renderer: ${msg}`);
   });
-  timelineWin.webContents.on("preload-error", (_e, path, err) => log(`preload-error ${path}: ${err}`));
+  shellWin.webContents.on("preload-error", (_e, path, err) => log(`preload-error ${path}: ${err}`));
   // The timeline is the control surface — closing it tears the whole app down.
-  timelineWin.on("closed", () => app.quit());
-  void timelineWin.loadFile(join(BASE, "renderer/index.html"));
+  shellWin.on("closed", () => quitHard());
+  void shellWin.loadFile(join(BASE, "renderer/index.html"));
 
   // Stream live events to the timeline window.
-  buffer.onPush((e) => timelineWin?.webContents.send("devloop:push", e));
+  buffer.onPush((e) => shellWin?.webContents.send("devloop:push", e));
 }
 
 // --- IPC for the timeline renderer ----------------------------------------
@@ -179,11 +185,12 @@ function wireIpc(): void {
   ipcMain.handle("devloop:devStart", (_e, opts: { cmd?: string; cwd?: string }) => {
     const cwd = opts?.cwd || process.cwd();
     const cmd = opts?.cmd || detectDevCommand(cwd);
+    awaitingDevUrl = true; // auto-navigate once the server announces its URL
     return devServer.start(cmd, cwd);
   });
   ipcMain.handle("devloop:devStop", () => devServer.stop());
   ipcMain.handle("devloop:pickFolder", async () => {
-    const r = await dialog.showOpenDialog(timelineWin!, { properties: ["openDirectory"] });
+    const r = await dialog.showOpenDialog(shellWin!, { properties: ["openDirectory"] });
     return r.canceled ? null : r.filePaths[0];
   });
 
@@ -195,6 +202,9 @@ function wireIpc(): void {
   ipcMain.handle("devloop:paneNew", (_e, url?: string) => manager.newPane(url));
   ipcMain.handle("devloop:paneSelect", (_e, id: string) => manager.selectPane(id));
   ipcMain.handle("devloop:paneClose", (_e, id: string) => manager.closePane(id));
+  ipcMain.handle("devloop:panePop", (_e, id: string) => manager.popPane(id));
+  // Renderer reports the #browserarea rect; reposition the embedded active pane.
+  ipcMain.handle("devloop:setBounds", (_e, rect) => manager.setBounds(rect));
 
   // Session: last-used setup, restored on relaunch.
   ipcMain.handle("devloop:session", () => getSession());
@@ -211,7 +221,8 @@ function wireIpc(): void {
     if (!p) throw new Error(`no saved project "${name}"`);
     if (!devServer.status().running) devServer.start(p.cmd || detectDevCommand(p.cwd), p.cwd);
     if (p.url) await manager.navigate(p.url);
-    return { dev: devServer.status(), url: p.url ?? null };
+    else awaitingDevUrl = true; // no saved URL → auto-navigate from the server's logs
+    return { dev: devServer.status(), url: p.url ?? null, name: projectName(p.cwd) };
   });
 }
 
@@ -250,9 +261,20 @@ async function main() {
     },
     SELFTEST,
   );
+  manager.attachTo(shellWin!);
   manager.onChange = () => {
-    if (timelineWin && !timelineWin.isDestroyed()) timelineWin.webContents.send("devloop:panesChanged");
+    if (shellWin && !shellWin.isDestroyed()) shellWin.webContents.send("devloop:panesChanged");
   };
+  // Auto-navigate: when a dev server announces a localhost URL, open it in the active pane.
+  buffer.onPush((e) => {
+    if (!awaitingDevUrl || e.source !== "server") return;
+    const m = e.line.match(/https?:\/\/(?:localhost|127\.0\.0\.1):\d+/i);
+    if (m) {
+      awaitingDevUrl = false;
+      log(`auto-navigating active pane to ${m[0]}`);
+      void manager.navigate(m[0]);
+    }
+  });
   await manager.start();
   log("manager started");
   configureTools({ buffer, browser: manager, devServer });
@@ -294,7 +316,7 @@ async function runSelfTest() {
   await client.close();
 
   // 4) RENDERER path: preload API present, and a renderer-initiated navigate reaches the buffer
-  const tl = timelineWin!.webContents;
+  const tl = shellWin!.webContents;
   for (let i = 0; i < 50 && tl.isLoading(); i++) await new Promise((r) => setTimeout(r, 100));
   const api = await tl.executeJavaScript("typeof window.devloop");
   const methods = await tl.executeJavaScript(
@@ -331,6 +353,14 @@ async function runSelfTest() {
   const taggedRight = p2Event?.target === pane2.id;
   console.log(`SELFTEST panes: count=${paneList.panes.length} pane2=${pane2.id} eventTarget=${p2Event?.target} tagged=${taggedRight}`);
 
+  // 6b) pop-out: detach pane-2 into its own window; pane_list should flag it popped
+  await handleTool("pane_pop", { id: pane2.id });
+  const afterPop = JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as {
+    panes: { id: string; popped?: boolean }[];
+  };
+  const popOk = afterPop.panes.find((p) => p.id === pane2.id)?.popped === true;
+  console.log(`SELFTEST pop-out: ${pane2.id} popped=${popOk}`);
+
   // 7) repro builder: drive the real "run ▶" button, confirm inline render + session persistence
   const builder = (await tl.executeJavaScript(`(async () => {
     const steps = document.getElementById('steps');
@@ -347,12 +377,17 @@ async function runSelfTest() {
   const b = JSON.parse(builder);
   const builderOk = b.inlineRendered === true && b.sessionSteps >= 1;
 
-  // 8) start a sentinel dev server; app.quit() (below) must kill its whole group.
-  const ds = JSON.parse(
-    (await handleTool("dev_start", { cmd: "sleep 6017", cwd: process.cwd() })).content[0]!.text as string,
-  );
-  console.log(`SELFTEST devserver pid=${ds.pid} (sentinel 'sleep 6017' must die on quit)`);
-  await new Promise((r) => setTimeout(r, 300));
+  // 8) dev server via the UI path (sets awaitingDevUrl): a server that prints a localhost URL
+  //    must trigger auto-navigate, and the sleep 6017 group must die on quit.
+  const devArgs = JSON.stringify({
+    cmd: 'bash -c "echo Local: http://localhost:4599; sleep 6017"',
+    cwd: process.cwd(),
+  });
+  await tl.executeJavaScript(`window.devloop.devStart(${devArgs})`);
+  await new Promise((r) => setTimeout(r, 1000));
+  const devName = JSON.parse((await handleTool("dev_status")).content[0]!.text as string).name;
+  console.log(`SELFTEST dev started via UI (auto-nav to :4599); project name=${devName}`);
+  const nameOk = devName === "devloop-mcp"; // package.json name of this repo
 
   const ok =
     api === "object" &&
@@ -361,11 +396,13 @@ async function runSelfTest() {
     rendererSees.includes("selftest-proj") &&
     paneList.panes.length >= 2 &&
     taggedRight &&
-    builderOk;
+    popOk &&
+    builderOk &&
+    nameOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").
-  timelineWin!.close();
+  shellWin!.close();
 }
 
 /** Kill everything we started: dev-server process group, browser panes, HTTP server. */
@@ -391,8 +428,15 @@ function cleanup(): void {
   log("cleaned up (dev server, panes, http)");
 }
 
+/** Request a graceful quit, then hard-exit if it stalls (orphaned view webContents, GPU proc, etc.). */
+function quitHard(): void {
+  cleanup();
+  app.quit();
+  setTimeout(() => app.exit(0), 1200);
+}
+
 app.on("before-quit", cleanup);
-app.on("window-all-closed", () => app.quit());
+app.on("window-all-closed", quitHard);
 process.on("SIGTERM", () => {
   cleanup();
   app.exit(0);

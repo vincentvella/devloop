@@ -13,6 +13,7 @@ interface Pane {
   id: string;
   url: string;
   active: boolean;
+  popped?: boolean;
 }
 
 interface Step {
@@ -42,6 +43,7 @@ interface DevStatus {
   running: boolean;
   cmd?: string;
   cwd?: string;
+  name?: string;
 }
 
 interface Project {
@@ -64,11 +66,13 @@ declare global {
       pickFolder: () => Promise<string | null>;
       projects: () => Promise<Project[]>;
       projectAdd: (p: Project) => Promise<Project[]>;
-      openProject: (name: string) => Promise<unknown>;
+      openProject: (name: string) => Promise<{ dev: DevStatus; url: string | null; name: string }>;
       panes: () => Promise<Pane[]>;
       paneNew: (url?: string) => Promise<Pane>;
       paneSelect: (id: string) => Promise<Pane>;
       paneClose: (id: string) => Promise<boolean>;
+      panePop: (id: string) => Promise<Pane>;
+      setBounds: (rect: { x: number; y: number; width: number; height: number }) => Promise<void>;
       onPanesChanged: (cb: () => void) => () => void;
       repro: (args: unknown) => Promise<ReproResult>;
       session: () => Promise<Session>;
@@ -94,6 +98,12 @@ const openBtn = document.getElementById("open")!;
 const pname = document.getElementById("pname") as HTMLInputElement;
 const saveBtn = document.getElementById("save")!;
 const panesBar = document.getElementById("panes")!;
+const browserArea = document.getElementById("browserarea")!;
+const sidebar = document.getElementById("sidebar")!;
+const popBtn = document.getElementById("pop")!;
+const toggleBtn = document.getElementById("toggle")!;
+const controlsToggle = document.getElementById("controlsToggle")!;
+const controlsEl = document.getElementById("controls")!;
 const stepsEl = document.getElementById("steps")!;
 const addStepBtn = document.getElementById("addstep")!;
 const runReproBtn = document.getElementById("runrepro")!;
@@ -102,6 +112,7 @@ const reproStatus = document.getElementById("reprostatus")!;
 let entries: Entry[] = [];
 let filterTarget: string | null = null; // null = all panes
 let projectsCache: Project[] = [];
+const paneLabels: Record<string, string> = {}; // pane id → project name (for tab labels)
 
 function isErr(e: Entry): boolean {
   return (
@@ -132,7 +143,7 @@ function render(): void {
     // Per-pane filter: keep server events always, browser events only for the selected pane.
     if (filterTarget && e.source === "browser" && e.target !== filterTarget) continue;
     const row = document.createElement("div");
-    row.className = `row ${e.source}${isErr(e) ? " err" : ""}`;
+    row.className = `logrow ${e.source}${isErr(e) ? " err" : ""}`;
     const tag = document.createElement("span");
     tag.className = "tag";
     tag.textContent = `${e.source}:${e.stream}`;
@@ -167,13 +178,14 @@ async function renderPanes(): Promise<void> {
 
   for (const p of panes) {
     const el = document.createElement("span");
-    el.className = `pane${p.active ? " active" : ""}`;
+    el.className = `pane${p.active ? " active" : ""}${p.popped ? " popped" : ""}`;
     const label = document.createElement("span");
-    label.textContent = p.id;
+    label.textContent = (paneLabels[p.id] ?? p.id) + (p.popped ? " ⤢" : "");
     label.addEventListener("click", async () => {
       await window.devloop.paneSelect(p.id);
       filterTarget = p.id;
       render();
+      reportBounds();
     });
     const x = document.createElement("span");
     x.className = "x";
@@ -235,6 +247,21 @@ function saveSession(): void {
     url: urlInput.value.trim(),
     steps: collectActions() as Step[],
   });
+}
+
+/** Label the active pane's tab (e.g. with the project's package.json/folder name). */
+async function labelActivePane(name: string): Promise<void> {
+  const active = (await window.devloop.panes()).find((p) => p.active);
+  if (active) {
+    paneLabels[active.id] = name;
+    await renderPanes();
+  }
+}
+
+/** Tell main where the embedded browser view should sit (the #browserarea rect). */
+function reportBounds(): void {
+  const r = browserArea.getBoundingClientRect();
+  void window.devloop.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
 }
 
 // --- repro builder ---
@@ -332,7 +359,11 @@ async function init(): Promise<void> {
     if (s.running) {
       await window.devloop.devStop();
     } else {
-      await window.devloop.devStart({ cmd: devCmd.value.trim() || undefined, cwd: devCwd.value.trim() || undefined });
+      const st = await window.devloop.devStart({
+        cmd: devCmd.value.trim() || undefined,
+        cwd: devCwd.value.trim() || undefined,
+      });
+      if (st.name) await labelActivePane(st.name); // tab shows the project name
       saveSession();
     }
     await refreshDevStatus();
@@ -352,7 +383,8 @@ async function init(): Promise<void> {
   openBtn.addEventListener("click", async () => {
     if (!projectSel.value) return;
     fillFromProject(projectSel.value);
-    await window.devloop.openProject(projectSel.value);
+    const res = await window.devloop.openProject(projectSel.value);
+    await labelActivePane(res.name); // package.json/folder name of the project
     saveSession();
     await refreshDevStatus();
   });
@@ -382,9 +414,34 @@ async function init(): Promise<void> {
   urlInput.value = session.url ?? "";
   loadSteps(session.steps);
 
+  // Pop the active pane into its own window.
+  popBtn.addEventListener("click", async () => {
+    const panes = await window.devloop.panes();
+    const active = panes.find((p) => p.active && !p.popped);
+    if (active) await window.devloop.panePop(active.id);
+  });
+
+  // Collapse / expand the timeline sidebar, then re-report bounds so the view reflows.
+  toggleBtn.addEventListener("click", () => {
+    const collapsed = sidebar.classList.toggle("collapsed");
+    toggleBtn.textContent = collapsed ? "timeline ⟩" : "⟨ timeline";
+    setTimeout(reportBounds, 150); // after the width transition
+  });
+
+  // Expand / collapse the controls (URL, project, dev). Default collapsed — top bar shows just tabs.
+  controlsToggle.addEventListener("click", () => {
+    controlsEl.classList.toggle("collapsed");
+    setTimeout(reportBounds, 0); // toolbar height changed → reposition the view
+  });
+
+  // Keep the embedded view aligned with #browserarea on any layout change.
+  new ResizeObserver(reportBounds).observe(browserArea);
+  window.addEventListener("resize", reportBounds);
+
   await refreshDevStatus();
   await refreshProjects();
   await renderPanes();
+  reportBounds(); // initial placement
 }
 
 void init();

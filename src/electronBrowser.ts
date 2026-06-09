@@ -62,6 +62,7 @@ export class ElectronBrowserController implements IBrowserController {
     switch (method) {
       case "Runtime.consoleAPICalled": {
         const rendered = (params.args as RemoteObject[]).map(renderRemote).join(" ");
+        if (rendered.includes("Electron Security Warning")) break; // dev-only nag, not the app's
         this.emit("console", `[${params.type}] ${rendered}`, {
           type: params.type,
           args: (params.args as RemoteObject[]).map((a) => (a.value !== undefined ? a.value : a.description)),

@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld("devloop", {
   paneNew: (url?: string) => ipcRenderer.invoke("devloop:paneNew", url),
   paneSelect: (id: string) => ipcRenderer.invoke("devloop:paneSelect", id),
   paneClose: (id: string) => ipcRenderer.invoke("devloop:paneClose", id),
+  panePop: (id: string) => ipcRenderer.invoke("devloop:panePop", id),
+  setBounds: (rect: { x: number; y: number; width: number; height: number }) =>
+    ipcRenderer.invoke("devloop:setBounds", rect),
   repro: (args: unknown) => ipcRenderer.invoke("devloop:repro", args),
   session: () => ipcRenderer.invoke("devloop:session"),
   sessionSave: (s: unknown) => ipcRenderer.invoke("devloop:sessionSave", s),

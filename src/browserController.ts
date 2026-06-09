@@ -19,6 +19,8 @@ export interface PaneInfo {
   id: string;
   url: string;
   active: boolean;
+  /** True when the pane has been detached into its own window. */
+  popped?: boolean;
 }
 
 /**
@@ -31,4 +33,5 @@ export interface IBrowserManager extends IBrowserController {
   newPane(url?: string): Promise<PaneInfo>;
   selectPane(id: string): PaneInfo;
   closePane(id: string): boolean;
+  popPane(id: string): PaneInfo;
 }

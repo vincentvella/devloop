@@ -8,7 +8,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import type { LogBuffer } from "./logBuffer.ts";
 
 type ServerStream = "stdout" | "stderr";
@@ -19,6 +19,19 @@ export interface DevStatus {
   cwd?: string;
   pid?: number;
   startedAt?: number;
+  /** Project name — package.json "name", else the folder basename. */
+  name?: string;
+}
+
+/** Derive a project's display name: package.json "name", falling back to the folder name. */
+export function projectName(cwd: string): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"));
+    if (typeof pkg.name === "string" && pkg.name.trim()) return pkg.name.trim();
+  } catch {
+    /* no package.json */
+  }
+  return basename(cwd) || cwd;
 }
 
 /** Pick a dev command from a project's package.json scripts. Throws if none found. */
@@ -40,7 +53,7 @@ export function detectDevCommand(cwd: string): string {
 
 export class DevServer {
   private child?: ChildProcess;
-  private meta?: { cmd: string; cwd: string; startedAt: number };
+  private meta?: { cmd: string; cwd: string; startedAt: number; name: string };
 
   constructor(private readonly buffer: LogBuffer) {}
 
@@ -51,15 +64,25 @@ export class DevServer {
     // Shell so callers can pass a full command line, e.g. "bun run dev" or
     // "bun run web -- --port 8090". `detached` makes the child a process-group
     // leader so stop() can kill the whole tree (the shell AND its grandchildren
-    // like `next dev`/`metro`), instead of orphaning them.
-    this.child = spawn(cmd, {
+    // like `next dev`/`metro`) via process.kill(-pid).
+    //
+    // We also wrap it with a parent-pid watchdog: a background loop kills the
+    // whole group if THIS process (the cockpit/stdio server) dies — so a crash
+    // or SIGKILL of the parent can't orphan the dev server (e.g. leaving :3000
+    // held). On normal exit of the command, the watchdog is torn down.
+    const parent = process.pid;
+    const wrapped =
+      `( ${cmd} ) & CMD=$!; ` +
+      `( while kill -0 ${parent} 2>/dev/null; do sleep 2; done; kill -TERM -$$ 2>/dev/null ) & WATCH=$!; ` +
+      `wait $CMD; kill $WATCH 2>/dev/null`;
+    this.child = spawn(wrapped, {
       cwd,
       shell: true,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
     });
-    this.meta = { cmd, cwd, startedAt: Date.now() };
+    this.meta = { cmd, cwd, startedAt: Date.now(), name: projectName(cwd) };
 
     this.pipe("stdout", this.child.stdout);
     this.pipe("stderr", this.child.stderr);
@@ -90,7 +113,14 @@ export class DevServer {
 
   status(): DevStatus {
     return this.child
-      ? { running: true, cmd: this.meta?.cmd, cwd: this.meta?.cwd, pid: this.child.pid, startedAt: this.meta?.startedAt }
+      ? {
+          running: true,
+          cmd: this.meta?.cmd,
+          cwd: this.meta?.cwd,
+          pid: this.child.pid,
+          startedAt: this.meta?.startedAt,
+          name: this.meta?.name,
+        }
       : { running: false };
   }
 
