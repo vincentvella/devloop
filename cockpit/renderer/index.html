@@ -18,6 +18,9 @@
       #project { flex: 1; min-width: 120px; }
       #devcmd, #devcwd { flex: 1; min-width: 100px; }
       .status { opacity: 0.7; white-space: nowrap; }
+      #devchip { padding: 2px 8px; border: 1px solid #30363d; border-radius: 6px; }
+      #devchip.running { color: #3fb950; border-color: #238636; }
+      .sep { width: 1px; align-self: stretch; background: #30363d; margin: 0 2px; }
       .spacer { flex: 1; }
       label { user-select: none; }
 
@@ -66,7 +69,13 @@
       <div class="row">
         <span id="panes" class="tabs"></span>
         <span class="spacer"></span>
-        <button id="controlsToggle" title="controls">⚙</button>
+        <span id="devchip" class="status">dev: —</span>
+        <button id="play" title="start / stop dev server">▶</button>
+        <button id="restart" title="restart dev server">⟳</button>
+        <button id="refresh" title="refresh page">⟲</button>
+        <button id="hardrefresh" title="hard refresh (ignore cache)">⤓</button>
+        <span class="sep"></span>
+        <button id="controlsToggle" title="settings">⚙</button>
         <button id="pop" title="pop active pane into its own window">⤢</button>
         <button id="toggle">⟨ timeline</button>
       </div>
@@ -83,8 +92,7 @@
           <input id="devcmd" placeholder="dev cmd (blank = auto-detect)" />
           <button id="browse">📁</button>
           <input id="devcwd" placeholder="project cwd" />
-          <button id="devbtn">dev start</button>
-          <span id="devstatus" class="status">dev: stopped</span>
+          <button id="setconfig">set dev config</button>
         </div>
       </div>
     </div>

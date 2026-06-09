@@ -51,11 +51,22 @@ export function detectDevCommand(cwd: string): string {
   );
 }
 
-export class DevServer {
+/** Minimal dev-server surface the tool layer depends on (DevServer, or a per-pane facade). */
+export interface DevServerLike {
+  start(cmd: string, cwd: string): DevStatus;
+  stop(): boolean;
+  status(): DevStatus;
+}
+
+export class DevServer implements DevServerLike {
   private child?: ChildProcess;
   private meta?: { cmd: string; cwd: string; startedAt: number; name: string };
 
-  constructor(private readonly buffer: LogBuffer) {}
+  /** `target` tags this server's log lines with a pane id (per-pane mode). */
+  constructor(
+    private readonly buffer: LogBuffer,
+    private readonly target?: string,
+  ) {}
 
   start(cmd: string, cwd: string): DevStatus {
     if (this.child) {
@@ -87,7 +98,7 @@ export class DevServer {
     this.pipe("stdout", this.child.stdout);
     this.pipe("stderr", this.child.stderr);
     this.child.on("exit", (code, signal) => {
-      this.buffer.push("server", "stderr", `[devloop] dev server exited code=${code} signal=${signal}`);
+      this.buffer.push("server", "stderr", `[devloop] dev server exited code=${code} signal=${signal}`, undefined, this.target);
       this.child = undefined;
       this.meta = undefined;
     });
@@ -105,7 +116,7 @@ export class DevServer {
       const lines = partial.split(/\r?\n/);
       partial = lines.pop() ?? ""; // keep incomplete trailing line
       for (const line of lines) {
-        this.buffer.push("server", stream, line);
+        this.buffer.push("server", stream, line, undefined, this.target);
         process.stderr.write(`[dev:${stream}] ${line}\n`); // mirror to operator
       }
     });

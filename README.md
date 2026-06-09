@@ -103,17 +103,22 @@ bun run app:selftest # headless integration test (no visible windows)
 ```
 
 **One window**, laid out as:
-- **Top bar** — the **pane tabs** plus `⚙` (controls), `⤢` (pop out the active pane), and `⟨ timeline` (collapse the sidebar). Tabs are auto-named from the project (`package.json` `name`, else folder basename) and show `⤢` when popped; click to switch (also filters the timeline to that pane), `×` to close. Updates live whether panes change from the UI or from Claude.
+- **Top bar** — the **pane tabs**, then the active pane's **dev controls** + window toggles:
+  - **dev controls** (act on the active pane): a status chip (`● project` green when running), **▶/⏹** start-stop the dev server, **⟳** restart it, **⟲** refresh the page, **⤓** hard-refresh (ignore cache).
+  - `⚙` (settings) · `⤢` (pop out the active pane into its own window) · `⟨ timeline` (collapse the sidebar).
+  - Tabs are auto-named from the project (`package.json` `name`, else folder basename), show `⤢` when popped; click to switch (also filters the timeline to that pane), `×` to close. Live-updates whether panes change from the UI or from Claude.
 - **Browser area** — the active pane: a real Chromium `WebContentsView` driven via CDP. Other panes keep running in the background (their logs keep flowing); the active one is positioned over this region and reflows when you collapse panels or resize.
-- **Controls** (behind `⚙`, collapsed by default so the top bar stays clean):
-  - **URL bar** — accepts a bare port (`3000` → `http://localhost:3000`) or any `http(s)://` URL / host. Usually unnecessary: see auto-navigate below.
-  - **project picker** — dropdown of saved projects; selecting one fills the whole form (cmd/cwd/url **and** repro steps), **open** runs it, **📁 browse** opens a native folder dialog → fills cwd, **save** snapshots the current form (including builder steps) as a named project.
-  - **dev server** start/stop + status.
+- **Settings** (behind `⚙`, collapsed by default so the top bar stays clean):
+  - **URL bar** — accepts a bare port (`3000` → `http://localhost:3000`) or any `http(s)://` URL / host. Usually unnecessary — see auto-navigate.
+  - **project picker** — dropdown of saved projects; selecting one fills the form (cmd/cwd/url **and** repro steps), **open** runs it, **📁 browse** opens a native folder dialog → fills cwd, **save** snapshots the form (incl. builder steps) as a named project.
+  - **dev config** — set the active pane's cmd/cwd **once**; after that the top-bar **▶** is pre-wired.
 - **Timeline sidebar** (collapsible) — the **repro builder** (`+ step` / `run ▶`, results render **inline** with per-step ✓/✗ and the correlated error list) above the live event list with per-source coloring, target tags, substring filter, and **errors only**.
 
-**Auto-navigate:** on dev-start (or opening a project), the cockpit watches the server output and opens the first `http://localhost:PORT` it announces in the active pane — no port-typing, no "go".
+**Per-pane projects:** each pane has its own dev server and config (cmd/cwd) — so different panes run different projects (on different ports) at once, and the top-bar controls act on whichever pane is active.
 
-**Session persistence:** the last-used setup — dev cmd/cwd, URL, and repro steps — is saved to `~/.devloop/session.json` and **restored when the cockpit reopens**, so you pick up where you left off even without a named project.
+**Auto-navigate:** on dev-start (or opening a project), the cockpit watches that pane's server output and opens the first `http://localhost:PORT` it announces in the pane — no port-typing, no "go".
+
+**Persistence & restore:** open panes (each pane's URL, project label, and dev config) are saved to `~/.devloop/panes.json` and restored on relaunch; the last-used form setup (cmd/cwd, URL, repro steps) is saved to `~/.devloop/session.json`. Restore **does not assume a dev server is running** — a pane whose saved URL is a dev (`localhost`) URL comes back as a "press ▶ to start" placeholder (its real URL preserved), and hitting **▶** starts the server and auto-navigates.
 
 The cockpit serves the same tools over **MCP-over-HTTP** (stateful sessions). It auto-picks a free port starting at `DEVLOOP_HTTP_PORT` (default 7333) and logs the URL. Point Claude at the running cockpit:
 
@@ -153,7 +158,8 @@ bun run typecheck
 bun run test-smoke.ts   # headless Puppeteer: structured args, networkidle, repro sequence, abort
 bun run app:selftest    # headless Electron: substrate→buffer, tool layer, MCP-over-HTTP,
                         # renderer IPC, registry, multi-target panes + pop-out, auto-navigate,
-                        # derived project name, inline repro builder, and clean teardown
+                        # derived project name, per-pane dev (server-log tagging), inline repro
+                        # builder, pane persistence/restore, and clean teardown
 ```
 
 ## Gotchas learned in the field
@@ -167,4 +173,4 @@ bun run app:selftest    # headless Electron: substrate→buffer, tool layer, MCP
 - **Network bodies** — capture request/response payloads via `Network.*` CDP events (currently method/status/url).
 - **Self-healing re-acquire for Electron panes** (the Puppeteer substrate already recovers from target loss).
 
-_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer) · project registry (with saved repro steps) · session persistence (restored on relaunch) · single-window Electron cockpit — tabbed panes, collapsible toolbar + timeline, pop-out, project-named tabs, auto-navigate from logs, project picker, folder browse, port/URL bar, visual repro builder · MCP-over-HTTP · clean process-group teardown + crash watchdog · Electron security-warning suppression._
+_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer) · project registry (with saved repro steps) · session persistence · single-window Electron cockpit — tabbed panes, collapsible toolbar + timeline, pop-out, project-named tabs · per-pane dev servers with top-bar play/stop/restart/refresh/hard-refresh, configure-once · auto-navigate from logs · pane persistence + restore (no "assume running") · project picker, folder browse, port/URL bar, visual repro builder · MCP-over-HTTP · clean process-group teardown + crash watchdog · Electron security-warning suppression._

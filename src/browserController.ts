@@ -21,6 +21,10 @@ export interface PaneInfo {
   active: boolean;
   /** True when the pane has been detached into its own window. */
   popped?: boolean;
+  /** Display label (e.g. the project name) shown on the tab. */
+  label?: string;
+  /** This pane's dev server state (per-pane mode). */
+  dev?: { running: boolean; name?: string; cmd?: string; cwd?: string };
 }
 
 /**

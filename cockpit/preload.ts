@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld("devloop", {
   navigate: (url: string) => ipcRenderer.invoke("devloop:navigate", url),
   devStart: (opts: { cmd?: string; cwd?: string }) => ipcRenderer.invoke("devloop:devStart", opts),
   devStop: () => ipcRenderer.invoke("devloop:devStop"),
+  devRestart: () => ipcRenderer.invoke("devloop:devRestart"),
+  setDevConfig: (opts: { cmd?: string; cwd?: string }) => ipcRenderer.invoke("devloop:setDevConfig", opts),
+  reload: (hard: boolean) => ipcRenderer.invoke("devloop:reload", hard),
   pickFolder: () => ipcRenderer.invoke("devloop:pickFolder"),
   projects: () => ipcRenderer.invoke("devloop:projects"),
   projectAdd: (p: { name: string; cwd: string; cmd?: string; url?: string }) =>
@@ -21,6 +24,7 @@ contextBridge.exposeInMainWorld("devloop", {
   paneSelect: (id: string) => ipcRenderer.invoke("devloop:paneSelect", id),
   paneClose: (id: string) => ipcRenderer.invoke("devloop:paneClose", id),
   panePop: (id: string) => ipcRenderer.invoke("devloop:panePop", id),
+  paneSetLabel: (id: string, label: string) => ipcRenderer.invoke("devloop:paneSetLabel", id, label),
   setBounds: (rect: { x: number; y: number; width: number; height: number }) =>
     ipcRenderer.invoke("devloop:setBounds", rect),
   repro: (args: unknown) => ipcRenderer.invoke("devloop:repro", args),

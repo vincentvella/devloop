@@ -35,9 +35,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { LogBuffer } from "../src/logBuffer.ts";
-import { DevServer, detectDevCommand, projectName } from "../src/devServer.ts";
+import { projectName, type DevServerLike } from "../src/devServer.ts";
 import { TOOLS, handleTool, configureTools } from "../src/toolLayer.ts";
-import { listProjects, addProject, getProject, getSession, setSession } from "../src/registry.ts";
+import { listProjects, addProject, getProject, getSession, setSession, getPanes } from "../src/registry.ts";
 import { BrowserManager } from "./browserManager.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
@@ -45,13 +45,11 @@ const SELFTEST = process.env.DEVLOOP_SELFTEST === "1";
 let chosenPort = PORT;
 
 const buffer = new LogBuffer(Number(process.env.DEVLOOP_LOG_CAPACITY ?? 5000));
-const devServer = new DevServer(buffer);
 
 let shellWin: BrowserWindow | undefined;
 let manager: BrowserManager;
 let httpServer: ReturnType<typeof createServer> | undefined;
 let cleanedUp = false;
-let awaitingDevUrl = false; // set on dev_start; auto-navigate the active pane to the first server URL we see
 
 // --- MCP over HTTP (stateful sessions) ------------------------------------
 function buildMcpServer(): Server {
@@ -176,19 +174,24 @@ function createWindows(): void {
 // --- IPC for the timeline renderer ----------------------------------------
 function wireIpc(): void {
   ipcMain.handle("devloop:getLogs", (_e, opts) => buffer.query(opts ?? {}));
-  ipcMain.handle("devloop:devStatus", () => devServer.status());
   ipcMain.handle("devloop:clear", () => {
     buffer.clear();
     return true;
   });
   ipcMain.handle("devloop:navigate", (_e, url: string) => manager.navigate(url));
-  ipcMain.handle("devloop:devStart", (_e, opts: { cmd?: string; cwd?: string }) => {
-    const cwd = opts?.cwd || process.cwd();
-    const cmd = opts?.cmd || detectDevCommand(cwd);
-    awaitingDevUrl = true; // auto-navigate once the server announces its URL
-    return devServer.start(cmd, cwd);
-  });
-  ipcMain.handle("devloop:devStop", () => devServer.stop());
+
+  // Per-pane dev lifecycle (top-bar controls act on the active pane).
+  ipcMain.handle("devloop:devStatus", () => manager.devStatus());
+  ipcMain.handle("devloop:devStart", (_e, opts: { cmd?: string; cwd?: string }) =>
+    manager.devStart(undefined, opts?.cmd || undefined, opts?.cwd || undefined),
+  );
+  ipcMain.handle("devloop:devStop", () => manager.devStop());
+  ipcMain.handle("devloop:devRestart", () => manager.devRestart());
+  ipcMain.handle("devloop:setDevConfig", (_e, opts: { cmd?: string; cwd?: string }) =>
+    manager.setDevConfig(undefined, opts?.cmd || undefined, opts?.cwd || undefined),
+  );
+  ipcMain.handle("devloop:reload", (_e, hard: boolean) => manager.reload(undefined, !!hard));
+
   ipcMain.handle("devloop:pickFolder", async () => {
     const r = await dialog.showOpenDialog(shellWin!, { properties: ["openDirectory"] });
     return r.canceled ? null : r.filePaths[0];
@@ -203,6 +206,7 @@ function wireIpc(): void {
   ipcMain.handle("devloop:paneSelect", (_e, id: string) => manager.selectPane(id));
   ipcMain.handle("devloop:paneClose", (_e, id: string) => manager.closePane(id));
   ipcMain.handle("devloop:panePop", (_e, id: string) => manager.popPane(id));
+  ipcMain.handle("devloop:paneSetLabel", (_e, id: string, label: string) => manager.setLabel(id, label));
   // Renderer reports the #browserarea rect; reposition the embedded active pane.
   ipcMain.handle("devloop:setBounds", (_e, rect) => manager.setBounds(rect));
 
@@ -219,10 +223,13 @@ function wireIpc(): void {
   ipcMain.handle("devloop:openProject", async (_e, name: string) => {
     const p = getProject(name);
     if (!p) throw new Error(`no saved project "${name}"`);
-    if (!devServer.status().running) devServer.start(p.cmd || detectDevCommand(p.cwd), p.cwd);
+    const label = projectName(p.cwd);
+    // Configure + start this project on the ACTIVE pane; auto-navigate (or use saved url).
+    manager.setDevConfig(undefined, p.cmd, p.cwd);
+    if (manager.devStatus().running) manager.devRestart();
+    else manager.devStart(undefined, p.cmd, p.cwd);
     if (p.url) await manager.navigate(p.url);
-    else awaitingDevUrl = true; // no saved URL → auto-navigate from the server's logs
-    return { dev: devServer.status(), url: p.url ?? null, name: projectName(p.cwd) };
+    return { dev: manager.devStatus(), url: p.url ?? null, name: label };
   });
 }
 
@@ -265,27 +272,31 @@ async function main() {
   manager.onChange = () => {
     if (shellWin && !shellWin.isDestroyed()) shellWin.webContents.send("devloop:panesChanged");
   };
-  // Auto-navigate: when a dev server announces a localhost URL, open it in the active pane.
-  buffer.onPush((e) => {
-    if (!awaitingDevUrl || e.source !== "server") return;
-    const m = e.line.match(/https?:\/\/(?:localhost|127\.0\.0\.1):\d+/i);
-    if (m) {
-      awaitingDevUrl = false;
-      log(`auto-navigating active pane to ${m[0]}`);
-      void manager.navigate(m[0]);
-    }
-  });
   await manager.start();
   log("manager started");
-  configureTools({ buffer, browser: manager, devServer });
+  if (SELFTEST) {
+    const ps = manager.listPanes();
+    const persisted0 = getPanes().panes[0];
+    console.log(
+      `SELFTEST restored ${ps.length} pane(s); anyDevRunning=${ps.some((p) => p.dev?.running)}; persistedUrl0=${persisted0?.url}`,
+    );
+  }
+
+  // The tool layer's dev_* tools act on the ACTIVE pane's dev server.
+  const devFacade: DevServerLike = {
+    start: (cmd, cwd) => manager.devStart(undefined, cmd, cwd),
+    stop: () => manager.devStop(),
+    status: () => manager.devStatus(),
+  };
+  configureTools({ buffer, browser: manager, devServer: devFacade });
 
   await startHttp();
   log("ready");
 
   if (SELFTEST) {
     await runSelfTest();
-  } else {
-    await manager.navigate(WELCOME); // give the first pane something instead of about:blank
+  } else if (manager.currentUrl() === "about:blank") {
+    await manager.navigate(WELCOME); // only on a fresh pane — restored panes keep their URL
   }
 }
 
@@ -353,6 +364,11 @@ async function runSelfTest() {
   const taggedRight = p2Event?.target === pane2.id;
   console.log(`SELFTEST panes: count=${paneList.panes.length} pane2=${pane2.id} eventTarget=${p2Event?.target} tagged=${taggedRight}`);
 
+  // 6a) persistence: the open panes should be saved (for restore on relaunch)
+  const persistedCount = getPanes().panes.length;
+  const persistOk = persistedCount >= 2;
+  console.log(`SELFTEST persisted panes: ${persistedCount}`);
+
   // 6b) pop-out: detach pane-2 into its own window; pane_list should flag it popped
   await handleTool("pane_pop", { id: pane2.id });
   const afterPop = JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as {
@@ -389,6 +405,14 @@ async function runSelfTest() {
   console.log(`SELFTEST dev started via UI (auto-nav to :4599); project name=${devName}`);
   const nameOk = devName === "devloop-mcp"; // package.json name of this repo
 
+  // 8b) per-pane: the dev server's logs are tagged with the active pane; reload IPC works.
+  const activeId = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string; active: boolean }[] }).panes.find((p) => p.active)!.id;
+  const serverTagged = buffer.query({ source: "server" }).some((e) => e.target === activeId);
+  await tl.executeJavaScript("window.devloop.reload(false)");
+  await tl.executeJavaScript("window.devloop.reload(true)");
+  console.log(`SELFTEST per-pane: activePane=${activeId} serverLogTagged=${serverTagged}`);
+  const perPaneOk = serverTagged;
+
   const ok =
     api === "object" &&
     got &&
@@ -398,7 +422,9 @@ async function runSelfTest() {
     taggedRight &&
     popOk &&
     builderOk &&
-    nameOk;
+    nameOk &&
+    persistOk &&
+    perPaneOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").
@@ -411,12 +437,7 @@ function cleanup(): void {
   cleanedUp = true;
   if (manager) manager.onChange = undefined; // stop notifying a window that's tearing down
   try {
-    devServer.stop();
-  } catch (e) {
-    log(`cleanup devServer: ${e}`);
-  }
-  try {
-    void manager?.close();
+    void manager?.close(); // stops every pane's dev server + closes panes/popped windows
   } catch (e) {
     log(`cleanup manager: ${e}`);
   }

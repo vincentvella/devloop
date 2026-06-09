@@ -1,25 +1,35 @@
 /**
  * Multi-target browser manager (cockpit, unified-window model).
  *
- * Each pane is a WebContentsView. The ACTIVE pane is attached to the shell
- * window and positioned over the renderer's #browserarea region; inactive panes
- * are detached from the layout but keep running (so their logs keep flowing).
- * A pane can be "popped out" into its own standalone window.
+ * Each pane is a WebContentsView with its OWN dev server (per-pane project) and
+ * dev config. The active pane is attached to the shell window over the
+ * renderer's #browserarea region; inactive panes are detached from the layout
+ * but keep running (logs keep flowing). A pane can be popped into its own window.
  *
  * Implements IBrowserManager: IBrowserController methods delegate to the active
- * pane; pane_* tools manage the set.
+ * pane; dev lifecycle (start/stop/restart/reload) is per-pane.
  */
 import { BrowserWindow, WebContentsView } from "electron";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import type { IBrowserManager, PaneInfo } from "../src/browserController.ts";
+import { getPanes, setPanes } from "../src/registry.ts";
+import { DevServer, detectDevCommand, type DevStatus } from "../src/devServer.ts";
 import { ElectronBrowserController, type ElectronBrowserOptions } from "../src/electronBrowser.ts";
 
 interface Pane {
   id: string;
   view: WebContentsView;
   ctl: ElectronBrowserController;
-  popped?: BrowserWindow; // set when detached into its own window
+  dev: DevServer; // this pane's own dev server
+  cmd?: string;
+  cwd?: string;
+  label?: string;
+  url: string; // canonical URL (persisted) — may differ from what's displayed (e.g. a placeholder)
+  awaitingUrl?: boolean; // auto-navigate this pane to the first server URL it logs
+  popped?: BrowserWindow;
 }
+
+const isLocalUrl = (url: string) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url);
 
 export interface Rect {
   x: number;
@@ -34,21 +44,83 @@ export class BrowserManager implements IBrowserManager {
   private counter = 0;
   private shell?: BrowserWindow;
   private bounds: Rect = { x: 0, y: 0, width: 800, height: 600 };
+  private restoring = false;
   onChange?: () => void;
 
   constructor(
     private readonly buffer: LogBuffer,
     private readonly opts: ElectronBrowserOptions,
     private readonly offscreen: boolean,
-  ) {}
+  ) {
+    // Per-pane auto-navigate: when a pane's dev server logs a localhost URL, open it there.
+    buffer.onPush((e) => {
+      if (e.source !== "server" || !e.target) return;
+      const p = this.panes.get(e.target);
+      if (!p?.awaitingUrl) return;
+      const m = e.line.match(/https?:\/\/(?:localhost|127\.0\.0\.1):\d+/i);
+      if (m) {
+        p.awaitingUrl = false;
+        p.url = m[0];
+        void p.ctl.navigate(m[0]);
+        this.persist();
+      }
+    });
+  }
 
-  /** The shell window that hosts embedded (non-popped) panes. */
   attachTo(shell: BrowserWindow): void {
     this.shell = shell;
   }
 
   async start(): Promise<void> {
-    await this.newPane();
+    const saved = getPanes();
+    this.restoring = true;
+    try {
+      if (saved.panes.length) {
+        for (const s of saved.panes) {
+          // Recreate the pane (blank), then decide what to display — without assuming the
+          // dev server is running. A localhost URL gets a "press ▶ to start" placeholder.
+          const info = await this.newPane(undefined, s.label, s.cmd, s.cwd);
+          const p = this.panes.get(info.id)!;
+          p.url = s.url || "about:blank"; // canonical (persisted) url, not the placeholder
+          if (s.url && isLocalUrl(s.url)) await p.ctl.navigate(this.placeholder(s.label, s.url));
+          else if (s.url) await p.ctl.navigate(s.url);
+        }
+        const ids = [...this.panes.keys()];
+        const target = ids[saved.activeIndex ?? 0];
+        if (target) {
+          this.activeId = target;
+          this.applyActive();
+        }
+      } else {
+        await this.newPane();
+      }
+    } finally {
+      this.restoring = false;
+    }
+    this.persist();
+  }
+
+  private placeholder(label: string | undefined, url: string): string {
+    return (
+      "data:text/html;charset=utf-8," +
+      encodeURIComponent(
+        `<html><body style="margin:0;font:14px ui-monospace,monospace;background:#0d1117;color:#8b949e;display:grid;place-items:center;height:100vh">` +
+          `<div style="text-align:center"><div style="font-size:16px;color:#c9d1d9">${label ?? "dev server"}</div>` +
+          `<div style="margin-top:8px">press ▶ to start — was ${url}</div></div></body></html>`,
+      )
+    );
+  }
+
+  private persist(): void {
+    if (this.restoring) return;
+    const ids = [...this.panes.keys()];
+    setPanes({
+      panes: ids.map((id) => {
+        const p = this.panes.get(id)!;
+        return { url: p.url, label: p.label, cmd: p.cmd, cwd: p.cwd };
+      }),
+      activeIndex: this.activeId ? ids.indexOf(this.activeId) : 0,
+    });
   }
 
   private notify(): void {
@@ -65,7 +137,12 @@ export class BrowserManager implements IBrowserManager {
     return p.ctl;
   }
 
-  /** Show only the active embedded pane, positioned over #browserarea. */
+  private paneOrActive(id?: string): Pane {
+    const p = this.panes.get(id ?? this.activeId ?? "");
+    if (!p) throw new Error(`no pane "${id ?? this.activeId}"`);
+    return p;
+  }
+
   private applyActive(): void {
     if (!this.shell || this.shell.isDestroyed()) return;
     for (const p of this.panes.values()) {
@@ -83,7 +160,6 @@ export class BrowserManager implements IBrowserManager {
     }
   }
 
-  /** Renderer reports the #browserarea rect; reposition the active pane. */
   setBounds(rect: Rect): void {
     this.bounds = {
       x: Math.round(rect.x),
@@ -95,17 +171,18 @@ export class BrowserManager implements IBrowserManager {
     if (a && !a.popped && this.shell && !this.shell.isDestroyed()) a.view.setBounds(this.bounds);
   }
 
-  // --- IBrowserManager (pane management) ---
-  async newPane(url?: string): Promise<PaneInfo> {
+  // --- pane management ---
+  async newPane(url?: string, label?: string, cmd?: string, cwd?: string): Promise<PaneInfo> {
     const id = `pane-${++this.counter}`;
     const view = new WebContentsView({ webPreferences: { sandbox: false, offscreen: this.offscreen } });
     await view.webContents.loadURL("about:blank");
     const ctl = new ElectronBrowserController(this.buffer, view.webContents, this.opts, id);
     await ctl.start();
-    this.panes.set(id, { id, view, ctl });
+    this.panes.set(id, { id, view, ctl, dev: new DevServer(this.buffer, id), cmd, cwd, label, url: url ?? "about:blank" });
     this.activeId = id;
     this.applyActive();
     if (url) await ctl.navigate(url);
+    this.persist();
     this.notify();
     return this.info(id);
   }
@@ -123,6 +200,7 @@ export class BrowserManager implements IBrowserManager {
     } else {
       this.applyActive();
     }
+    this.persist();
     this.notify();
     return this.info(id);
   }
@@ -130,6 +208,7 @@ export class BrowserManager implements IBrowserManager {
   closePane(id: string): boolean {
     const p = this.panes.get(id);
     if (!p) return false;
+    p.dev.stop();
     void p.ctl.close();
     if (p.popped && !p.popped.isDestroyed()) p.popped.destroy();
     else if (this.shell && !this.shell.isDestroyed()) {
@@ -144,11 +223,11 @@ export class BrowserManager implements IBrowserManager {
       this.activeId = this.panes.keys().next().value;
       this.applyActive();
     }
+    this.persist();
     this.notify();
     return true;
   }
 
-  /** Detach a pane into its own standalone window. */
   popPane(id: string): PaneInfo {
     const p = this.panes.get(id);
     if (!p) throw new Error(`no pane "${id}"`);
@@ -160,7 +239,7 @@ export class BrowserManager implements IBrowserManager {
         /* not attached */
       }
     }
-    const win = new BrowserWindow({ width: 1000, height: 720, show: !this.offscreen, title: `devloop — ${id}` });
+    const win = new BrowserWindow({ width: 1000, height: 720, show: !this.offscreen, title: `devloop — ${p.label ?? id}` });
     win.contentView.addChildView(p.view);
     const fill = () => {
       const [w, h] = win.getContentSize();
@@ -174,18 +253,83 @@ export class BrowserManager implements IBrowserManager {
       this.activeId = [...this.panes.keys()].find((k) => !this.panes.get(k)!.popped);
       this.applyActive();
     }
+    this.persist();
     this.notify();
     return this.info(id);
   }
 
-  private info(id: string): PaneInfo & { popped: boolean } {
+  // --- per-pane dev lifecycle (default: active pane) ---
+  setDevConfig(id: string | undefined, cmd: string | undefined, cwd: string | undefined): void {
+    const p = this.paneOrActive(id);
+    p.cmd = cmd;
+    p.cwd = cwd;
+    this.persist();
+    this.notify();
+  }
+
+  devStart(id?: string, cmd?: string, cwd?: string): DevStatus {
+    const p = this.paneOrActive(id);
+    if (cmd !== undefined) p.cmd = cmd;
+    if (cwd !== undefined) p.cwd = cwd;
+    const resolvedCwd = p.cwd || process.cwd();
+    const resolvedCmd = p.cmd || detectDevCommand(resolvedCwd);
+    p.awaitingUrl = true; // auto-navigate this pane when the server announces its URL
+    const st = p.dev.start(resolvedCmd, resolvedCwd);
+    this.persist();
+    this.notify();
+    return st;
+  }
+
+  devStop(id?: string): boolean {
+    const r = this.paneOrActive(id).dev.stop();
+    this.notify();
+    return r;
+  }
+
+  devRestart(id?: string): DevStatus {
+    const p = this.paneOrActive(id);
+    p.dev.stop();
+    return this.devStart(p.id);
+  }
+
+  devStatus(id?: string): DevStatus {
+    return this.paneOrActive(id).dev.status();
+  }
+
+  reload(id: string | undefined, hard: boolean): void {
+    const wc = this.paneOrActive(id).view.webContents;
+    if (hard) wc.reloadIgnoringCache();
+    else wc.reload();
+  }
+
+  private info(id: string): PaneInfo {
     const p = this.panes.get(id)!;
-    return { id, url: p.ctl.currentUrl(), active: id === this.activeId, popped: !!p.popped };
+    const st = p.dev.status();
+    return {
+      id,
+      url: p.ctl.currentUrl(),
+      active: id === this.activeId,
+      popped: !!p.popped,
+      label: p.label,
+      dev: { running: st.running, name: st.name, cmd: p.cmd, cwd: p.cwd },
+    };
+  }
+
+  setLabel(id: string, label: string): void {
+    const p = this.panes.get(id);
+    if (!p) return;
+    p.label = label;
+    this.persist();
+    this.notify();
   }
 
   // --- IBrowserController (delegate to active pane) ---
-  navigate(url: string) {
-    return this.active().navigate(url);
+  async navigate(url: string) {
+    const r = await this.active().navigate(url);
+    const p = this.activeId ? this.panes.get(this.activeId) : undefined;
+    if (p) p.url = url; // canonical url follows real navigations
+    this.persist();
+    return r;
   }
   screenshot(fullPage?: boolean) {
     return this.active().screenshot(fullPage);
@@ -208,7 +352,12 @@ export class BrowserManager implements IBrowserManager {
   async close(): Promise<void> {
     for (const p of this.panes.values()) {
       try {
-        await p.ctl.close(); // detach debugger
+        p.dev.stop();
+      } catch {
+        /* ignore */
+      }
+      try {
+        await p.ctl.close();
       } catch {
         /* ignore */
       }

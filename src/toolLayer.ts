@@ -9,14 +9,14 @@
 
 import { type CallToolResult, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { type LogBuffer, type LogSource } from "./logBuffer.ts";
-import { detectDevCommand, type DevServer } from "./devServer.ts";
+import { detectDevCommand, type DevServerLike } from "./devServer.ts";
 import { listProjects, addProject, removeProject, getProject } from "./registry.ts";
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
 
 export interface ToolDeps {
   buffer: LogBuffer;
   browser: IBrowserController;
-  devServer: DevServer;
+  devServer: DevServerLike;
 }
 
 let deps: ToolDeps;

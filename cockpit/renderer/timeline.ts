@@ -14,6 +14,8 @@ interface Pane {
   url: string;
   active: boolean;
   popped?: boolean;
+  label?: string;
+  dev?: { running: boolean; name?: string; cmd?: string; cwd?: string };
 }
 
 interface Step {
@@ -63,6 +65,9 @@ declare global {
       devStart: (opts: { cmd?: string; cwd?: string }) => Promise<DevStatus>;
       devStop: () => Promise<boolean>;
       devStatus: () => Promise<DevStatus>;
+      devRestart: () => Promise<DevStatus>;
+      setDevConfig: (opts: { cmd?: string; cwd?: string }) => Promise<void>;
+      reload: (hard: boolean) => Promise<void>;
       pickFolder: () => Promise<string | null>;
       projects: () => Promise<Project[]>;
       projectAdd: (p: Project) => Promise<Project[]>;
@@ -72,6 +77,7 @@ declare global {
       paneSelect: (id: string) => Promise<Pane>;
       paneClose: (id: string) => Promise<boolean>;
       panePop: (id: string) => Promise<Pane>;
+      paneSetLabel: (id: string, label: string) => Promise<void>;
       setBounds: (rect: { x: number; y: number; width: number; height: number }) => Promise<void>;
       onPanesChanged: (cb: () => void) => () => void;
       repro: (args: unknown) => Promise<ReproResult>;
@@ -90,8 +96,12 @@ const urlInput = document.getElementById("url") as HTMLInputElement;
 const goBtn = document.getElementById("go")!;
 const devCmd = document.getElementById("devcmd") as HTMLInputElement;
 const devCwd = document.getElementById("devcwd") as HTMLInputElement;
-const devBtn = document.getElementById("devbtn")!;
-const devStatusEl = document.getElementById("devstatus")!;
+const setConfigBtn = document.getElementById("setconfig")!;
+const devChip = document.getElementById("devchip")!;
+const playBtn = document.getElementById("play")!;
+const restartBtn = document.getElementById("restart")!;
+const refreshBtn = document.getElementById("refresh")!;
+const hardRefreshBtn = document.getElementById("hardrefresh")!;
 const browseBtn = document.getElementById("browse")!;
 const projectSel = document.getElementById("project") as HTMLSelectElement;
 const openBtn = document.getElementById("open")!;
@@ -112,7 +122,6 @@ const reproStatus = document.getElementById("reprostatus")!;
 let entries: Entry[] = [];
 let filterTarget: string | null = null; // null = all panes
 let projectsCache: Project[] = [];
-const paneLabels: Record<string, string> = {}; // pane id → project name (for tab labels)
 
 function isErr(e: Entry): boolean {
   return (
@@ -140,8 +149,8 @@ function render(): void {
   for (const e of entries) {
     if (q && !e.line.toLowerCase().includes(q)) continue;
     if (onlyErr && !isErr(e)) continue;
-    // Per-pane filter: keep server events always, browser events only for the selected pane.
-    if (filterTarget && e.source === "browser" && e.target !== filterTarget) continue;
+    // Per-pane filter: keep events for the selected pane (browser + its server), plus untagged.
+    if (filterTarget && e.target && e.target !== filterTarget) continue;
     const row = document.createElement("div");
     row.className = `logrow ${e.source}${isErr(e) ? " err" : ""}`;
     const tag = document.createElement("span");
@@ -180,12 +189,13 @@ async function renderPanes(): Promise<void> {
     const el = document.createElement("span");
     el.className = `pane${p.active ? " active" : ""}${p.popped ? " popped" : ""}`;
     const label = document.createElement("span");
-    label.textContent = (paneLabels[p.id] ?? p.id) + (p.popped ? " ⤢" : "");
+    label.textContent = (p.label ?? p.id) + (p.popped ? " ⤢" : "");
     label.addEventListener("click", async () => {
       await window.devloop.paneSelect(p.id);
       filterTarget = p.id;
       render();
       reportBounds();
+      void refreshDevControls();
     });
     const x = document.createElement("span");
     x.className = "x";
@@ -208,10 +218,19 @@ async function renderPanes(): Promise<void> {
   panesBar.replaceChildren(frag);
 }
 
-async function refreshDevStatus(): Promise<void> {
-  const s = await window.devloop.devStatus();
-  devStatusEl.textContent = s.running ? `dev: ${s.cmd}` : "dev: stopped";
-  (devBtn as HTMLButtonElement).textContent = s.running ? "dev stop" : "dev start";
+/** Update the top-bar dev chip + play button from the active pane, and prefill the config inputs. */
+async function refreshDevControls(): Promise<void> {
+  const active = (await window.devloop.panes()).find((p) => p.active);
+  const d = active?.dev;
+  const running = !!d?.running;
+  devChip.classList.toggle("running", running);
+  if (running) devChip.textContent = `● ${d?.name ?? active?.label ?? "dev"}`;
+  else if (d?.cmd || d?.cwd) devChip.textContent = "dev: stopped";
+  else devChip.textContent = "dev: not configured";
+  playBtn.textContent = running ? "⏹" : "▶";
+  // Prefill the (one-time) config inputs with this pane's saved config.
+  devCmd.value = d?.cmd ?? "";
+  devCwd.value = d?.cwd ?? "";
 }
 
 async function refreshProjects(selected?: string): Promise<void> {
@@ -253,7 +272,7 @@ function saveSession(): void {
 async function labelActivePane(name: string): Promise<void> {
   const active = (await window.devloop.panes()).find((p) => p.active);
   if (active) {
-    paneLabels[active.id] = name;
+    await window.devloop.paneSetLabel(active.id, name); // persisted by the manager
     await renderPanes();
   }
 }
@@ -354,19 +373,30 @@ async function init(): Promise<void> {
     if ((e as KeyboardEvent).key === "Enter") void navigate();
   });
 
-  devBtn.addEventListener("click", async () => {
-    const s = await window.devloop.devStatus();
-    if (s.running) {
+  // Top-bar dev controls (act on the active pane, pre-wired from its saved config).
+  playBtn.addEventListener("click", async () => {
+    const active = (await window.devloop.panes()).find((p) => p.active);
+    const d = active?.dev;
+    if (d?.running) {
       await window.devloop.devStop();
+    } else if (!d?.cmd && !d?.cwd) {
+      controlsEl.classList.remove("collapsed"); // not configured yet → reveal the gear
+      devCwd.focus();
     } else {
-      const st = await window.devloop.devStart({
-        cmd: devCmd.value.trim() || undefined,
-        cwd: devCwd.value.trim() || undefined,
-      });
-      if (st.name) await labelActivePane(st.name); // tab shows the project name
-      saveSession();
+      const st = await window.devloop.devStart({});
+      if (st.name) await labelActivePane(st.name);
     }
-    await refreshDevStatus();
+    await refreshDevControls();
+  });
+  restartBtn.addEventListener("click", async () => {
+    await window.devloop.devRestart();
+    await refreshDevControls();
+  });
+  refreshBtn.addEventListener("click", () => void window.devloop.reload(false));
+  hardRefreshBtn.addEventListener("click", () => void window.devloop.reload(true));
+  setConfigBtn.addEventListener("click", async () => {
+    await window.devloop.setDevConfig({ cmd: devCmd.value.trim() || undefined, cwd: devCwd.value.trim() || undefined });
+    await refreshDevControls();
   });
 
   browseBtn.addEventListener("click", async () => {
@@ -386,7 +416,7 @@ async function init(): Promise<void> {
     const res = await window.devloop.openProject(projectSel.value);
     await labelActivePane(res.name); // package.json/folder name of the project
     saveSession();
-    await refreshDevStatus();
+    await refreshDevControls();
   });
   saveBtn.addEventListener("click", async () => {
     const name = pname.value.trim();
@@ -402,7 +432,10 @@ async function init(): Promise<void> {
     await refreshProjects(name);
   });
 
-  window.devloop.onPanesChanged(() => void renderPanes());
+  window.devloop.onPanesChanged(() => {
+    void renderPanes();
+    void refreshDevControls();
+  });
 
   addStepBtn.addEventListener("click", () => addStep());
   runReproBtn.addEventListener("click", runRepro);
@@ -438,7 +471,7 @@ async function init(): Promise<void> {
   new ResizeObserver(reportBounds).observe(browserArea);
   window.addEventListener("resize", reportBounds);
 
-  await refreshDevStatus();
+  await refreshDevControls();
   await refreshProjects();
   await renderPanes();
   reportBounds(); // initial placement

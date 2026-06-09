@@ -35,9 +35,16 @@ export interface Session {
   steps?: ReproStep[];
 }
 
+/** Open panes (url + project label + dev config) so the cockpit restores them on relaunch. */
+export interface PanesState {
+  panes: { url: string; label?: string; cmd?: string; cwd?: string }[];
+  activeIndex?: number;
+}
+
 const DIR = process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop");
 const FILE = join(DIR, "projects.json");
 const SESSION_FILE = join(DIR, "session.json");
+const PANES_FILE = join(DIR, "panes.json");
 
 export function listProjects(): Project[] {
   try {
@@ -84,4 +91,18 @@ export function getSession(): Session {
 export function setSession(s: Session): void {
   mkdirSync(DIR, { recursive: true });
   writeFileSync(SESSION_FILE, JSON.stringify(s, null, 2));
+}
+
+export function getPanes(): PanesState {
+  try {
+    const parsed = JSON.parse(readFileSync(PANES_FILE, "utf8"));
+    return Array.isArray(parsed.panes) ? parsed : { panes: [] };
+  } catch {
+    return { panes: [] };
+  }
+}
+
+export function setPanes(state: PanesState): void {
+  mkdirSync(DIR, { recursive: true });
+  writeFileSync(PANES_FILE, JSON.stringify(state, null, 2));
 }
