@@ -183,14 +183,16 @@ function wireIpc(): void {
 
   // Per-pane dev lifecycle (top-bar controls act on the active pane).
   ipcMain.handle("devloop:devStatus", () => manager.devStatus());
-  ipcMain.handle("devloop:devStart", (_e, opts: { cmd?: string; cwd?: string }) =>
-    manager.devStart(undefined, opts?.cmd || undefined, opts?.cwd || undefined),
-  );
+  ipcMain.handle("devloop:devStart", async (_e, opts: { cmd?: string; cwd?: string }) => {
+    await manager.ensureActive();
+    return manager.devStart(undefined, opts?.cmd || undefined, opts?.cwd || undefined);
+  });
   ipcMain.handle("devloop:devStop", () => manager.devStop());
   ipcMain.handle("devloop:devRestart", () => manager.devRestart());
-  ipcMain.handle("devloop:setDevConfig", (_e, opts: { cmd?: string; cwd?: string }) =>
-    manager.setDevConfig(undefined, opts?.cmd || undefined, opts?.cwd || undefined),
-  );
+  ipcMain.handle("devloop:setDevConfig", async (_e, opts: { cmd?: string; cwd?: string }) => {
+    await manager.ensureActive();
+    return manager.setDevConfig(undefined, opts?.cmd || undefined, opts?.cwd || undefined);
+  });
   ipcMain.handle("devloop:reload", (_e, hard: boolean) => manager.reload(undefined, !!hard));
 
   ipcMain.handle("devloop:pickFolder", async () => {
@@ -224,6 +226,7 @@ function wireIpc(): void {
   ipcMain.handle("devloop:openProject", async (_e, name: string) => {
     const p = getProject(name);
     if (!p) throw new Error(`no saved project "${name}"`);
+    await manager.ensureActive(); // open into a pane even if all were closed
     const label = projectName(p.cwd);
     // Configure + start this project on the ACTIVE pane; auto-navigate (or use saved url).
     manager.setDevConfig(undefined, p.cmd, p.cwd);
@@ -434,6 +437,22 @@ async function runSelfTest() {
   const recovered = buffer.query({}).some((e) => e.line.includes("post-crash-ok"));
   console.log(`SELFTEST self-heal: recovered=${recovered}`);
 
+  // 11) regression: closing every pane then a dev action must not crash ("no pane undefined").
+  let robustOk = false;
+  try {
+    for (const p of (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string }[] }).panes) {
+      await handleTool("pane_close", { id: p.id });
+    }
+    await new Promise((r) => setTimeout(r, 300)); // let the replacement pane settle
+    JSON.parse((await handleTool("dev_status")).content[0]!.text as string); // must not throw
+    await tl.executeJavaScript(`window.devloop.setDevConfig({ cwd: ${JSON.stringify(process.cwd())} })`);
+    const after = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: unknown[] }).panes.length;
+    robustOk = after >= 1;
+    console.log(`SELFTEST robustness (close-all → dev action): panesAfter=${after} ok=${robustOk}`);
+  } catch (e) {
+    console.log(`SELFTEST robustness FAILED: ${e}`);
+  }
+
   const ok =
     api === "object" &&
     got &&
@@ -447,7 +466,8 @@ async function runSelfTest() {
     persistOk &&
     perPaneOk &&
     bodyOk &&
-    recovered;
+    recovered &&
+    robustOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").

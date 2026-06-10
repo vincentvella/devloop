@@ -138,9 +138,19 @@ export class BrowserManager implements IBrowserManager {
   }
 
   private paneOrActive(id?: string): Pane {
-    const p = this.panes.get(id ?? this.activeId ?? "");
-    if (!p) throw new Error(`no pane "${id ?? this.activeId}"`);
+    // Fall back to the active pane, then to any open pane (e.g. when the active one was popped).
+    const key = id ?? this.activeId ?? this.panes.keys().next().value;
+    const p = key ? this.panes.get(key) : undefined;
+    if (!p) throw new Error("no panes open");
     return p;
+  }
+
+  /** Ensure there's an active pane (creating one if all were closed). */
+  async ensureActive(): Promise<void> {
+    if (this.activeId && this.panes.has(this.activeId)) return;
+    const first = this.panes.keys().next().value;
+    if (first) this.activeId = first;
+    else await this.newPane();
   }
 
   private applyActive(): void {
@@ -223,6 +233,7 @@ export class BrowserManager implements IBrowserManager {
       this.activeId = this.panes.keys().next().value;
       this.applyActive();
     }
+    // Zero panes is a valid state (browser-area hint shows); a dev action re-creates one.
     this.persist();
     this.notify();
     return true;
@@ -293,10 +304,12 @@ export class BrowserManager implements IBrowserManager {
   }
 
   devStatus(id?: string): DevStatus {
+    if (this.panes.size === 0) return { running: false };
     return this.paneOrActive(id).dev.status();
   }
 
   reload(id: string | undefined, hard: boolean): void {
+    if (this.panes.size === 0) return;
     const wc = this.paneOrActive(id).view.webContents;
     if (hard) wc.reloadIgnoringCache();
     else wc.reload();
