@@ -220,8 +220,11 @@ export class BrowserManager implements IBrowserManager {
     if (!p) return false;
     p.dev.stop();
     void p.ctl.close();
-    if (p.popped && !p.popped.isDestroyed()) p.popped.destroy();
-    else if (this.shell && !this.shell.isDestroyed()) {
+    if (p.popped && !p.popped.isDestroyed()) {
+      const w = p.popped;
+      p.popped = undefined; // so the 'close'/dockPane path no-ops — we're destroying the pane
+      w.destroy();
+    } else if (this.shell && !this.shell.isDestroyed()) {
       try {
         this.shell.contentView.removeChildView(p.view);
       } catch {
@@ -258,7 +261,9 @@ export class BrowserManager implements IBrowserManager {
     };
     fill();
     win.on("resize", fill);
-    win.on("closed", () => this.closePane(id));
+    // Closing the pop-out RE-DOCKS the pane (doesn't destroy it). The tab's × still closes it
+    // — closePane uses win.destroy(), which skips 'close', so this handler won't re-dock then.
+    win.on("close", () => this.dockPane(id));
     p.popped = win;
     if (this.activeId === id) {
       this.activeId = [...this.panes.keys()].find((k) => !this.panes.get(k)!.popped);
@@ -319,6 +324,26 @@ export class BrowserManager implements IBrowserManager {
   __crashActive(): void {
     const p = this.activeId ? this.panes.get(this.activeId) : undefined;
     p?.view.webContents.forcefullyCrashRenderer();
+  }
+
+  /** Test hook: user-close a popped window (verifies re-dock). */
+  __closePoppedWindow(id: string): void {
+    this.panes.get(id)?.popped?.close();
+  }
+
+  /** Re-dock a popped pane back into the shell (called when its window is closed). */
+  private dockPane(id: string): void {
+    const p = this.panes.get(id);
+    if (!p?.popped) return;
+    try {
+      p.popped.contentView.removeChildView(p.view); // keep the view alive as the window closes
+    } catch {
+      /* already detached */
+    }
+    p.popped = undefined;
+    if (this.activeId === id) this.applyActive(); // re-attach + position in the shell
+    this.persist();
+    this.notify();
   }
 
   private info(id: string): PaneInfo {

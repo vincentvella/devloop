@@ -381,6 +381,16 @@ async function runSelfTest() {
   const popOk = afterPop.panes.find((p) => p.id === pane2.id)?.popped === true;
   console.log(`SELFTEST pop-out: ${pane2.id} popped=${popOk}`);
 
+  // 6c) closing the pop-out window re-docks the pane (doesn't destroy it).
+  manager.__closePoppedWindow(pane2.id);
+  await new Promise((r) => setTimeout(r, 200));
+  const afterDock = JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as {
+    panes: { id: string; popped?: boolean }[];
+  };
+  const dockedPane = afterDock.panes.find((p) => p.id === pane2.id);
+  const redockOk = !!dockedPane && dockedPane.popped !== true; // still exists, no longer popped
+  console.log(`SELFTEST re-dock: pane present=${!!dockedPane} popped=${dockedPane?.popped ?? false} ok=${redockOk}`);
+
   // 7) repro builder: drive the real "run ▶" button, confirm inline render + session persistence
   const builder = (await tl.executeJavaScript(`(async () => {
     const steps = document.getElementById('steps');
@@ -461,6 +471,7 @@ async function runSelfTest() {
     paneList.panes.length >= 2 &&
     taggedRight &&
     popOk &&
+    redockOk &&
     builderOk &&
     nameOk &&
     persistOk &&
