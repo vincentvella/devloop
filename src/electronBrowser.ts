@@ -10,7 +10,7 @@
  */
 
 import type { WebContents } from "electron";
-import type { LogBuffer } from "./logBuffer.ts";
+import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
 
 export interface ElectronBrowserOptions {
@@ -34,7 +34,10 @@ export class ElectronBrowserController implements IBrowserController {
   private inflight = 0;
   private lastActivity = 0;
   private lastDocStatus: number | null = null;
-  private readonly requests = new Map<string, { url: string; method: string }>();
+  private readonly requests = new Map<string, { url: string; method: string; postData?: string }>();
+  /** Network entries awaiting their response body (fetched on loadingFinished). */
+  private readonly pendingBodies = new Map<string, LogEntry>();
+  private listening = false;
 
   constructor(
     private readonly buffer: LogBuffer,
@@ -51,11 +54,36 @@ export class ElectronBrowserController implements IBrowserController {
   async start(): Promise<void> {
     const dbg = this.wc.debugger;
     if (!dbg.isAttached()) dbg.attach("1.3");
-    dbg.on("message", (_event, method, params) => this.onCdp(method, params));
+    if (!this.listening) {
+      dbg.on("message", (_event, method, params) => this.onCdp(method, params));
+      // Self-heal: a renderer crash detaches CDP — re-attach, re-enable, and reload.
+      this.wc.on("render-process-gone", (_e, details) => {
+        this.emit("pageerror", `[devloop] renderer gone (${details.reason}); recovering`);
+        void this.recover();
+      });
+      this.listening = true;
+    }
+    await this.enableDomains();
+  }
+
+  private async enableDomains(): Promise<void> {
+    const dbg = this.wc.debugger;
     await dbg.sendCommand("Runtime.enable");
     await dbg.sendCommand("Network.enable");
     await dbg.sendCommand("Log.enable");
     await dbg.sendCommand("Page.enable");
+  }
+
+  /** Re-attach CDP and reload after a renderer crash. */
+  private async recover(): Promise<void> {
+    try {
+      const dbg = this.wc.debugger;
+      if (!dbg.isAttached()) dbg.attach("1.3");
+      await this.enableDomains();
+      this.wc.reload();
+    } catch {
+      /* window/view may be gone */
+    }
   }
 
   private onCdp(method: string, params: any): void {
@@ -78,20 +106,37 @@ export class ElectronBrowserController implements IBrowserController {
       case "Network.requestWillBeSent": {
         this.inflight++;
         this.lastActivity = Date.now();
-        this.requests.set(params.requestId, { url: params.request.url, method: params.request.method });
+        this.requests.set(params.requestId, {
+          url: params.request.url,
+          method: params.request.method,
+          postData: params.request.postData,
+        });
         break;
       }
       case "Network.responseReceived": {
         const status: number = params.response.status;
         if (params.type === "Document") this.lastDocStatus = status;
         if (status >= this.opts.networkErrorThreshold) {
-          this.emit("network", `${status} ${params.response.url}`, { url: params.response.url, status });
+          const req = this.requests.get(params.requestId);
+          const entry = this.buffer.push(
+            "browser",
+            "network",
+            `${status} ${req?.method ?? ""} ${params.response.url}`.trim(),
+            { url: params.response.url, status, method: req?.method, requestBody: cap(req?.postData) },
+            this.id,
+          );
+          this.pendingBodies.set(params.requestId, entry); // body fetched on loadingFinished
         }
         break;
       }
       case "Network.loadingFinished": {
         this.inflight = Math.max(0, this.inflight - 1);
         this.lastActivity = Date.now();
+        const entry = this.pendingBodies.get(params.requestId);
+        if (entry) {
+          this.pendingBodies.delete(params.requestId);
+          void this.attachResponseBody(params.requestId, entry);
+        }
         this.requests.delete(params.requestId);
         break;
       }
@@ -103,10 +148,31 @@ export class ElectronBrowserController implements IBrowserController {
         this.emit(
           "network",
           `FAILED ${req?.method ?? ""} ${req?.url ?? params.requestId} — ${params.errorText}`,
-          { url: req?.url, failure: params.errorText },
+          { url: req?.url, failure: params.errorText, requestBody: cap(req?.postData) },
         );
+        this.pendingBodies.delete(params.requestId);
         break;
       }
+    }
+  }
+
+  /** Fetch a logged response's body (capped) and patch it onto the entry. */
+  private async attachResponseBody(requestId: string, entry: LogEntry): Promise<void> {
+    try {
+      const res = (await this.wc.debugger.sendCommand("Network.getResponseBody", { requestId })) as {
+        body: string;
+        base64Encoded: boolean;
+      };
+      let body: string | undefined;
+      if (res.base64Encoded) {
+        const buf = Buffer.from(res.body, "base64");
+        body = buf.includes(0) ? `<binary ${buf.length} bytes>` : cap(buf.toString("utf8")); // decode text, flag binary
+      } else {
+        body = cap(res.body);
+      }
+      (entry.detail as Record<string, unknown>).responseBody = body;
+    } catch {
+      /* body unavailable (evicted, redirect, no content) */
     }
   }
 
@@ -192,6 +258,12 @@ export class ElectronBrowserController implements IBrowserController {
       /* already detached / window gone */
     }
   }
+}
+
+/** Cap a body to keep the buffer light; mark truncation. */
+function cap(s: string | undefined, n = 2000): string | undefined {
+  if (s == null) return undefined;
+  return s.length > n ? `${s.slice(0, n)}…(${s.length - n} more)` : s;
 }
 
 function renderRemote(o: RemoteObject): string {

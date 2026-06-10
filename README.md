@@ -51,6 +51,7 @@ bunx puppeteer browsers install chrome   # headless mode, if no bundled Chromium
 **Logs & correlation**
 - `get_logs({ source?, stream?, grep?, sinceSeq?, limit? })` — unified tail. `source` is `server`|`browser`; `stream` is `stdout`/`stderr`/`console`/`network`/`pageerror`. Pass the last `seq` as `sinceSeq` to tail incrementally.
 - `get_logs_around({ ts, windowMs?, source? })` — **the correlation tool**: all events within ±`windowMs` of a timestamp, time-ordered across both sources.
+- Logged **network** events (failures + status ≥ `DEVLOOP_NET_THRESHOLD`) carry the request `postData` and a capped, base64-decoded `responseBody` in their `detail` (Electron substrate).
 - `clear_logs()` — reset before reproducing an issue.
 - `repro({ actions | action, waitFor?, settleMs?, stepSettleMs?, idleMs?, timeoutMs?, continueOnError?, clear? })` — **reproduce-and-correlate**: clears the buffer, performs one action or a **sequence**, waits, and returns everything that happened on both sides across the sequence — with per-step results (`steps[]`), a `byStream` count, and a pre-filtered `errors` list.
   - `actions: [{kind, ...}]` — kinds: `navigate`/`click`/`type`/`eval`/`none`. `action` (singular) = one-step convenience.
@@ -170,7 +171,7 @@ bun run app:selftest    # headless Electron: substrate→buffer, tool layer, MCP
 
 ## Where to take it next
 
-- **Network bodies** — capture request/response payloads via `Network.*` CDP events (currently method/status/url).
-- **Self-healing re-acquire for Electron panes** (the Puppeteer substrate already recovers from target loss).
+- **Stdout/network parity for Puppeteer** — the Puppeteer substrate logs method/status/url; bring request/response **bodies** there too (the Electron substrate captures them).
+- **HTTP/SSE for stdio** — a long-lived shared daemon outside the cockpit.
 
-_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer) · project registry (with saved repro steps) · session persistence · single-window Electron cockpit — tabbed panes, collapsible toolbar + timeline, pop-out, project-named tabs · per-pane dev servers with top-bar play/stop/restart/refresh/hard-refresh, configure-once · auto-navigate from logs · pane persistence + restore (no "assume running") · project picker, folder browse, port/URL bar, visual repro builder · MCP-over-HTTP · clean process-group teardown + crash watchdog · Electron security-warning suppression._
+_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer **and** Electron panes — recover from renderer crash) · **network request/response bodies** (capped, base64-decoded, on logged Electron entries) · project registry (with saved repro steps) · session persistence · single-window Electron cockpit — tabbed panes, collapsible toolbar + timeline, pop-out, project-named tabs · per-pane dev servers with top-bar play/stop/restart/refresh/hard-refresh, configure-once · auto-navigate from logs · pane persistence + restore (no "assume running") · project picker, folder browse, port/URL bar, visual repro builder · MCP-over-HTTP · clean process-group teardown + crash watchdog · Electron security-warning suppression._

@@ -89,6 +89,7 @@ async function startHttp(): Promise<void> {
   const http = (httpServer = createServer(async (req, res) => {
     if (!req.url?.startsWith("/mcp")) {
       res.statusCode = 404;
+      res.setHeader("Access-Control-Allow-Origin", "*"); // so cross-origin probes get the response
       return res.end("not found");
     }
     const sid = req.headers["mcp-session-id"] as string | undefined;
@@ -413,6 +414,26 @@ async function runSelfTest() {
   console.log(`SELFTEST per-pane: activePane=${activeId} serverLogTagged=${serverTagged}`);
   const perPaneOk = serverTagged;
 
+  // 9) network body: fetch the cockpit's own HTTP server for a 404 (subresource → reliable body).
+  await manager.navigate(
+    `data:text/html,<script>fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`,
+  );
+  await new Promise((r) => setTimeout(r, 800));
+  const net = buffer
+    .query({ source: "browser", stream: "network" })
+    .find((e) => (e.detail as { status?: number })?.status === 404);
+  const body = (net?.detail as { responseBody?: string } | undefined)?.responseBody;
+  const bodyOk = typeof body === "string" && body.includes("not found");
+  console.log(`SELFTEST network body: status=${(net?.detail as { status?: number })?.status} body=${JSON.stringify(body)}`);
+
+  // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
+  manager.__crashActive();
+  await new Promise((r) => setTimeout(r, 1500));
+  await manager.navigate("data:text/html,<script>console.log('post-crash-ok')</script>");
+  await new Promise((r) => setTimeout(r, 400));
+  const recovered = buffer.query({}).some((e) => e.line.includes("post-crash-ok"));
+  console.log(`SELFTEST self-heal: recovered=${recovered}`);
+
   const ok =
     api === "object" &&
     got &&
@@ -424,7 +445,9 @@ async function runSelfTest() {
     builderOk &&
     nameOk &&
     persistOk &&
-    perPaneOk;
+    perPaneOk &&
+    bodyOk &&
+    recovered;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").

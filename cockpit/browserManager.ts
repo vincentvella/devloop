@@ -302,6 +302,12 @@ export class BrowserManager implements IBrowserManager {
     else wc.reload();
   }
 
+  /** Test hook: force the active pane's renderer to crash (verifies self-heal). */
+  __crashActive(): void {
+    const p = this.activeId ? this.panes.get(this.activeId) : undefined;
+    p?.view.webContents.forcefullyCrashRenderer();
+  }
+
   private info(id: string): PaneInfo {
     const p = this.panes.get(id)!;
     const st = p.dev.status();
