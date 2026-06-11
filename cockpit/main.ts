@@ -323,11 +323,32 @@ async function runSelfTest() {
   const clicked = JSON.parse((clickRes.content[0] as any).text);
   console.log(`SELFTEST repro click: stepCount=${clicked.stepCount} errorCount=${clicked.errorCount}`);
 
-  // 3) MCP over HTTP handshake + tools/list
+  // 3) MCP over HTTP — the real remote-Claude surface: handshake, tools/list, AND run a repro.
   const client = new Client({ name: "selftest", version: "0" }, { capabilities: {} });
   await client.connect(new StreamableHTTPClientTransport(new URL(`http://localhost:${chosenPort}/mcp`)));
   const t = await client.listTools();
   console.log(`SELFTEST MCP/HTTP tools: ${t.tools.length} (${t.tools.map((x) => x.name).join(", ")})`);
+
+  // Set up and run a repro entirely over MCP-over-HTTP, then read it back.
+  const reproRes = (await client.callTool({
+    name: "repro",
+    arguments: {
+      action: {
+        kind: "navigate",
+        url: `data:text/html,<script>console.error('mcp-repro-err');fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`,
+      },
+      waitFor: "networkidle",
+      idleMs: 400,
+      timeoutMs: 5000,
+    },
+  })) as { content: Array<{ type: string; text?: string }> };
+  const reproData = JSON.parse(reproRes.content.find((c) => c.type === "text")!.text!) as {
+    stepCount: number;
+    errorCount: number;
+    errors: { line: string }[];
+  };
+  const mcpReproOk = reproData.stepCount === 1 && reproData.errorCount >= 1;
+  console.log(`SELFTEST MCP repro: steps=${reproData.stepCount} errors=${reproData.errorCount} ok=${mcpReproOk}`);
   await client.close();
 
   // 4) RENDERER path: preload API present, and a renderer-initiated navigate reaches the buffer
@@ -467,6 +488,7 @@ async function runSelfTest() {
 
   const ok =
     api === "object" &&
+    mcpReproOk &&
     got &&
     inTool &&
     rendererSees.includes("selftest-proj") &&
