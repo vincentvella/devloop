@@ -1,0 +1,10 @@
+<svg width="380" height="96" viewBox="0 0 380 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- mark (no plate) -->
+  <g transform="translate(12,12) scale(0.28)">
+    <path d="M 66 128 A 62 62 0 0 1 190 128" stroke="#79c0ff" stroke-width="22" stroke-linecap="round"/>
+    <path d="M 190 128 A 62 62 0 0 1 66 128" stroke="#d2a8ff" stroke-width="22" stroke-linecap="round"/>
+    <circle cx="128" cy="128" r="16" fill="#3fb950"/>
+  </g>
+  <!-- wordmark -->
+  <text x="96" y="62" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="46" font-weight="600" fill="#c9d1d9">Devloop</text>
+</svg>

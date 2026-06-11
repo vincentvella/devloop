@@ -1,0 +1,17 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- app-icon plate -->
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+
+  <!-- the loop: two streams circulating into one timeline (gaps at the sides for flow) -->
+  <!-- server stream (blue) — over the top, left → right -->
+  <path d="M 70 110 A 62 62 0 0 1 186 110" stroke="#79c0ff" stroke-width="20" stroke-linecap="round"/>
+  <!-- browser stream (purple) — under the bottom, right → left -->
+  <path d="M 186 146 A 62 62 0 0 1 70 146" stroke="#d2a8ff" stroke-width="20" stroke-linecap="round"/>
+
+  <!-- flow arrowheads at the leading ends -->
+  <path d="M 186 110 l 13 -7 l 1 19 z" fill="#79c0ff"/>
+  <path d="M 70 146 l -13 7 l -1 -19 z" fill="#d2a8ff"/>
+
+  <!-- correlated moment at the core -->
+  <circle cx="128" cy="128" r="15" fill="#3fb950"/>
+</svg>

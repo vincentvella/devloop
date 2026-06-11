@@ -17,9 +17,10 @@
 // and it just spams the timeline. (Set before any window/view is created.)
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, nativeImage } from "electron";
 import { createServer, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 
 // The bundler inlines __dirname to the SOURCE dir, so derive the real output dir
@@ -151,6 +152,7 @@ function createWindows(): void {
     height: 820,
     show: !SELFTEST,
     title: "Devloop",
+    icon: [join(BASE, "../assets/icon.png"), join(BASE, "assets/icon.png")].find(existsSync),
     webPreferences: {
       preload: join(BASE, "preload.cjs"),
       contextIsolation: true,
@@ -278,6 +280,10 @@ async function main() {
   app.setName("Devloop");
   log("waiting for app ready…");
   await app.whenReady();
+  // Dock/taskbar icon in dev (packaged builds get it from electron-builder).
+  // Icons live beside the repo root; in a packaged app they're under resources.
+  const iconPng = [join(BASE, "../assets/icon.png"), join(BASE, "assets/icon.png")].find(existsSync);
+  if (iconPng && process.platform === "darwin" && app.dock) app.dock.setIcon(nativeImage.createFromPath(iconPng));
   log("app ready; creating windows");
   createWindows();
   wireIpc();
