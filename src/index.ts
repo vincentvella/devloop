@@ -33,7 +33,7 @@ const browser = new PuppeteerBrowserController(buffer, {
 
 configureTools({ buffer, browser, devServer });
 
-const server = new Server({ name: "devloop-mcp", version: "0.1.0" }, { capabilities: { tools: {} } });
+const server = new Server({ name: "devloop-mcp", version: "0.1.1" }, { capabilities: { tools: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args = {} } = req.params;
