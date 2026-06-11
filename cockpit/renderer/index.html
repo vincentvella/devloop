@@ -20,6 +20,7 @@
       .status { opacity: 0.7; white-space: nowrap; }
       #devchip { padding: 2px 8px; border: 1px solid #30363d; border-radius: 6px; }
       #devchip.running { color: #3fb950; border-color: #238636; }
+      #devchip.failed { color: #ffa198; border-color: #f85149; }
       .sep { width: 1px; align-self: stretch; background: #30363d; margin: 0 2px; }
       .spacer { flex: 1; }
       label { user-select: none; }
@@ -61,6 +62,7 @@
       .browser { color: #d2a8ff; }
       .repro { color: #7ee787; border-left-color: #2ea043; }
       .repro .tag { color: #7ee787; }
+      .logrow img.shot { display: block; max-width: 320px; max-height: 200px; margin-top: 4px; border: 1px solid #30363d; border-radius: 6px; }
       .err { background: #2d1517; border-left-color: #f85149; color: #ffa198; }
     </style>
   </head>
@@ -74,6 +76,7 @@
         <button id="restart" title="restart dev server">⟳</button>
         <button id="refresh" title="refresh page">⟲</button>
         <button id="hardrefresh" title="hard refresh (ignore cache)">⤓</button>
+        <button id="shot" title="screenshot active pane → timeline">📷</button>
         <span class="sep"></span>
         <button id="controlsToggle" title="settings">⚙</button>
         <button id="pop" title="pop active pane into its own window">⤢</button>

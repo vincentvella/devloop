@@ -194,6 +194,11 @@ function wireIpc(): void {
     return manager.setDevConfig(undefined, opts?.cmd || undefined, opts?.cwd || undefined);
   });
   ipcMain.handle("devloop:reload", (_e, hard: boolean) => manager.reload(undefined, !!hard));
+  ipcMain.handle("devloop:screenshot", async () => {
+    const shot = await manager.screenshot(false);
+    const active = manager.listPanes().find((p) => p.active);
+    buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, active?.id);
+  });
 
   ipcMain.handle("devloop:pickFolder", async () => {
     const r = await dialog.showOpenDialog(shellWin!, { properties: ["openDirectory"] });
@@ -486,6 +491,21 @@ async function runSelfTest() {
     console.log(`SELFTEST robustness FAILED: ${e}`);
   }
 
+  // 12) dev "failed" state: a non-zero exit surfaces as exitCode on the status.
+  await tl.executeJavaScript(`window.devloop.devStart({ cmd: "bash -c 'exit 3'", cwd: ${JSON.stringify(process.cwd())} })`);
+  await new Promise((r) => setTimeout(r, 800));
+  const failStatus = JSON.parse((await handleTool("dev_status")).content[0]!.text as string) as { exitCode?: number };
+  const failOk = failStatus.exitCode === 3;
+  console.log(`SELFTEST dev failed: exitCode=${failStatus.exitCode} ok=${failOk}`);
+
+  // 13) screenshot → a 'screenshot' timeline entry carrying a PNG data URL.
+  await tl.executeJavaScript("window.devloop.screenshot()");
+  await new Promise((r) => setTimeout(r, 500));
+  const shotEntry = buffer.query({ source: "browser", stream: "screenshot" }).pop();
+  const shotImg = (shotEntry?.detail as { image?: string } | undefined)?.image;
+  const shotOk = typeof shotImg === "string" && shotImg.startsWith("data:image/png");
+  console.log(`SELFTEST screenshot: present=${!!shotEntry} ok=${shotOk}`);
+
   const ok =
     api === "object" &&
     mcpReproOk &&
@@ -502,7 +522,9 @@ async function runSelfTest() {
     perPaneOk &&
     bodyOk &&
     recovered &&
-    robustOk;
+    robustOk &&
+    failOk &&
+    shotOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").

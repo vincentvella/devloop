@@ -7,6 +7,7 @@ interface Entry {
   stream: string;
   line: string;
   target?: string;
+  detail?: { image?: string };
 }
 
 interface Pane {
@@ -15,7 +16,7 @@ interface Pane {
   active: boolean;
   popped?: boolean;
   label?: string;
-  dev?: { running: boolean; name?: string; cmd?: string; cwd?: string };
+  dev?: { running: boolean; name?: string; cmd?: string; cwd?: string; exitCode?: number | null };
 }
 
 interface Step {
@@ -68,6 +69,7 @@ declare global {
       devRestart: () => Promise<DevStatus>;
       setDevConfig: (opts: { cmd?: string; cwd?: string }) => Promise<void>;
       reload: (hard: boolean) => Promise<void>;
+      screenshot: () => Promise<void>;
       pickFolder: () => Promise<string | null>;
       projects: () => Promise<Project[]>;
       projectAdd: (p: Project) => Promise<Project[]>;
@@ -102,6 +104,7 @@ const playBtn = document.getElementById("play")!;
 const restartBtn = document.getElementById("restart")!;
 const refreshBtn = document.getElementById("refresh")!;
 const hardRefreshBtn = document.getElementById("hardrefresh")!;
+const shotBtn = document.getElementById("shot")!;
 const browseBtn = document.getElementById("browse")!;
 const projectSel = document.getElementById("project") as HTMLSelectElement;
 const openBtn = document.getElementById("open")!;
@@ -163,7 +166,14 @@ function render(): void {
       tgt.textContent = e.target;
       row.append(tgt);
     }
-    row.append(document.createTextNode(e.line));
+    if (e.stream === "screenshot" && e.detail?.image) {
+      const img = document.createElement("img");
+      img.className = "shot";
+      img.src = e.detail.image;
+      row.append(img);
+    } else {
+      row.append(document.createTextNode(e.line));
+    }
     frag.appendChild(row);
   }
   list.replaceChildren(frag);
@@ -223,8 +233,11 @@ async function refreshDevControls(): Promise<void> {
   const active = (await window.devloop.panes()).find((p) => p.active);
   const d = active?.dev;
   const running = !!d?.running;
+  const failed = !running && typeof d?.exitCode === "number" && d.exitCode !== 0;
   devChip.classList.toggle("running", running);
+  devChip.classList.toggle("failed", failed);
   if (running) devChip.textContent = `● ${d?.name ?? active?.label ?? "dev"}`;
+  else if (failed) devChip.textContent = `✗ exited (code ${d!.exitCode})`;
   else if (d?.cmd || d?.cwd) devChip.textContent = "dev: stopped";
   else devChip.textContent = "dev: not configured";
   playBtn.textContent = running ? "⏹" : "▶";
@@ -383,8 +396,14 @@ async function init(): Promise<void> {
       controlsEl.classList.remove("collapsed"); // not configured yet → reveal the gear
       devCwd.focus();
     } else {
-      const st = await window.devloop.devStart({});
-      if (st.name) await labelActivePane(st.name);
+      try {
+        const st = await window.devloop.devStart({});
+        if (st.name) await labelActivePane(st.name);
+      } catch (e) {
+        devChip.classList.add("failed");
+        devChip.textContent = `✗ ${(e as Error)?.message?.split(": ").pop() ?? "start failed"}`;
+        return;
+      }
     }
     await refreshDevControls();
   });
@@ -394,6 +413,7 @@ async function init(): Promise<void> {
   });
   refreshBtn.addEventListener("click", () => void window.devloop.reload(false));
   hardRefreshBtn.addEventListener("click", () => void window.devloop.reload(true));
+  shotBtn.addEventListener("click", () => void window.devloop.screenshot());
   setConfigBtn.addEventListener("click", async () => {
     await window.devloop.setDevConfig({ cmd: devCmd.value.trim() || undefined, cwd: devCwd.value.trim() || undefined });
     await refreshDevControls();

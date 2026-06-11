@@ -21,6 +21,8 @@ export interface DevStatus {
   startedAt?: number;
   /** Project name — package.json "name", else the folder basename. */
   name?: string;
+  /** Exit code of the last run (when not running). Non-zero ⇒ it failed. */
+  exitCode?: number | null;
 }
 
 /** Derive a project's display name: package.json "name", falling back to the folder name. */
@@ -61,6 +63,7 @@ export interface DevServerLike {
 export class DevServer implements DevServerLike {
   private child?: ChildProcess;
   private meta?: { cmd: string; cwd: string; startedAt: number; name: string };
+  private lastExit?: { code: number | null; signal: NodeJS.Signals | null };
 
   /** `target` tags this server's log lines with a pane id (per-pane mode). */
   constructor(
@@ -85,7 +88,7 @@ export class DevServer implements DevServerLike {
     const wrapped =
       `( ${cmd} ) & CMD=$!; ` +
       `( while kill -0 ${parent} 2>/dev/null; do sleep 2; done; kill -TERM -$$ 2>/dev/null ) & WATCH=$!; ` +
-      `wait $CMD; kill $WATCH 2>/dev/null`;
+      `wait $CMD; CODE=$?; kill $WATCH 2>/dev/null; exit $CODE`; // propagate the dev cmd's exit code
     this.child = spawn(wrapped, {
       cwd,
       shell: true,
@@ -94,11 +97,13 @@ export class DevServer implements DevServerLike {
       env: process.env,
     });
     this.meta = { cmd, cwd, startedAt: Date.now(), name: projectName(cwd) };
+    this.lastExit = undefined;
 
     this.pipe("stdout", this.child.stdout);
     this.pipe("stderr", this.child.stderr);
     this.child.on("exit", (code, signal) => {
       this.buffer.push("server", "stderr", `[devloop] dev server exited code=${code} signal=${signal}`, undefined, this.target);
+      this.lastExit = { code, signal };
       this.child = undefined;
       this.meta = undefined;
     });
@@ -132,7 +137,7 @@ export class DevServer implements DevServerLike {
           startedAt: this.meta?.startedAt,
           name: this.meta?.name,
         }
-      : { running: false };
+      : { running: false, exitCode: this.lastExit?.code ?? undefined };
   }
 
   stop(): boolean {

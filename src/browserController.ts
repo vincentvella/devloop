@@ -24,7 +24,7 @@ export interface PaneInfo {
   /** Display label (e.g. the project name) shown on the tab. */
   label?: string;
   /** This pane's dev server state (per-pane mode). */
-  dev?: { running: boolean; name?: string; cmd?: string; cwd?: string };
+  dev?: { running: boolean; name?: string; cmd?: string; cwd?: string; exitCode?: number | null };
 }
 
 /**

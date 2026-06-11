@@ -354,7 +354,7 @@ export class BrowserManager implements IBrowserManager {
       active: id === this.activeId,
       popped: !!p.popped,
       label: p.label,
-      dev: { running: st.running, name: st.name, cmd: p.cmd, cwd: p.cwd },
+      dev: { running: st.running, name: st.name, cmd: p.cmd, cwd: p.cwd, exitCode: st.exitCode },
     };
   }
 
