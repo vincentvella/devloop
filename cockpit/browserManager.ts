@@ -265,10 +265,9 @@ export class BrowserManager implements IBrowserManager {
     // — closePane uses win.destroy(), which skips 'close', so this handler won't re-dock then.
     win.on("close", () => this.dockPane(id));
     p.popped = win;
-    if (this.activeId === id) {
-      this.activeId = [...this.panes.keys()].find((k) => !this.panes.get(k)!.popped);
-      this.applyActive();
-    }
+    // The popped pane stays ACTIVE (just external) — so its config still shows in the controls
+    // and closing the window re-docks it. The shell area just clears while it's out.
+    this.applyActive();
     this.persist();
     this.notify();
     return this.info(id);

@@ -378,8 +378,10 @@ async function runSelfTest() {
   const afterPop = JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as {
     panes: { id: string; popped?: boolean }[];
   };
-  const popOk = afterPop.panes.find((p) => p.id === pane2.id)?.popped === true;
-  console.log(`SELFTEST pop-out: ${pane2.id} popped=${popOk}`);
+  const poppedInfo = afterPop.panes.find((p) => p.id === pane2.id) as { popped?: boolean; active?: boolean } | undefined;
+  // Popped pane stays ACTIVE so its config/controls persist (regression: gear cleared on pop-out).
+  const popOk = poppedInfo?.popped === true && poppedInfo?.active === true;
+  console.log(`SELFTEST pop-out: ${pane2.id} popped=${poppedInfo?.popped} stillActive=${poppedInfo?.active}`);
 
   // 6c) closing the pop-out window re-docks the pane (doesn't destroy it).
   manager.__closePoppedWindow(pane2.id);
