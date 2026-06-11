@@ -38,6 +38,7 @@ win:
 linux:
   icon: assets/icons/512x512.png
   category: Development
+  maintainer: Vincent Vella <vincevella0@gmail.com>
   target:
     - AppImage
     - deb

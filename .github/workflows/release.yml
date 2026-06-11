@@ -44,6 +44,13 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: bun install --frozen-lockfile
       - run: bun run mcp:build
-      - run: npm publish --access public
+      - name: Publish to npm (skip if this version is already published)
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if npm view "devloop-mcp@$V" version >/dev/null 2>&1; then
+            echo "devloop-mcp@$V already on npm — skipping publish."
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
