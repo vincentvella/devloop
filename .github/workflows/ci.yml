@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Typecheck (core + renderer)
+        run: bun run typecheck
+      - name: Build cockpit bundle
+        run: bun run app:build
+      - name: Build stdio MCP (node-runnable)
+        run: bun run mcp:build
+      - name: Sanity-check the published bundle parses under node
+        run: node --check dist/index.cjs
