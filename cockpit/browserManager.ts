@@ -45,7 +45,14 @@ export class BrowserManager implements IBrowserManager {
   private shell?: BrowserWindow;
   private bounds: Rect = { x: 0, y: 0, width: 800, height: 600 };
   private restoring = false;
+  private overlay = false; // when true, the active view is detached so a DOM overlay can show on top
   onChange?: () => void;
+
+  /** Detach/re-attach the active pane view so renderer DOM (e.g. a lightbox) can cover the area. */
+  setOverlay(on: boolean): void {
+    this.overlay = on;
+    this.applyActive();
+  }
 
   constructor(
     private readonly buffer: LogBuffer,
@@ -163,6 +170,7 @@ export class BrowserManager implements IBrowserManager {
         /* not attached */
       }
     }
+    if (this.overlay) return; // keep the area clear for a DOM overlay
     const a = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (a && !a.popped) {
       this.shell.contentView.addChildView(a.view);
@@ -177,6 +185,7 @@ export class BrowserManager implements IBrowserManager {
       width: Math.round(rect.width),
       height: Math.round(rect.height),
     };
+    if (this.overlay) return;
     const a = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (a && !a.popped && this.shell && !this.shell.isDestroyed()) a.view.setBounds(this.bounds);
   }

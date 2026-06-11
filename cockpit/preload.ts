@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld("devloop", {
   paneSetLabel: (id: string, label: string) => ipcRenderer.invoke("devloop:paneSetLabel", id, label),
   setBounds: (rect: { x: number; y: number; width: number; height: number }) =>
     ipcRenderer.invoke("devloop:setBounds", rect),
+  overlay: (on: boolean) => ipcRenderer.invoke("devloop:overlay", on),
   repro: (args: unknown) => ipcRenderer.invoke("devloop:repro", args),
   session: () => ipcRenderer.invoke("devloop:session"),
   sessionSave: (s: unknown) => ipcRenderer.invoke("devloop:sessionSave", s),

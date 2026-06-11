@@ -217,6 +217,7 @@ function wireIpc(): void {
   ipcMain.handle("devloop:paneSetLabel", (_e, id: string, label: string) => manager.setLabel(id, label));
   // Renderer reports the #browserarea rect; reposition the embedded active pane.
   ipcMain.handle("devloop:setBounds", (_e, rect) => manager.setBounds(rect));
+  ipcMain.handle("devloop:overlay", (_e, on: boolean) => manager.setOverlay(!!on));
 
   // Session: last-used setup, restored on relaunch.
   ipcMain.handle("devloop:session", () => getSession());
@@ -419,14 +420,10 @@ async function runSelfTest() {
   const redockOk = !!dockedPane && dockedPane.popped !== true; // still exists, no longer popped
   console.log(`SELFTEST re-dock: pane present=${!!dockedPane} popped=${dockedPane?.popped ?? false} ok=${redockOk}`);
 
-  // 7) repro builder: drive the real "run ▶" button, confirm inline render + session persistence
+  // 7) repro builder: run via the React test hook, confirm inline render + session persistence
   const builder = (await tl.executeJavaScript(`(async () => {
-    const steps = document.getElementById('steps');
-    const sel = steps.querySelector('select'); const inp = steps.querySelector('input');
-    sel.value = 'navigate'; sel.dispatchEvent(new Event('change'));
-    inp.value = "data:text/html,<title>x</title>";
-    document.getElementById('runrepro').click();
-    await new Promise(r=>setTimeout(r,2000));
+    await window.__devloopTest.runRepro([{ kind: 'navigate', url: 'data:text/html,<title>x</title>' }]);
+    await new Promise(r=>setTimeout(r,1500));
     const listText = document.getElementById('list').textContent || '';
     const sess = await window.devloop.session();
     return JSON.stringify({ inlineRendered: listText.includes('▶ repro'), sessionSteps: (sess.steps||[]).length });

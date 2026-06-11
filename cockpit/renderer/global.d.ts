@@ -1,0 +1,93 @@
+export interface Entry {
+  seq: number;
+  ts: number;
+  source: "server" | "browser" | "repro";
+  stream: string;
+  line: string;
+  target?: string;
+  detail?: { image?: string };
+}
+
+export interface DevStatus {
+  running: boolean;
+  cmd?: string;
+  cwd?: string;
+  name?: string;
+  exitCode?: number | null;
+}
+
+export interface Pane {
+  id: string;
+  url: string;
+  active: boolean;
+  popped?: boolean;
+  label?: string;
+  dev?: { running: boolean; name?: string; cmd?: string; cwd?: string; exitCode?: number | null };
+}
+
+export interface Step {
+  kind: string;
+  url?: string;
+  selector?: string;
+  text?: string;
+  expression?: string;
+}
+
+export interface Project {
+  name: string;
+  cwd: string;
+  cmd?: string;
+  url?: string;
+  steps?: Step[];
+}
+
+export interface ReproResult {
+  stepCount: number;
+  errorCount: number;
+  stoppedAtStep: number | null;
+  steps: { index: number; action: { kind: string }; error?: string }[];
+  errors: { source: string; stream: string; line: string }[];
+}
+
+export interface Session {
+  cmd?: string;
+  cwd?: string;
+  url?: string;
+  steps?: Step[];
+}
+
+export interface DevloopApi {
+  getLogs: (opts?: { limit?: number }) => Promise<Entry[]>;
+  clear: () => Promise<boolean>;
+  navigate: (url: string) => Promise<{ url: string; status: number | null }>;
+  devStatus: () => Promise<DevStatus>;
+  devStart: (opts: { cmd?: string; cwd?: string }) => Promise<DevStatus>;
+  devStop: () => Promise<boolean>;
+  devRestart: () => Promise<DevStatus>;
+  setDevConfig: (opts: { cmd?: string; cwd?: string }) => Promise<void>;
+  reload: (hard: boolean) => Promise<void>;
+  screenshot: () => Promise<void>;
+  pickFolder: () => Promise<string | null>;
+  projects: () => Promise<Project[]>;
+  projectAdd: (p: Project) => Promise<Project[]>;
+  openProject: (name: string) => Promise<{ dev: DevStatus; url: string | null; name: string }>;
+  panes: () => Promise<Pane[]>;
+  paneNew: (url?: string) => Promise<Pane>;
+  paneSelect: (id: string) => Promise<Pane>;
+  paneClose: (id: string) => Promise<boolean>;
+  panePop: (id: string) => Promise<Pane>;
+  paneSetLabel: (id: string, label: string) => Promise<void>;
+  setBounds: (rect: { x: number; y: number; width: number; height: number }) => Promise<void>;
+  overlay: (on: boolean) => Promise<void>;
+  repro: (args: unknown) => Promise<ReproResult>;
+  session: () => Promise<Session>;
+  sessionSave: (s: Session) => Promise<void>;
+  onPanesChanged: (cb: () => void) => () => void;
+  onPush: (cb: (e: Entry) => void) => () => void;
+}
+
+declare global {
+  interface Window {
+    devloop: DevloopApi;
+  }
+}

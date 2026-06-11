@@ -4,120 +4,98 @@
     <meta charset="utf-8" />
     <title>devloop</title>
     <style>
-      :root { color-scheme: dark; }
+      :root {
+        color-scheme: dark;
+        --bg: #0d1117;
+        --bg2: #161b22;
+        --panel: #0d1117;
+        --border: #30363d;
+        --fg: #c9d1d9;
+        --dim: #8b949e;
+        --accent: #d2a8ff;
+        --green: #3fb950;
+        --red: #f85149;
+        --blue: #79c0ff;
+      }
       * { box-sizing: border-box; }
-      body { margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
-             font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #0d1117; color: #c9d1d9; }
+      html, body, #root { height: 100%; }
+      body { margin: 0; overflow: hidden; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); color: var(--fg); }
+      #root { display: flex; flex-direction: column; }
+
+      button, input, select { font: inherit; color: var(--fg); }
+      input, select { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+      input:focus, select:focus { outline: none; border-color: var(--accent); }
+      button { background: #21262d; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+      button:hover { background: #2a3038; }
+      button.icon { width: 28px; padding: 4px 0; text-align: center; }
+      button:disabled { opacity: 0.4; cursor: default; }
 
       /* toolbar */
-      #toolbar { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: #161b22; border-bottom: 1px solid #30363d; }
-      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-      input, select, button { background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 4px 8px; }
-      button { background: #21262d; cursor: pointer; }
-      #url { flex: 1; min-width: 180px; }
-      #project { flex: 1; min-width: 120px; }
-      #devcmd, #devcwd { flex: 1; min-width: 100px; }
-      .status { opacity: 0.7; white-space: nowrap; }
-      #devchip { padding: 2px 8px; border: 1px solid #30363d; border-radius: 6px; }
-      #devchip.running { color: #3fb950; border-color: #238636; }
-      #devchip.failed { color: #ffa198; border-color: #f85149; }
-      .sep { width: 1px; align-self: stretch; background: #30363d; margin: 0 2px; }
+      .toolbar { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--bg2); border-bottom: 1px solid var(--border); }
+      .bar { display: flex; gap: 6px; align-items: center; }
+      .group { display: flex; gap: 4px; align-items: center; }
+      .sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 4px; }
       .spacer { flex: 1; }
-      label { user-select: none; }
-
-      /* collapsible controls */
-      #controls { display: flex; flex-direction: column; gap: 6px; }
-      #controls.collapsed { display: none; }
+      .settings { display: flex; flex-direction: column; gap: 6px; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .row input, .row select { flex: 1; min-width: 90px; }
 
       /* pane tabs */
-      .tabs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-      .pane { display: inline-flex; align-items: center; gap: 6px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 3px 6px 3px 10px; cursor: pointer; }
-      .pane.active { border-color: #d2a8ff; color: #d2a8ff; }
-      .pane.popped { opacity: 0.6; font-style: italic; }
-      .pane .x { opacity: 0.5; padding: 0 2px; }
-      .pane .x:hover { opacity: 1; color: #f85149; }
+      .tabs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex: 1; min-width: 0; }
+      .tab { display: inline-flex; align-items: center; gap: 6px; background: #21262d; border: 1px solid var(--border); border-radius: 7px; padding: 3px 6px 3px 9px; cursor: pointer; max-width: 200px; }
+      .tab:hover { background: #2a3038; }
+      .tab.active { border-color: var(--accent); color: var(--accent); }
+      .tab .dot { width: 7px; height: 7px; border-radius: 50%; background: #484f58; flex: none; }
+      .tab.run .dot { background: var(--green); box-shadow: 0 0 5px var(--green); }
+      .tab .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tab .x { opacity: 0.45; padding: 0 2px; border-radius: 4px; }
+      .tab .x:hover { opacity: 1; color: var(--red); background: #30363d; }
+      .tab.add { color: var(--dim); padding: 3px 9px; }
 
-      /* body split: browser area + collapsible timeline sidebar */
-      #body { display: flex; flex: 1; min-height: 0; }
-      #browserarea { flex: 1; position: relative; background: #010409; }
-      #browserarea .hint { position: absolute; inset: 0; display: grid; place-items: center; color: #6e7681; text-align: center; padding: 20px; }
-      #sidebar { width: 460px; display: flex; flex-direction: column; border-left: 1px solid #30363d; overflow: hidden; transition: width 0.12s ease; }
-      #sidebar.collapsed { width: 0; border-left: none; }
+      /* dev chip */
+      .chip { padding: 2px 9px; border: 1px solid var(--border); border-radius: 7px; white-space: nowrap; color: var(--dim); }
+      .chip.run { color: var(--green); border-color: #238636; }
+      .chip.fail { color: #ffa198; border-color: var(--red); }
+
+      /* body split */
+      .body { display: flex; flex: 1; min-height: 0; }
+      .pane-area { flex: 1; position: relative; background: #010409; }
+      .pane-area .hint { position: absolute; inset: 0; display: grid; place-items: center; color: #6e7681; text-align: center; padding: 24px; }
+      .sidebar { width: 460px; display: flex; flex-direction: column; border-left: 1px solid var(--border); overflow: hidden; transition: width 0.12s ease; }
+      .sidebar.hidden { width: 0; border-left: none; }
 
       /* repro builder */
-      #steps { padding: 4px 10px; }
-      .step { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
+      .repro-head { display: flex; gap: 8px; align-items: center; padding: 8px 10px 4px; }
+      .repro-head strong { color: var(--dim); font-weight: 600; }
+      .steps { padding: 0 10px; display: flex; flex-direction: column; gap: 4px; }
+      .step { display: flex; gap: 6px; align-items: center; }
+      .step select { flex: none; }
       .step input { flex: 1; }
       .step .del { cursor: pointer; opacity: 0.5; padding: 0 4px; }
-      .step .del:hover { opacity: 1; color: #f85149; }
+      .step .del:hover { opacity: 1; color: var(--red); }
 
       /* timeline */
-      #filterbar { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-top: 1px solid #30363d; }
-      #filter { flex: 1; }
-      #list { flex: 1; overflow-y: auto; padding: 6px 0; }
-      .logrow { padding: 2px 10px; white-space: pre-wrap; word-break: break-word; border-left: 3px solid transparent; }
-      .logrow .tag { opacity: 0.55; margin-right: 8px; }
-      .logrow .tgt { opacity: 0.4; margin-right: 6px; }
-      .server { color: #79c0ff; }
-      .browser { color: #d2a8ff; }
-      .repro { color: #7ee787; border-left-color: #2ea043; }
-      .repro .tag { color: #7ee787; }
-      .logrow img.shot { display: block; max-width: 320px; max-height: 200px; margin-top: 4px; border: 1px solid #30363d; border-radius: 6px; }
-      .err { background: #2d1517; border-left-color: #f85149; color: #ffa198; }
+      .filterbar { position: sticky; top: 0; z-index: 1; display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+      .filterbar input { flex: 1; }
+      .list { flex: 1; overflow-y: auto; padding: 4px 0; }
+      .logrow { display: flex; gap: 6px; padding: 2px 10px; white-space: pre-wrap; word-break: break-word; border-left: 3px solid transparent; }
+      .logrow .ts { color: #586069; flex: none; }
+      .logrow .tag { color: var(--dim); flex: none; }
+      .logrow .tgt { color: #6e7681; flex: none; }
+      .logrow .msg { flex: 1; }
+      .logrow.server .tag { color: var(--blue); }
+      .logrow.browser .tag { color: var(--accent); }
+      .logrow.repro { color: #7ee787; border-left-color: #2ea043; }
+      .logrow.err { background: #2d1517; border-left-color: var(--red); color: #ffa198; }
+      .logrow img.shot { display: block; max-width: 280px; max-height: 180px; margin-top: 4px; border: 1px solid var(--border); border-radius: 6px; cursor: zoom-in; }
+
+      /* screenshot lightbox */
+      .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: grid; place-items: center; z-index: 10; cursor: zoom-out; }
+      .lightbox img { max-width: 92vw; max-height: 92vh; border: 1px solid var(--border); border-radius: 8px; }
     </style>
   </head>
   <body>
-    <div id="toolbar">
-      <div class="row">
-        <span id="panes" class="tabs"></span>
-        <span class="spacer"></span>
-        <span id="devchip" class="status">dev: —</span>
-        <button id="play" title="start / stop dev server">▶</button>
-        <button id="restart" title="restart dev server">⟳</button>
-        <button id="refresh" title="refresh page">⟲</button>
-        <button id="hardrefresh" title="hard refresh (ignore cache)">⤓</button>
-        <button id="shot" title="screenshot active pane → timeline">📷</button>
-        <span class="sep"></span>
-        <button id="controlsToggle" title="settings">⚙</button>
-        <button id="pop" title="pop active pane into its own window">⤢</button>
-        <button id="toggle">⟨ timeline</button>
-      </div>
-      <div id="controls" class="collapsed">
-        <div class="row">
-          <input id="url" placeholder="3000  or  http://localhost:3000  →  Enter" />
-          <button id="go">go</button>
-          <select id="project"><option value="">— project —</option></select>
-          <button id="open">open</button>
-          <input id="pname" placeholder="save as…" style="max-width: 120px" />
-          <button id="save">save</button>
-        </div>
-        <div class="row">
-          <input id="devcmd" placeholder="dev cmd (blank = auto-detect)" />
-          <button id="browse">📁</button>
-          <input id="devcwd" placeholder="project cwd" />
-          <button id="setconfig">set dev config</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="body">
-      <div id="browserarea"><div class="hint">browser pane — enter a URL or open a project</div></div>
-      <div id="sidebar">
-        <div class="row" style="padding: 8px 10px 0">
-          <strong style="opacity: 0.7">repro</strong>
-          <button id="addstep">+ step</button>
-          <button id="runrepro">run ▶</button>
-          <span id="reprostatus" class="status"></span>
-        </div>
-        <div id="steps"></div>
-        <div id="filterbar">
-          <input id="filter" placeholder="filter (substring)…" />
-          <label><input type="checkbox" id="errOnly" /> errors only</label>
-          <button id="clear">clear</button>
-        </div>
-        <div id="list"></div>
-      </div>
-    </div>
-    <script type="module" src="./timeline.js"></script>
+    <div id="root"></div>
+    <script type="module" src="./main.js"></script>
   </body>
 </html>
