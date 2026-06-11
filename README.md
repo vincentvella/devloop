@@ -1,4 +1,12 @@
-# devloop-mcp
+<p align="center">
+  <img src="assets/wordmark.svg" alt="Devloop" width="280" />
+</p>
+
+<p align="center">
+  Browser control + dev-server logs on one correlated timeline — for AI agents and humans.
+</p>
+
+---
 
 A unified dev-loop tool: it drives a **browser** and your **dev server**, pushing both sides into one timestamped buffer so you can correlate a browser console error with the backend stack trace from the same moment. It runs two ways from a shared core:
 
@@ -28,10 +36,22 @@ stdout is reserved for the MCP protocol in stdio mode; all human-facing output g
 
 ## Install
 
+**Headless MCP (stdio)** — no clone needed, register it with Claude Code:
+
+```sh
+claude mcp add devloop --scope user -- npx -y devloop-mcp
+```
+
+(Published as [`devloop-mcp`](https://www.npmjs.com/package/devloop-mcp) on npm; Puppeteer fetches Chromium on first install.)
+
+**Cockpit (desktop app)** — grab the installer for your OS from [Releases](https://github.com/vincentvella/devloop/releases) (`.dmg` / `.exe` / `.AppImage`).
+
+**From source** (dev) — requires [bun](https://bun.sh):
+
 ```sh
 bun install
-bunx puppeteer browsers install chrome   # headless mode, if no bundled Chromium
-# Electron's binary downloads on install; the cockpit needs it.
+bun run app          # build + launch the Electron cockpit
+bun run start        # or run the stdio MCP directly
 ```
 
 ## Tools (20)
@@ -79,8 +99,7 @@ bunx puppeteer browsers install chrome   # headless mode, if no bundled Chromium
 Register **once**, at user scope — works for every project:
 
 ```sh
-claude mcp add devloop --scope user \
-  -- bun run /Users/vince/Workspace/devloop-mcp/src/index.ts
+claude mcp add devloop --scope user -- npx -y devloop-mcp
 ```
 
 Then, in any project: *"dev_start and repro a navigate to /projects"*. `dev_start` defaults `cwd` to the project you're in and auto-detects the command.
