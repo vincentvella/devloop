@@ -30,9 +30,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Publish the stdio MCP to npm (needs an NPM_TOKEN repo secret).
+  # Publish the stdio MCP to npm via Trusted Publishing (OIDC) — no token/secret.
+  # Requires a trusted publisher configured on the devloop-mcp npm package
+  # (GitHub: vincentvella/devloop, workflow release.yml).
   npm:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # mint the OIDC token npm verifies
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -40,11 +45,11 @@ jobs:
           bun-version: latest
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
+          node-version: 22
+      - run: npm install -g npm@latest # Trusted Publishing needs npm >= 11.5.1
       - run: bun install --frozen-lockfile
       - run: bun run mcp:build
-      - name: Publish to npm (skip if this version is already published)
+      - name: Publish to npm (OIDC; skip if this version is already published)
         run: |
           V=$(node -p "require('./package.json').version")
           if npm view "devloop-mcp@$V" version >/dev/null 2>&1; then
@@ -52,5 +57,3 @@ jobs:
           else
             npm publish --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
