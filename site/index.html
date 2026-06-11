@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Devloop — browser + dev-server logs on one timeline</title>
+    <meta name="description" content="Devloop drives a browser and your dev server, putting both on one correlated timeline. An MCP server with a headless (stdio) mode and an Electron cockpit." />
+    <meta property="og:title" content="Devloop" />
+    <meta property="og:description" content="Browser control + dev-server logs on one correlated timeline — for AI agents and humans." />
+    <style>
+      :root {
+        --bg: #0d1117; --bg2: #161b22; --edge: #30363d; --fg: #c9d1d9; --dim: #8b949e;
+        --accent: #d2a8ff; --ok: #3fb950; --info: #79c0ff;
+        --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--mono); line-height: 1.6;
+        background-image: radial-gradient(60rem 40rem at 50% -10rem, #1b2030 0%, transparent 60%); }
+      a { color: var(--info); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+      header { text-align: center; padding: 88px 0 56px; }
+      .mark { display: block; margin: 0 auto 8px; }
+      h1 { font-size: 44px; margin: 8px 0 4px; letter-spacing: 1px; }
+      .tag { color: var(--dim); font-size: 17px; margin: 0 auto; max-width: 620px; }
+      .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+      .btn { border: 1px solid var(--edge); border-radius: 9px; padding: 10px 18px; color: var(--fg); background: #21262d; }
+      .btn:hover { background: #2a3038; text-decoration: none; }
+      .btn.primary { border-color: var(--accent); color: var(--accent); }
+
+      section { padding: 28px 0; border-top: 1px solid var(--edge); }
+      h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 2px; color: var(--dim); font-weight: 600; }
+      pre { background: var(--bg2); border: 1px solid var(--edge); border-radius: 9px; padding: 14px 16px; overflow-x: auto; }
+      code { color: #cae3ff; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      .card { background: var(--bg2); border: 1px solid var(--edge); border-radius: 10px; padding: 16px 18px; }
+      .card h3 { margin: 0 0 6px; font-size: 15px; color: var(--fg); }
+      .card p { margin: 0; color: var(--dim); font-size: 14px; }
+      .dl { display: flex; gap: 10px; flex-wrap: wrap; }
+      .dl a { border: 1px solid var(--edge); border-radius: 8px; padding: 8px 14px; background: #21262d; color: var(--fg); font-size: 14px; }
+      footer { text-align: center; color: var(--dim); padding: 40px 0 64px; font-size: 13px; border-top: 1px solid var(--edge); }
+      @media (max-width: 620px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 34px; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <svg class="mark" width="88" height="88" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Devloop">
+          <path d="M 70 110 A 62 62 0 0 1 186 110" stroke="#79c0ff" stroke-width="20" stroke-linecap="round"/>
+          <path d="M 186 146 A 62 62 0 0 1 70 146" stroke="#d2a8ff" stroke-width="20" stroke-linecap="round"/>
+          <path d="M 186 110 l 13 -7 l 1 19 z" fill="#79c0ff"/>
+          <path d="M 70 146 l -13 7 l -1 -19 z" fill="#d2a8ff"/>
+          <circle cx="128" cy="128" r="15" fill="#3fb950"/>
+        </svg>
+        <h1>Devloop</h1>
+        <p class="tag">Browser control + dev-server logs on <strong>one correlated timeline</strong> — so a browser console error and the backend stack trace from the same moment sit side by side. For AI agents and humans.</p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/vincentvella/devloop/releases/latest">Download the app</a>
+          <a class="btn" href="https://github.com/vincentvella/devloop">GitHub</a>
+          <a class="btn" href="https://www.npmjs.com/package/devloop-mcp">npm</a>
+        </div>
+      </header>
+
+      <section>
+        <h2>Use it with Claude (MCP)</h2>
+        <pre><code>claude mcp add devloop --scope user -- npx -y devloop-mcp</code></pre>
+        <p class="tag" style="font-size:14px">Then, in any project: <em>“dev_start and repro a navigate to /projects.”</em> It starts your dev server, drives the browser, and returns a correlated slice of both sides.</p>
+      </section>
+
+      <section>
+        <h2>Or run the cockpit</h2>
+        <p class="tag" style="font-size:14px;margin-bottom:14px">A desktop app: tabbed browser panes beside a unified, filterable timeline, a repro builder, and pop-out browser windows. Grab your platform:</p>
+        <div class="dl">
+          <a href="https://github.com/vincentvella/devloop/releases/latest">macOS&nbsp;.dmg</a>
+          <a href="https://github.com/vincentvella/devloop/releases/latest">Windows&nbsp;.exe</a>
+          <a href="https://github.com/vincentvella/devloop/releases/latest">Linux&nbsp;.AppImage</a>
+          <a href="https://github.com/vincentvella/devloop/releases/latest">Linux&nbsp;.deb</a>
+        </div>
+      </section>
+
+      <section>
+        <h2>What it does</h2>
+        <div class="grid">
+          <div class="card"><h3>One timeline</h3><p>Server stdout/stderr and browser console/network/page-errors share one clock — correlate cause and effect across the stack.</p></div>
+          <div class="card"><h3>repro</h3><p>Run an action sequence (navigate / click / type / eval), wait for network idle, and get everything that happened on both sides.</p></div>
+          <div class="card"><h3>Per-app scoping</h3><p>Run several projects at once; query logs by app name, not just the active pane.</p></div>
+          <div class="card"><h3>Agent-drivable</h3><p>Headless stdio for Claude Code, or MCP-over-HTTP so an agent can drive the running cockpit.</p></div>
+        </div>
+      </section>
+
+      <footer>
+        MIT © Vincent Vella · <a href="https://github.com/vincentvella/devloop">vincentvella/devloop</a>
+      </footer>
+    </div>
+  </body>
+</html>
