@@ -1,0 +1,466 @@
+@import "tailwindcss";
+@source "./*.tsx";
+
+/* Theme tokens — change the palette here and it flows everywhere. */
+@theme {
+  --color-bg: #0d1117;
+  --color-bg2: #161b22;
+  --color-raise: #21262d;
+  --color-edge: #30363d;
+  --color-fg: #c9d1d9;
+  --color-dim: #8b949e;
+  --color-accent: #d2a8ff;
+  --color-ok: #3fb950;
+  --color-bad: #f85149;
+  --color-info: #79c0ff;
+  --color-warn: #d29922;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  #root {
+    display: flex;
+    flex-direction: column;
+  }
+  input,
+  select {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    border: 1px solid var(--color-edge);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font: inherit;
+  }
+  input:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+  button {
+    background: var(--color-raise);
+    color: var(--color-fg);
+    border: 1px solid var(--color-edge);
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font: inherit;
+  }
+  button:hover {
+    background: #2a3038;
+  }
+  button.icon {
+    width: 28px;
+    padding: 4px 0;
+    text-align: center;
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+@layer components {
+  .toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--color-bg2);
+    border-bottom: 1px solid var(--color-edge);
+  }
+  .bar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .group {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .sep {
+    width: 1px;
+    align-self: stretch;
+    background: var(--color-edge);
+    margin: 2px 4px;
+  }
+  .spacer {
+    flex: 1;
+  }
+  .settings {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .row input,
+  .row select {
+    flex: 1;
+    min-width: 90px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+  }
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--color-raise);
+    border: 1px solid var(--color-edge);
+    border-radius: 7px;
+    padding: 3px 6px 3px 9px;
+    cursor: pointer;
+    max-width: 200px;
+  }
+  .tab:hover {
+    background: #2a3038;
+  }
+  .tab.active {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+  .tab .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #484f58;
+    flex: none;
+  }
+  .tab.run .dot {
+    background: var(--color-ok);
+    box-shadow: 0 0 5px var(--color-ok);
+  }
+  .tab .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tab .edit {
+    width: 90px;
+    padding: 1px 4px;
+  }
+  .tab .x {
+    opacity: 0.45;
+    padding: 0 2px;
+    border-radius: 4px;
+  }
+  .tab .x:hover {
+    opacity: 1;
+    color: var(--color-bad);
+    background: var(--color-edge);
+  }
+  .tab.add {
+    color: var(--color-dim);
+    padding: 3px 9px;
+  }
+
+  .chip {
+    padding: 2px 9px;
+    border: 1px solid var(--color-edge);
+    border-radius: 7px;
+    white-space: nowrap;
+    color: var(--color-dim);
+  }
+  .chip.run {
+    color: var(--color-ok);
+    border-color: #238636;
+  }
+  .chip.fail {
+    color: #ffa198;
+    border-color: var(--color-bad);
+  }
+
+  .body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .pane-area {
+    flex: 1;
+    position: relative;
+    background: #010409;
+    min-width: 120px;
+  }
+  .pane-area .hint {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #6e7681;
+    text-align: center;
+    padding: 24px;
+  }
+  .divider {
+    width: 5px;
+    cursor: col-resize;
+    background: var(--color-edge);
+    flex: none;
+  }
+  .divider:hover,
+  .divider.drag {
+    background: var(--color-accent);
+  }
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--color-edge);
+    overflow: hidden;
+    flex: none;
+  }
+  .sidebar.hidden {
+    width: 0 !important;
+    border-left: none;
+  }
+
+
+  .repro-head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px 4px;
+  }
+  .collapse-btn {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--color-dim);
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 14px;
+  }
+  .collapse-btn:hover {
+    color: var(--color-fg);
+    background: transparent;
+  }
+
+  /* thin gutter on the right edge (reserved so the native pane view can't cover the handle) */
+  .edge {
+    width: 16px;
+    flex: none;
+    position: relative;
+  }
+  /* small handle pinned near the top (aligns with the in-sidebar collapse button) */
+  .edge .handle {
+    position: absolute;
+    top: 8px;
+    right: 0;
+    width: 16px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-edge);
+    border-radius: 6px 0 0 6px;
+    color: var(--color-dim);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .edge .handle:hover {
+    background: var(--color-raise);
+    color: var(--color-fg);
+  }
+  .repro-head strong {
+    color: var(--color-dim);
+    font-weight: 600;
+  }
+  .steps {
+    padding: 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .step {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .step select {
+    flex: none;
+  }
+  .step input {
+    flex: 1;
+  }
+  .step .del {
+    cursor: pointer;
+    opacity: 0.5;
+    padding: 0 4px;
+  }
+  .step .del:hover {
+    opacity: 1;
+    color: var(--color-bad);
+  }
+
+  .filterbar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 10px;
+    background: var(--color-bg2);
+    border-top: 1px solid var(--color-edge);
+    border-bottom: 1px solid var(--color-edge);
+  }
+  .filterbar input {
+    flex: 1;
+  }
+  .chips {
+    display: flex;
+    gap: 5px;
+  }
+  .fchip {
+    padding: 1px 8px;
+    border: 1px solid var(--color-edge);
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--color-dim);
+    user-select: none;
+  }
+  .fchip:hover {
+    background: var(--color-raise);
+  }
+  .fchip.on {
+    background: #1f6feb33;
+    border-color: #1f6feb;
+    color: #cae3ff;
+  }
+
+  .list-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .pill {
+    position: absolute;
+    right: 16px;
+    bottom: 12px;
+    background: #1f6feb;
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 4px 12px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  .logrow {
+    display: flex;
+    gap: 6px;
+    padding: 2px 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-left: 3px solid transparent;
+  }
+  .logrow .ts {
+    color: #586069;
+    flex: none;
+  }
+  .logrow .tag {
+    color: var(--color-dim);
+    flex: none;
+  }
+  .logrow .tgt {
+    color: #6e7681;
+    flex: none;
+  }
+  .logrow .msg {
+    flex: 1;
+  }
+  .logrow.server .tag {
+    color: var(--color-info);
+  }
+  .logrow.browser .tag {
+    color: var(--color-accent);
+  }
+  .logrow.repro {
+    color: #7ee787;
+    border-left-color: #2ea043;
+  }
+  .logrow.err {
+    background: #2d1517;
+    border-left-color: var(--color-bad);
+    color: #ffa198;
+  }
+  .logrow.warn,
+  .logrow.warn .tag {
+    color: var(--color-warn);
+  }
+  .logrow .msg.clamp {
+    max-height: 4.5em;
+    overflow: hidden;
+    cursor: pointer;
+    -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent);
+  }
+  .logrow img.shot {
+    display: block;
+    max-width: 280px;
+    max-height: 180px;
+    margin-top: 4px;
+    border: 1px solid var(--color-edge);
+    border-radius: 6px;
+    cursor: zoom-in;
+  }
+
+  /* Radix dialog (lightbox) + tooltip */
+  .lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 10;
+  }
+  .lightbox-content {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 11;
+    cursor: zoom-out;
+  }
+  .lightbox-content img {
+    max-width: 92vw;
+    max-height: 92vh;
+    border: 1px solid var(--color-edge);
+    border-radius: 8px;
+  }
+  .tooltip {
+    background: #161b22;
+    color: var(--color-fg);
+    border: 1px solid var(--color-edge);
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 11px;
+    z-index: 20;
+  }
+}

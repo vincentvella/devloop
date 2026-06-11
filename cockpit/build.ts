@@ -24,4 +24,20 @@ for (const r of results) {
 }
 
 cpSync("cockpit/renderer/index.html", "out/renderer/index.html");
-console.log("built cockpit → out/ (main.cjs, preload.cjs, renderer/)");
+
+// Compile Tailwind → out/renderer/styles.css
+const tw = Bun.spawnSync([
+  "bunx",
+  "@tailwindcss/cli",
+  "-i",
+  "cockpit/renderer/styles.css",
+  "-o",
+  "out/renderer/styles.css",
+  "--minify",
+]);
+if (tw.exitCode !== 0) {
+  console.error(new TextDecoder().decode(tw.stderr));
+  process.exit(1);
+}
+
+console.log("built cockpit → out/ (main.cjs, preload.cjs, renderer/, styles.css)");

@@ -1,8 +1,28 @@
 import { createRoot } from "react-dom/client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import type { Entry, Pane, Project, Step } from "./global";
 
 const dl = () => window.devloop;
+
+// Accessible icon button with a Radix tooltip.
+function IconBtn({ tip, onClick, children }: { tip: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <button className="icon" aria-label={tip} onClick={onClick}>
+          {children}
+        </button>
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content className="tooltip" sideOffset={4}>
+          {tip}
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
 
 // --- helpers ---------------------------------------------------------------
 function normalizeUrl(input: string): string {
@@ -27,15 +47,56 @@ const fmtTime = (ts: number) => {
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
 };
 
+const CHIPS: { key: string; label: string; test: (e: Entry) => boolean }[] = [
+  { key: "server", label: "server", test: (e) => e.source === "server" },
+  { key: "console", label: "console", test: (e) => e.stream === "console" },
+  { key: "network", label: "network", test: (e) => e.stream === "network" },
+  { key: "errors", label: "errors", test: isErr },
+  { key: "repro", label: "repro", test: (e) => e.source === "repro" },
+];
+
+let reproUid = -1; // unique negative keys for client-side repro rows
+
+// --- log row (own expand state) -------------------------------------------
+function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const long = e.line.length > 220 || (e.line.match(/\n/g)?.length ?? 0) > 2;
+  const cls = ["logrow", e.source];
+  if (isErr(e)) cls.push("err");
+  else if (e.stream === "console" && e.line.includes("[warning]")) cls.push("warn");
+  return (
+    <div className={cls.join(" ")}>
+      <span className="ts">{fmtTime(e.ts)}</span>
+      <span className="tag">
+        {e.source}:{e.stream}
+      </span>
+      {e.target && <span className="tgt">{e.target}</span>}
+      {e.stream === "screenshot" && e.detail?.image ? (
+        <img className="shot" src={e.detail.image} onClick={() => onZoom(e.detail!.image!)} />
+      ) : (
+        <span
+          className={`msg${long && !open ? " clamp" : ""}`}
+          onClick={long ? () => setOpen((v) => !v) : undefined}
+          title={long ? (open ? "click to collapse" : "click to expand") : undefined}
+        >
+          {e.line}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // --- app -------------------------------------------------------------------
 function App() {
   const [panes, setPanes] = useState<Pane[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [filter, setFilter] = useState("");
-  const [errOnly, setErrOnly] = useState(false);
-  const [filterTarget, setFilterTarget] = useState<string | null>(null); // null = all panes
+  const [chips, setChips] = useState<Set<string>>(new Set());
+  const [filterTarget, setFilterTarget] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(460);
+  const [dragging, setDragging] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selProject, setSelProject] = useState("");
   const [pname, setPname] = useState("");
@@ -45,9 +106,13 @@ function App() {
   const [steps, setSteps] = useState<Step[]>([{ kind: "navigate" }]);
   const [reproStatus, setReproStatus] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [editingPane, setEditingPane] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [atBottom, setAtBottom] = useState(true);
 
   const paneAreaRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
 
   const active = panes.find((p) => p.active);
   const dev = active?.dev;
@@ -63,10 +128,9 @@ function App() {
   }, []);
   const refreshProjects = useCallback(async () => setProjects(await dl().projects()), []);
 
-  // mount: load logs, session, panes, projects; subscribe to live updates.
   useEffect(() => {
     void (async () => {
-      setEntries(await dl().getLogs({ limit: 1000 }));
+      setEntries((await dl().getLogs({ limit: 1000 })).map((e) => ({ ...e })));
       const s = await dl().session();
       setUrl(s.url ?? "");
       if (s.steps?.length) setSteps(s.steps);
@@ -97,14 +161,14 @@ function App() {
       ro.disconnect();
       window.removeEventListener("resize", report);
     };
-  }, [sidebarHidden, settingsOpen, panes.length]);
+  }, [sidebarHidden, settingsOpen, sidebarWidth, panes.length]);
 
-  // auto-scroll timeline to bottom on new entries.
+  // smart auto-scroll: only stick to bottom if already near it.
   useEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [entries]);
+    const el = listRef.current;
+    if (el && atBottom) el.scrollTop = el.scrollHeight;
+  }, [entries, atBottom]);
 
-  // The embedded pane is a native layer above the DOM — detach it while the lightbox is open.
   useEffect(() => {
     void dl().overlay(lightbox !== null);
   }, [lightbox]);
@@ -130,11 +194,9 @@ function App() {
     }
   }, [url, saveSession]);
 
-  // dev controls
   const onPlay = useCallback(async () => {
-    if (devRunning) {
-      await dl().devStop();
-    } else if (!dev?.cmd && !dev?.cwd) {
+    if (devRunning) await dl().devStop();
+    else if (!dev?.cmd && !dev?.cwd) {
       setSettingsOpen(true);
       return;
     } else {
@@ -148,31 +210,74 @@ function App() {
     await refreshPanes();
   }, [devRunning, dev, labelActive, refreshPanes]);
 
-  // repro
   const runRepro = useCallback(
     async (actions: Step[]) => {
-      if (!actions.length) {
-        setReproStatus("add a step first");
-        return;
-      }
+      if (!actions.length) return setReproStatus("add a step first");
       setReproStatus("running…");
       const r = await dl().repro({ actions, clear: false });
       const stopped = r.stoppedAtStep === null ? "" : ` · stopped@${r.stoppedAtStep}`;
       setReproStatus(`${r.stepCount} steps · ${r.errorCount} errors${stopped}`);
       const now = Date.now();
-      const rows: Entry[] = [{ seq: -1, ts: now, source: "repro", stream: "summary", line: `▶ repro · ${r.stepCount} steps · ${r.errorCount} errors${stopped}` }];
-      for (const s of r.steps) rows.push({ seq: -1, ts: now, source: "repro", stream: "step", line: `   ${s.index}. ${s.action.kind} ${s.error ? "✗ " + s.error : "✓"}` });
-      for (const e of r.errors) rows.push({ seq: -1, ts: now, source: "repro", stream: "error", line: `   ✗ [${e.source}:${e.stream}] ${e.line}` });
+      const rows: Entry[] = [{ seq: reproUid--, ts: now, source: "repro", stream: "summary", line: `▶ repro · ${r.stepCount} steps · ${r.errorCount} errors${stopped}` }];
+      for (const s of r.steps) rows.push({ seq: reproUid--, ts: now, source: "repro", stream: "step", line: `   ${s.index}. ${s.action.kind} ${s.error ? "✗ " + s.error : "✓"}` });
+      for (const e of r.errors) rows.push({ seq: reproUid--, ts: now, source: "repro", stream: "error", line: `   ✗ [${e.source}:${e.stream}] ${e.line}` });
       setEntries((cur) => [...cur, ...rows]);
       saveSession();
     },
     [saveSession],
   );
-
-  // expose a test hook for the headless selftest (drive repro without React-controlled inputs).
   useEffect(() => {
     (window as unknown as { __devloopTest?: unknown }).__devloopTest = { runRepro };
   }, [runRepro]);
+
+  // keyboard shortcuts
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (!ev.metaKey) return;
+      const k = ev.key.toLowerCase();
+      if (k === "l") {
+        ev.preventDefault();
+        setSettingsOpen(true);
+        setTimeout(() => urlRef.current?.focus(), 0);
+      } else if (k === "r") {
+        ev.preventDefault();
+        void dl().reload(ev.shiftKey); // ⌘R reload page, ⌘⇧R hard reload (intercept Electron's reload)
+      } else if (k === "k") {
+        ev.preventDefault();
+        void dl().clear();
+        setEntries([]);
+      } else if (k === "b") {
+        ev.preventDefault();
+        setSidebarHidden((v) => !v);
+      } else if (k === ",") {
+        ev.preventDefault();
+        setSettingsOpen((v) => !v);
+      } else if (/^[1-9]$/.test(k)) {
+        const p = panes[Number(k) - 1];
+        if (p) {
+          ev.preventDefault();
+          void dl().paneSelect(p.id).then(refreshPanes);
+          setFilterTarget(p.id);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panes, refreshPanes]);
+
+  // draggable sidebar divider
+  const startDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragging(true);
+    const move = (ev: MouseEvent) => setSidebarWidth(Math.min(800, Math.max(280, window.innerWidth - ev.clientX)));
+    const up = () => {
+      setDragging(false);
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }, []);
 
   const fillFromProject = (name: string) => {
     const p = projects.find((x) => x.name === name);
@@ -184,15 +289,22 @@ function App() {
     setSteps(p.steps?.length ? p.steps : [{ kind: "navigate" }]);
   };
 
+  const toggleChip = (key: string) =>
+    setChips((cur) => {
+      const next = new Set(cur);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
   const shown = entries.filter((e) => {
     if (filter && !e.line.toLowerCase().includes(filter.toLowerCase())) return false;
-    if (errOnly && !isErr(e)) return false;
+    if (chips.size && !CHIPS.some((c) => chips.has(c.key) && c.test(e))) return false;
     if (filterTarget && e.target && e.target !== filterTarget) return false;
     return true;
   });
 
   return (
-    <>
+    <Tooltip.Provider delayDuration={250}>
       <div className="toolbar">
         <div className="bar">
           <div className="tabs">
@@ -208,9 +320,33 @@ function App() {
                   setFilterTarget(p.id);
                   await refreshPanes();
                 }}
+                onDoubleClick={() => {
+                  setEditingPane(p.id);
+                  setEditLabel(p.label ?? "");
+                }}
+                title="double-click to rename"
               >
                 <span className="dot" />
-                <span className="name">{(p.label ?? p.id) + (p.popped ? " ⤢" : "")}</span>
+                {editingPane === p.id ? (
+                  <input
+                    className="edit"
+                    autoFocus
+                    value={editLabel}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    onBlur={async () => {
+                      if (editLabel.trim()) await dl().paneSetLabel(p.id, editLabel.trim());
+                      setEditingPane(null);
+                      await refreshPanes();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      if (e.key === "Escape") setEditingPane(null);
+                    }}
+                  />
+                ) : (
+                  <span className="name">{(p.label ?? p.id) + (p.popped ? " ⤢" : "")}</span>
+                )}
                 <span
                   className="x"
                   onClick={(ev) => {
@@ -229,7 +365,10 @@ function App() {
 
           <div className="spacer" />
 
-          <span className={`chip${devRunning ? " run" : ""}${devFailed ? " fail" : ""}`}>
+          <span
+            className={`chip${devRunning ? " run" : ""}${devFailed ? " fail" : ""}`}
+            title={dev?.cmd || dev?.cwd ? `${dev?.cmd ?? "(auto)"}\n${dev?.cwd ?? ""}` : "no dev config"}
+          >
             {devRunning
               ? `● ${dev?.name ?? active?.label ?? "dev"}`
               : devFailed
@@ -239,40 +378,36 @@ function App() {
                   : "dev: not configured"}
           </span>
           <div className="group">
-            <button className="icon" title="start / stop dev server" onClick={onPlay}>
+            <IconBtn tip="start / stop dev server (▶)" onClick={() => void onPlay()}>
               {devRunning ? "⏹" : "▶"}
-            </button>
-            <button className="icon" title="restart dev server" onClick={() => void dl().devRestart().then(refreshPanes)}>
+            </IconBtn>
+            <IconBtn tip="restart dev server" onClick={() => void dl().devRestart().then(refreshPanes)}>
               ⟳
-            </button>
-            <button className="icon" title="refresh page" onClick={() => void dl().reload(false)}>
+            </IconBtn>
+            <IconBtn tip="refresh page (⌘R)" onClick={() => void dl().reload(false)}>
               ⟲
-            </button>
-            <button className="icon" title="hard refresh (ignore cache)" onClick={() => void dl().reload(true)}>
+            </IconBtn>
+            <IconBtn tip="hard refresh (⌘⇧R)" onClick={() => void dl().reload(true)}>
               ⤓
-            </button>
-            <button className="icon" title="screenshot → timeline" onClick={() => void dl().screenshot()}>
+            </IconBtn>
+            <IconBtn tip="screenshot → timeline" onClick={() => void dl().screenshot()}>
               📷
-            </button>
+            </IconBtn>
           </div>
           <div className="sep" />
           <div className="group">
-            <button className="icon" title="settings" onClick={() => setSettingsOpen((v) => !v)}>
+            <IconBtn tip="settings (⌘,)" onClick={() => setSettingsOpen((v) => !v)}>
               ⚙
-            </button>
-            <button
-              className="icon"
-              title="pop active pane into its own window"
+            </IconBtn>
+            <IconBtn
+              tip="pop active pane into its own window"
               onClick={async () => {
                 if (active && !active.popped) await dl().panePop(active.id);
                 await refreshPanes();
               }}
             >
               ⤢
-            </button>
-            <button title="toggle timeline" onClick={() => setSidebarHidden((v) => !v)}>
-              {sidebarHidden ? "timeline ⟩" : "⟨ timeline"}
-            </button>
+            </IconBtn>
           </div>
         </div>
 
@@ -280,7 +415,7 @@ function App() {
           <div className="settings">
             <div className="row">
               <input
-                id="url"
+                ref={urlRef}
                 placeholder="3000  or  http://localhost:3000  →  Enter"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
@@ -356,7 +491,9 @@ function App() {
           {panes.length === 0 && <div className="hint">no pane — open a project or add a pane (+)</div>}
         </div>
 
-        <div className={`sidebar${sidebarHidden ? " hidden" : ""}`}>
+        {!sidebarHidden && <div className={`divider${dragging ? " drag" : ""}`} onMouseDown={startDrag} />}
+
+        <div className={`sidebar${sidebarHidden ? " hidden" : ""}`} style={{ width: sidebarHidden ? 0 : sidebarWidth }}>
           <div className="repro-head">
             <strong>repro</strong>
             <button onClick={() => setSteps((s) => [...s, { kind: "navigate" }])}>+ step</button>
@@ -364,6 +501,9 @@ function App() {
             <span className="chip" style={{ border: "none", opacity: 0.7 }}>
               {reproStatus}
             </span>
+            <button className="collapse-btn" title="collapse timeline (⌘B)" onClick={() => setSidebarHidden(true)}>
+              ›
+            </button>
           </div>
           <div className="steps">
             {steps.map((s, i) => (
@@ -378,9 +518,13 @@ function App() {
 
           <div className="filterbar">
             <input placeholder="filter (substring)…" value={filter} onChange={(e) => setFilter(e.target.value)} />
-            <label>
-              <input type="checkbox" checked={errOnly} onChange={(e) => setErrOnly(e.target.checked)} /> errors only
-            </label>
+            <div className="chips">
+              {CHIPS.map((c) => (
+                <span key={c.key} className={`fchip${chips.has(c.key) ? " on" : ""}`} onClick={() => toggleChip(c.key)}>
+                  {c.label}
+                </span>
+              ))}
+            </div>
             <button
               onClick={async () => {
                 await dl().clear();
@@ -391,31 +535,54 @@ function App() {
             </button>
           </div>
 
-          <div className="list" id="list" ref={listRef}>
-            {shown.map((e, i) => (
-              <div key={i} className={`logrow ${e.source}${isErr(e) ? " err" : ""}`}>
-                <span className="ts">{fmtTime(e.ts)}</span>
-                <span className="tag">
-                  {e.source}:{e.stream}
-                </span>
-                {e.target && <span className="tgt">{e.target}</span>}
-                {e.stream === "screenshot" && e.detail?.image ? (
-                  <img className="shot" src={e.detail.image} onClick={() => setLightbox(e.detail!.image!)} />
-                ) : (
-                  <span className="msg">{e.line}</span>
-                )}
-              </div>
-            ))}
+          <div className="list-wrap">
+            <div
+              className="list"
+              id="list"
+              ref={listRef}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
+              }}
+            >
+              {shown.map((e, i) => (
+                <LogRow key={`${e.seq}:${i}`} e={e} onZoom={setLightbox} />
+              ))}
+            </div>
+            {!atBottom && (
+              <button
+                className="pill"
+                onClick={() => {
+                  const el = listRef.current;
+                  if (el) el.scrollTop = el.scrollHeight;
+                  setAtBottom(true);
+                }}
+              >
+                ↓ latest
+              </button>
+            )}
           </div>
         </div>
+
+        {sidebarHidden && (
+          <div className="edge">
+            <div className="handle" title="show timeline (⌘B)" onClick={() => setSidebarHidden(false)}>
+              ‹
+            </div>
+          </div>
+        )}
       </div>
 
-      {lightbox && (
-        <div className="lightbox" onClick={() => setLightbox(null)}>
-          <img src={lightbox} />
-        </div>
-      )}
-    </>
+      <Dialog.Root open={!!lightbox} onOpenChange={(o) => !o && setLightbox(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="lightbox-overlay" />
+          <Dialog.Content className="lightbox-content" onClick={() => setLightbox(null)}>
+            <Dialog.Title className="sr-only">Screenshot</Dialog.Title>
+            {lightbox && <img src={lightbox} />}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </Tooltip.Provider>
   );
 }
 
