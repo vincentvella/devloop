@@ -49,8 +49,8 @@ bunx puppeteer browsers install chrome   # headless mode, if no bundled Chromium
 - `browser_eval({ expression })` — runs in page context (not blocked by CSP)
 
 **Logs & correlation**
-- `get_logs({ source?, stream?, grep?, sinceSeq?, limit? })` — unified tail. `source` is `server`|`browser`; `stream` is `stdout`/`stderr`/`console`/`network`/`pageerror`. Pass the last `seq` as `sinceSeq` to tail incrementally.
-- `get_logs_around({ ts, windowMs?, source? })` — **the correlation tool**: all events within ±`windowMs` of a timestamp, time-ordered across both sources.
+- `get_logs({ source?, stream?, grep?, app?, sinceSeq?, limit? })` — unified tail. `source` is `server`|`browser`; `stream` is `stdout`/`stderr`/`console`/`network`/`pageerror`. `app` scopes to one project's logs — it matches a pane's **label** (project name) or id (see `pane_list`) and filters *both* that pane's server and browser logs, regardless of which pane is active. Pass the last `seq` as `sinceSeq` to tail incrementally.
+- `get_logs_around({ ts, windowMs?, source?, app? })` — **the correlation tool**: all events within ±`windowMs` of a timestamp, time-ordered across both sources (optionally scoped to one `app`).
 - Logged **network** events (failures + status ≥ `DEVLOOP_NET_THRESHOLD`) carry the request `postData` and a capped, base64-decoded `responseBody` in their `detail` (Electron substrate).
 - `clear_logs()` — reset before reproducing an issue.
 - `repro({ actions | action, waitFor?, settleMs?, stepSettleMs?, idleMs?, timeoutMs?, continueOnError?, clear? })` — **reproduce-and-correlate**: clears the buffer, performs one action or a **sequence**, waits, and returns everything that happened on both sides across the sequence — with per-step results (`steps[]`), a `byStream` count, and a pre-filtered `errors` list.

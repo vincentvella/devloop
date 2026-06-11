@@ -55,8 +55,10 @@ export class LogBuffer {
     source?: LogSource;
     stream?: string;
     limit?: number;
+    /** Restrict to these pane targets (server + browser logs are both tagged per pane). */
+    targets?: string[];
   } = {}): LogEntry[] {
-    const { sinceSeq, grep, source, stream, limit = 200 } = opts;
+    const { sinceSeq, grep, source, stream, limit = 200, targets } = opts;
     let re: RegExp | undefined;
     if (grep) {
       try {
@@ -70,6 +72,7 @@ export class LogBuffer {
       if (sinceSeq !== undefined && e.seq < sinceSeq) return false;
       if (source && e.source !== source) return false;
       if (stream && e.stream !== stream) return false;
+      if (targets && (!e.target || !targets.includes(e.target))) return false;
       if (grep) {
         return re ? re.test(e.line) : e.line.toLowerCase().includes(grep.toLowerCase());
       }
@@ -81,9 +84,12 @@ export class LogBuffer {
   }
 
   /** Entries within +/- windowMs of timestamp `ts`, across all sources, time-ordered. */
-  around(ts: number, windowMs: number, source?: LogSource): LogEntry[] {
+  around(ts: number, windowMs: number, source?: LogSource, targets?: string[]): LogEntry[] {
     return this.entries.filter(
-      (e) => Math.abs(e.ts - ts) <= windowMs && (!source || e.source === source),
+      (e) =>
+        Math.abs(e.ts - ts) <= windowMs &&
+        (!source || e.source === source) &&
+        (!targets || (!!e.target && targets.includes(e.target))),
     );
   }
 

@@ -465,6 +465,13 @@ async function runSelfTest() {
   console.log(`SELFTEST per-pane: activePane=${activeId} serverLogTagged=${serverTagged}`);
   const perPaneOk = serverTagged;
 
+  // 8c) app-scoped logs: get_logs({ app }) returns only that pane's entries.
+  const scoped = JSON.parse((await handleTool("get_logs", { app: activeId, limit: 500 })).content[0]!.text as string) as {
+    entries: { target?: string }[];
+  };
+  const appScopeOk = scoped.entries.length > 0 && scoped.entries.every((e) => e.target === activeId);
+  console.log(`SELFTEST app-scope: app=${activeId} entries=${scoped.entries.length} allTagged=${appScopeOk}`);
+
   // 9) network body: fetch the cockpit's own HTTP server for a 404 (subresource → reliable body).
   await manager.navigate(
     `data:text/html,<script>fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`,
@@ -534,7 +541,8 @@ async function runSelfTest() {
     recovered &&
     robustOk &&
     failOk &&
-    shotOk;
+    shotOk &&
+    appScopeOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").

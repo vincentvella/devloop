@@ -77,13 +77,19 @@ export const TOOLS: Tool[] = [
     description:
       "Return recent events from the unified buffer (server stdout/stderr + browser " +
       "console/network/pageerror), newest last. Filter by source, stream, grep, and " +
-      "tail incrementally with sinceSeq.",
+      "tail incrementally with sinceSeq. Scope to one project's logs with `app`.",
     inputSchema: {
       type: "object",
       properties: {
         source: { type: "string", enum: ["server", "browser"] },
         stream: { type: "string", description: "e.g. stdout, stderr, console, network, pageerror" },
         grep: { type: "string", description: "Case-insensitive regex (or substring if invalid)." },
+        app: {
+          type: "string",
+          description:
+            "Scope to a specific app/project's logs — matches a pane's label (project name) or id (see pane_list). " +
+            "Filters both that pane's server and browser logs. Omit for all apps.",
+        },
         sinceSeq: { type: "number", description: "Only events with seq >= this." },
         limit: { type: "number", description: "Max events (default 200)." },
       },
@@ -101,6 +107,7 @@ export const TOOLS: Tool[] = [
         ts: { type: "number", description: "Center timestamp (ms since epoch)." },
         windowMs: { type: "number", description: "Half-window in ms (default 500)." },
         source: { type: "string", enum: ["server", "browser"], description: "Optional: limit to one side." },
+        app: { type: "string", description: "Optional: scope to one app/project (pane label or id; see pane_list)." },
       },
       required: ["ts"],
     },
@@ -315,6 +322,24 @@ function asManager(): IBrowserManager {
   return b as IBrowserManager;
 }
 
+/**
+ * Resolve an `app` name (or pane id) to the matching pane target ids, so log
+ * reads can be scoped to one project's logs. Matches a pane's label or id,
+ * case-insensitively, exact-first then substring. Returns undefined (no filter)
+ * if there's no multi-pane manager or nothing matches.
+ */
+function resolveTargets(app: string | undefined): string[] | undefined {
+  if (!app) return undefined;
+  const b = deps.browser as Partial<IBrowserManager>;
+  if (typeof b.listPanes !== "function") return undefined; // single-pane (stdio) — nothing to scope
+  const panes = (b as IBrowserManager).listPanes();
+  const q = app.toLowerCase();
+  const exact = panes.filter((p) => p.label?.toLowerCase() === q || p.id.toLowerCase() === q);
+  const matched = exact.length ? exact : panes.filter((p) => p.label?.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+  if (!matched.length) throw new Error(`no pane/app matching "${app}" (see pane_list for labels)`);
+  return matched.map((p) => p.id);
+}
+
 export async function handleTool(name: string, args: Record<string, unknown>): Promise<CallToolResult> {
   const { buffer, browser, devServer } = deps;
   switch (name) {
@@ -333,19 +358,22 @@ export async function handleTool(name: string, args: Record<string, unknown>): P
     case "browser_eval":
       return json({ value: await browser.evaluate(args.expression as string) });
     case "get_logs": {
+      const targets = resolveTargets(args.app as string | undefined);
       const entries = buffer.query({
         source: args.source as LogSource | undefined,
         stream: args.stream as string | undefined,
         grep: args.grep as string | undefined,
         sinceSeq: args.sinceSeq as number | undefined,
         limit: args.limit as number | undefined,
+        targets,
       });
       return json({ latestSeq: buffer.latestSeq, count: entries.length, entries });
     }
     case "get_logs_around": {
       const ts = args.ts as number;
       const windowMs = (args.windowMs as number | undefined) ?? 500;
-      const entries = buffer.around(ts, windowMs, args.source as LogSource | undefined);
+      const targets = resolveTargets(args.app as string | undefined);
+      const entries = buffer.around(ts, windowMs, args.source as LogSource | undefined, targets);
       return json({ ts, windowMs, count: entries.length, entries });
     }
     case "clear_logs":
