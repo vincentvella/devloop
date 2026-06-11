@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "Unified dev-loop: one MCP server exposing browser control + dev-server logs on a correlated timeline. Headless (stdio) or Electron cockpit (HTTP).",
   "type": "module",
+  "main": "out/main.cjs",
   "bin": {
     "devloop-mcp": "./src/index.ts"
   },
@@ -11,7 +12,11 @@
     "typecheck": "tsc --noEmit && tsc -p cockpit/renderer/tsconfig.json",
     "app:build": "bun run cockpit/build.ts",
     "app": "bun run app:build && electron out/main.cjs",
-    "app:selftest": "bun run app:build && DEVLOOP_SELFTEST=1 electron out/main.cjs"
+    "app:selftest": "bun run app:build && DEVLOOP_SELFTEST=1 electron out/main.cjs",
+    "dist": "bun run app:build && electron-builder",
+    "dist:mac": "bun run app:build && electron-builder --mac",
+    "dist:win": "bun run app:build && electron-builder --win",
+    "dist:linux": "bun run app:build && electron-builder --linux"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
@@ -29,6 +34,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "electron": "^42.3.3",
+    "electron-builder": "^26.15.2",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.6.0"
   }

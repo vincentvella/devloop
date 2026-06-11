@@ -1,0 +1,36 @@
+appId: com.devloop.app
+productName: Devloop
+copyright: Devloop
+
+directories:
+  output: release
+  buildResources: assets
+
+# main.cjs has all deps bundled (only electron is external), so the package is
+# just the built output + the runtime — no node_modules (keeps puppeteer/chromium out).
+files:
+  - out/**/*
+  - package.json
+
+asar: true
+
+mac:
+  icon: assets/icon.icns
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # Unsigned for now; release CI can add signing/notarization later.
+  identity: null
+
+win:
+  icon: assets/icon.ico
+  target:
+    - nsis
+
+linux:
+  icon: assets/icons/512x512.png
+  category: Development
+  target:
+    - AppImage
+    - deb

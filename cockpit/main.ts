@@ -23,9 +23,10 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 
-// The bundler inlines __dirname to the SOURCE dir, so derive the real output dir
-// (where main.cjs/preload.cjs/renderer live) from the script Electron actually ran.
-const BASE = dirname(resolve(process.argv[1] ?? "."));
+// Where main.cjs/preload.cjs/renderer live. Bun inlines __dirname to the SOURCE dir,
+// so we can't use it. Packaged: <app.asar>/out via getAppPath(). Dev (`electron
+// out/main.cjs`): the dir of the script Electron actually ran.
+const BASE = app.isPackaged ? join(app.getAppPath(), "out") : dirname(resolve(process.argv[1] ?? "."));
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
