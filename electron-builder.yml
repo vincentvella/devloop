@@ -2,6 +2,13 @@ appId: com.devloop.app
 productName: Devloop
 copyright: Devloop
 
+# CI uploads installers to a GitHub Release (draft) for this version.
+publish:
+  provider: github
+  owner: vincentvella
+  repo: devloop
+  releaseType: draft
+
 directories:
   output: release
   buildResources: assets
