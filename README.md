@@ -165,8 +165,11 @@ bun run typecheck
 bun run test-smoke.ts   # headless Puppeteer: structured args, networkidle, repro sequence, abort
 bun run app:selftest    # headless Electron: substrate→buffer, tool layer, MCP-over-HTTP,
                         # renderer IPC, registry, multi-target panes + pop-out, auto-navigate,
-                        # derived project name, per-pane dev (server-log tagging), inline repro
-                        # builder, pane persistence/restore, and clean teardown
+                        # derived project name, per-pane dev (server-log tagging), app-scoped
+                        # get_logs, inline repro builder, pane persistence/restore, teardown
+bun run mcp-drive.ts    # live smoke test: drives a RUNNING cockpit over its MCP-over-HTTP
+                        # endpoint (start dev server → auto-navigate → verify the live app via
+                        # browser_eval → app-scoped get_logs → screenshot). Cockpit must be up.
 ```
 
 ## Gotchas learned in the field
