@@ -1,40 +1,71 @@
 {
   "name": "devloop-mcp",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Unified dev-loop: one MCP server exposing browser control + dev-server logs on a correlated timeline. Headless (stdio) or Electron cockpit (HTTP).",
   "type": "module",
   "main": "out/main.cjs",
   "bin": {
-    "devloop-mcp": "./src/index.ts"
+    "devloop-mcp": "dist/index.cjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "devtools",
+    "browser",
+    "puppeteer",
+    "electron",
+    "logs",
+    "dev-server"
+  ],
+  "author": "Vincent Vella",
+  "license": "MIT",
+  "homepage": "https://github.com/vincentvella/devloop#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vincentvella/devloop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vincentvella/devloop/issues"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "scripts": {
     "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit && tsc -p cockpit/renderer/tsconfig.json",
+    "mcp:build": "bun run scripts/build-mcp.ts",
     "app:build": "bun run cockpit/build.ts",
     "app": "bun run app:build && electron out/main.cjs",
     "app:selftest": "bun run app:build && DEVLOOP_SELFTEST=1 electron out/main.cjs",
     "dist": "bun run app:build && electron-builder",
     "dist:mac": "bun run app:build && electron-builder --mac",
     "dist:win": "bun run app:build && electron-builder --win",
-    "dist:linux": "bun run app:build && electron-builder --linux"
+    "dist:linux": "bun run app:build && electron-builder --linux",
+    "prepublishOnly": "bun run mcp:build"
   },
   "dependencies": {
+    "puppeteer": "^25.1.0"
+  },
+  "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
     "@radix-ui/react-dialog": "^1.1.16",
     "@radix-ui/react-dropdown-menu": "^2.1.17",
     "@radix-ui/react-tooltip": "^1.2.9",
-    "lucide-react": "^1.17.0",
-    "puppeteer": "^25.1.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
-  },
-  "devDependencies": {
     "@tailwindcss/cli": "^4.3.0",
     "@types/bun": "latest",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "electron": "^42.3.3",
     "electron-builder": "^26.15.2",
+    "lucide-react": "^1.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.6.0"
   }
