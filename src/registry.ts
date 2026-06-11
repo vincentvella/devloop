@@ -33,6 +33,9 @@ export interface Session {
   cwd?: string;
   url?: string;
   steps?: ReproStep[];
+  /** Last-selected project + save-as name in the cockpit form. */
+  project?: string;
+  pname?: string;
 }
 
 /** Open panes (url + project label + dev config) so the cockpit restores them on relaunch. */

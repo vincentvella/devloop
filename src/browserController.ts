@@ -25,6 +25,8 @@ export interface PaneInfo {
   label?: string;
   /** This pane's dev server state (per-pane mode). */
   dev?: { running: boolean; name?: string; cmd?: string; cwd?: string; exitCode?: number | null };
+  /** Browser navigation state for the back/forward buttons. */
+  nav?: { canBack: boolean; canForward: boolean };
 }
 
 /**

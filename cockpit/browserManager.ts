@@ -58,6 +58,8 @@ export class BrowserManager implements IBrowserManager {
     private readonly buffer: LogBuffer,
     private readonly opts: ElectronBrowserOptions,
     private readonly offscreen: boolean,
+    /** Paths so a popped-out pane can load the same renderer (in `?pop=<id>` mode) as its chrome. */
+    private readonly popChrome: { indexPath: string; preloadPath: string },
   ) {
     // Per-pane auto-navigate: when a pane's dev server logs a localhost URL, open it there.
     buffer.onPush((e) => {
@@ -136,6 +138,16 @@ export class BrowserManager implements IBrowserManager {
     } catch {
       /* a destroyed window listener must not break teardown */
     }
+    // Popped windows render their own browser bar — keep their URL/nav state fresh too.
+    for (const p of this.panes.values()) {
+      if (p.popped && !p.popped.isDestroyed()) {
+        try {
+          p.popped.webContents.send("devloop:panesChanged");
+        } catch {
+          /* window tearing down */
+        }
+      }
+    }
   }
 
   private active(): ElectronBrowserController {
@@ -197,7 +209,18 @@ export class BrowserManager implements IBrowserManager {
     await view.webContents.loadURL("about:blank");
     const ctl = new ElectronBrowserController(this.buffer, view.webContents, this.opts, id);
     await ctl.start();
-    this.panes.set(id, { id, view, ctl, dev: new DevServer(this.buffer, id), cmd, cwd, label, url: url ?? "about:blank" });
+    const pane: Pane = { id, view, ctl, dev: new DevServer(this.buffer, id), cmd, cwd, label, url: url ?? "about:blank" };
+    this.panes.set(id, pane);
+    // Track the live URL (link clicks, SPA routes) for the address bar — but ignore
+    // placeholder/blank pages so the canonical (persisted) url isn't clobbered.
+    const sync = (u: string) => {
+      if (u.startsWith("data:") || u === "about:blank") return;
+      pane.url = u;
+      this.persist();
+      this.notify();
+    };
+    view.webContents.on("did-navigate", (_e, u) => sync(u));
+    view.webContents.on("did-navigate-in-page", (_e, u, isMainFrame) => isMainFrame && sync(u));
     this.activeId = id;
     this.applyActive();
     if (url) await ctl.navigate(url);
@@ -262,18 +285,23 @@ export class BrowserManager implements IBrowserManager {
         /* not attached */
       }
     }
-    const win = new BrowserWindow({ width: 1000, height: 720, show: !this.offscreen, title: `devloop — ${p.label ?? id}` });
+    const win = new BrowserWindow({
+      width: 1000,
+      height: 720,
+      show: !this.offscreen,
+      title: `devloop — ${p.label ?? id}`,
+      webPreferences: { preload: this.popChrome.preloadPath, contextIsolation: true, sandbox: false, offscreen: this.offscreen },
+    });
     win.contentView.addChildView(p.view);
-    const fill = () => {
-      const [w, h] = win.getContentSize();
-      p.view.setBounds({ x: 0, y: 0, width: w, height: h });
-    };
-    fill();
-    win.on("resize", fill);
+    // Initial bounds (leave room for the bar); the pop renderer refines via setBoundsFor once mounted.
+    const [w, h] = win.getContentSize();
+    p.view.setBounds({ x: 0, y: 44, width: w, height: Math.max(0, h - 44) });
     // Closing the pop-out RE-DOCKS the pane (doesn't destroy it). The tab's × still closes it
     // — closePane uses win.destroy(), which skips 'close', so this handler won't re-dock then.
     win.on("close", () => this.dockPane(id));
     p.popped = win;
+    // Load the same renderer in pop mode — its own browser bar drives this pane.
+    void win.loadFile(this.popChrome.indexPath, { search: `pop=${id}` });
     // The popped pane stays ACTIVE (just external) — so its config still shows in the controls
     // and closing the window re-docks it. The shell area just clears while it's out.
     this.applyActive();
@@ -357,13 +385,20 @@ export class BrowserManager implements IBrowserManager {
   private info(id: string): PaneInfo {
     const p = this.panes.get(id)!;
     const st = p.dev.status();
+    let nav = { canBack: false, canForward: false };
+    try {
+      nav = { canBack: p.view.webContents.navigationHistory.canGoBack(), canForward: p.view.webContents.navigationHistory.canGoForward() };
+    } catch {
+      /* view gone */
+    }
     return {
       id,
-      url: p.ctl.currentUrl(),
+      url: p.url,
       active: id === this.activeId,
       popped: !!p.popped,
       label: p.label,
       dev: { running: st.running, name: st.name, cmd: p.cmd, cwd: p.cwd, exitCode: st.exitCode },
+      nav,
     };
   }
 
@@ -379,9 +414,48 @@ export class BrowserManager implements IBrowserManager {
   async navigate(url: string) {
     const r = await this.active().navigate(url);
     const p = this.activeId ? this.panes.get(this.activeId) : undefined;
-    if (p) p.url = url; // canonical url follows real navigations
+    if (p && !url.startsWith("data:") && url !== "about:blank") p.url = url; // canonical url
     this.persist();
     return r;
+  }
+
+  back(): void {
+    if (this.panes.size === 0) return;
+    const wc = this.paneOrActive().view.webContents;
+    if (wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
+  }
+  forward(): void {
+    if (this.panes.size === 0) return;
+    const wc = this.paneOrActive().view.webContents;
+    if (wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
+  }
+
+  // --- pane-targeted ops (a popped window drives its own pane by id) ---
+  async navigateFor(id: string, url: string) {
+    const p = this.panes.get(id);
+    if (!p) return { url, status: null };
+    const r = await p.ctl.navigate(url);
+    if (!url.startsWith("data:") && url !== "about:blank") p.url = url;
+    this.persist();
+    return r;
+  }
+  backFor(id: string): void {
+    const wc = this.panes.get(id)?.view.webContents;
+    if (wc?.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
+  }
+  forwardFor(id: string): void {
+    const wc = this.panes.get(id)?.view.webContents;
+    if (wc?.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
+  }
+  setBoundsFor(id: string, rect: Rect): void {
+    const p = this.panes.get(id);
+    if (!p || !p.popped) return; // only meaningful while popped
+    p.view.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) });
+  }
+  screenshotFor(id: string): Promise<{ base64: string; mimeType: string }> {
+    const p = this.panes.get(id);
+    if (!p) return Promise.resolve({ base64: "", mimeType: "image/png" });
+    return p.ctl.screenshot(false);
   }
   screenshot(fullPage?: boolean) {
     return this.active().screenshot(fullPage);

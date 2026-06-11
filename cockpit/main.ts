@@ -194,6 +194,18 @@ function wireIpc(): void {
     return manager.setDevConfig(undefined, opts?.cmd || undefined, opts?.cwd || undefined);
   });
   ipcMain.handle("devloop:reload", (_e, hard: boolean) => manager.reload(undefined, !!hard));
+  ipcMain.handle("devloop:back", () => manager.back());
+  ipcMain.handle("devloop:forward", () => manager.forward());
+  // pane-targeted (popped windows drive their own pane)
+  ipcMain.handle("devloop:navigateFor", (_e, id: string, url: string) => manager.navigateFor(id, url));
+  ipcMain.handle("devloop:backFor", (_e, id: string) => manager.backFor(id));
+  ipcMain.handle("devloop:forwardFor", (_e, id: string) => manager.forwardFor(id));
+  ipcMain.handle("devloop:reloadFor", (_e, id: string, hard: boolean) => manager.reload(id, !!hard));
+  ipcMain.handle("devloop:setBoundsFor", (_e, id: string, rect) => manager.setBoundsFor(id, rect));
+  ipcMain.handle("devloop:screenshotFor", async (_e, id: string) => {
+    const shot = await manager.screenshotFor(id);
+    if (shot.base64) buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, id);
+  });
   ipcMain.handle("devloop:screenshot", async () => {
     const shot = await manager.screenshot(false);
     const active = manager.listPanes().find((p) => p.active);
@@ -277,6 +289,7 @@ async function main() {
       actionTimeoutMs: Number(process.env.DEVLOOP_ACTION_TIMEOUT ?? 10_000),
     },
     SELFTEST,
+    { indexPath: join(BASE, "renderer/index.html"), preloadPath: join(BASE, "preload.cjs") },
   );
   manager.attachTo(shellWin!);
   manager.onChange = () => {

@@ -23,6 +23,7 @@ export interface Pane {
   popped?: boolean;
   label?: string;
   dev?: { running: boolean; name?: string; cmd?: string; cwd?: string; exitCode?: number | null };
+  nav?: { canBack: boolean; canForward: boolean };
 }
 
 export interface Step {
@@ -54,6 +55,8 @@ export interface Session {
   cwd?: string;
   url?: string;
   steps?: Step[];
+  project?: string;
+  pname?: string;
 }
 
 export interface DevloopApi {
@@ -66,7 +69,15 @@ export interface DevloopApi {
   devRestart: () => Promise<DevStatus>;
   setDevConfig: (opts: { cmd?: string; cwd?: string }) => Promise<void>;
   reload: (hard: boolean) => Promise<void>;
+  back: () => Promise<void>;
+  forward: () => Promise<void>;
   screenshot: () => Promise<void>;
+  navigateFor: (id: string, url: string) => Promise<{ url: string; status: number | null }>;
+  backFor: (id: string) => Promise<void>;
+  forwardFor: (id: string) => Promise<void>;
+  reloadFor: (id: string, hard: boolean) => Promise<void>;
+  screenshotFor: (id: string) => Promise<void>;
+  setBoundsFor: (id: string, rect: { x: number; y: number; width: number; height: number }) => Promise<void>;
   pickFolder: () => Promise<string | null>;
   projects: () => Promise<Project[]>;
   projectAdd: (p: Project) => Promise<Project[]>;

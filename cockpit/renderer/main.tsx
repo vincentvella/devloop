@@ -2,16 +2,35 @@ import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
+import {
+  Play,
+  Square,
+  Power,
+  RotateCw,
+  RefreshCw,
+  Camera,
+  Settings,
+  ExternalLink,
+  PanelRightClose,
+  PanelRightOpen,
+  X,
+  Plus,
+  FolderOpen,
+  ArrowDown,
+  Save,
+  ArrowLeft,
+  ArrowRight,
+} from "lucide-react";
 import type { Entry, Pane, Project, Step } from "./global";
 
 const dl = () => window.devloop;
 
 // Accessible icon button with a Radix tooltip.
-function IconBtn({ tip, onClick, children }: { tip: string; onClick: () => void; children: ReactNode }) {
+function IconBtn({ tip, onClick, children, disabled }: { tip: string; onClick: () => void; children: ReactNode; disabled?: boolean }) {
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
-        <button className="icon" aria-label={tip} onClick={onClick}>
+        <button className="icon" aria-label={tip} onClick={onClick} disabled={disabled}>
           {children}
         </button>
       </Tooltip.Trigger>
@@ -92,14 +111,12 @@ function App() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [filter, setFilter] = useState("");
   const [chips, setChips] = useState<Set<string>>(new Set());
-  const [filterTarget, setFilterTarget] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(460);
   const [dragging, setDragging] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selProject, setSelProject] = useState("");
-  const [pname, setPname] = useState("");
   const [devCmd, setDevCmd] = useState("");
   const [devCwd, setDevCwd] = useState("");
   const [url, setUrl] = useState("");
@@ -109,6 +126,8 @@ function App() {
   const [editingPane, setEditingPane] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [atBottom, setAtBottom] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [panelTab, setPanelTab] = useState<"logs" | "repro">("logs");
 
   const paneAreaRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -118,6 +137,9 @@ function App() {
   const dev = active?.dev;
   const devRunning = !!dev?.running;
   const devFailed = !devRunning && typeof dev?.exitCode === "number" && dev.exitCode !== 0;
+  // When the active pane is popped into its own window, its embedded view is gone —
+  // let the timeline fill the freed space.
+  const fillTimeline = !!active?.popped && !sidebarHidden;
 
   const refreshPanes = useCallback(async () => {
     const ps = await dl().panes();
@@ -128,14 +150,24 @@ function App() {
   }, []);
   const refreshProjects = useCallback(async () => setProjects(await dl().projects()), []);
 
+  // Save the active pane's dev cmd/cwd (auto-applied on blur / folder pick).
+  const applyDevConfig = useCallback(
+    async (cmd: string, cwd: string) => {
+      await dl().setDevConfig({ cmd: cmd.trim() || undefined, cwd: cwd.trim() || undefined });
+      await refreshPanes();
+    },
+    [refreshPanes],
+  );
+
   useEffect(() => {
     void (async () => {
       setEntries((await dl().getLogs({ limit: 1000 })).map((e) => ({ ...e })));
       const s = await dl().session();
-      setUrl(s.url ?? "");
       if (s.steps?.length) setSteps(s.steps);
+      if (s.project) setSelProject(s.project);
       await refreshPanes();
       await refreshProjects();
+      setLoaded(true);
     })();
     const offPush = dl().onPush((e) => setEntries((cur) => [...cur.slice(-1999), e]));
     const offPanes = dl().onPanesChanged(() => void refreshPanes());
@@ -161,7 +193,7 @@ function App() {
       ro.disconnect();
       window.removeEventListener("resize", report);
     };
-  }, [sidebarHidden, settingsOpen, sidebarWidth, panes.length]);
+  }, [sidebarHidden, settingsOpen, sidebarWidth, panes.length, fillTimeline]);
 
   // smart auto-scroll: only stick to bottom if already near it.
   useEffect(() => {
@@ -174,8 +206,21 @@ function App() {
   }, [lightbox]);
 
   const saveSession = useCallback(() => {
-    void dl().sessionSave({ cmd: devCmd.trim(), cwd: devCwd.trim(), url: url.trim(), steps });
-  }, [devCmd, devCwd, url, steps]);
+    void dl().sessionSave({ cmd: devCmd.trim(), cwd: devCwd.trim(), steps, project: selProject });
+  }, [devCmd, devCwd, steps, selProject]);
+
+  // Address bar follows the active pane's current URL (link clicks / SPA routes update it).
+  useEffect(() => {
+    setUrl(active?.url && active.url !== "about:blank" ? active.url : "");
+  }, [active?.url]);
+
+  // Persist the form (incl. project + save-as) on any change, debounced.
+  // Gated on `loaded` so the initial blank render can't overwrite the saved session.
+  useEffect(() => {
+    if (!loaded) return;
+    const t = setTimeout(saveSession, 300);
+    return () => clearTimeout(t);
+  }, [saveSession, loaded]);
 
   const labelActive = useCallback(
     async (name: string) => {
@@ -222,6 +267,7 @@ function App() {
       for (const s of r.steps) rows.push({ seq: reproUid--, ts: now, source: "repro", stream: "step", line: `   ${s.index}. ${s.action.kind} ${s.error ? "✗ " + s.error : "✓"}` });
       for (const e of r.errors) rows.push({ seq: reproUid--, ts: now, source: "repro", stream: "error", line: `   ✗ [${e.source}:${e.stream}] ${e.line}` });
       setEntries((cur) => [...cur, ...rows]);
+      setPanelTab("logs"); // surface the run's output in the timeline
       saveSession();
     },
     [saveSession],
@@ -237,8 +283,8 @@ function App() {
       const k = ev.key.toLowerCase();
       if (k === "l") {
         ev.preventDefault();
-        setSettingsOpen(true);
-        setTimeout(() => urlRef.current?.focus(), 0);
+        urlRef.current?.focus();
+        urlRef.current?.select();
       } else if (k === "r") {
         ev.preventDefault();
         void dl().reload(ev.shiftKey); // ⌘R reload page, ⌘⇧R hard reload (intercept Electron's reload)
@@ -257,7 +303,6 @@ function App() {
         if (p) {
           ev.preventDefault();
           void dl().paneSelect(p.id).then(refreshPanes);
-          setFilterTarget(p.id);
         }
       }
     };
@@ -285,9 +330,32 @@ function App() {
     setDevCwd(p.cwd);
     setDevCmd(p.cmd ?? "");
     setUrl(p.url ?? "");
-    setPname(p.name);
     setSteps(p.steps?.length ? p.steps : [{ kind: "navigate" }]);
   };
+
+  // Open a saved project (fill the form, then dev_start + navigate on the active pane).
+  const openProject = useCallback(
+    async (name: string) => {
+      if (!name) return;
+      setSelProject(name);
+      fillFromProject(name);
+      const res = await dl().openProject(name);
+      await labelActive(res.name);
+      await refreshPanes();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projects, labelActive, refreshPanes],
+  );
+
+  // Save the active pane as a project (named by its tab label / folder; rename on the tab).
+  const saveProject = useCallback(async () => {
+    const a = (await dl().panes()).find((p) => p.active);
+    const name = a?.label || devCwd.split("/").filter(Boolean).pop();
+    if (!name || !devCwd.trim()) return;
+    await dl().projectAdd({ name, cwd: devCwd.trim(), cmd: devCmd.trim() || undefined, url: url.trim() || undefined, steps });
+    await refreshProjects();
+    setSelProject(name);
+  }, [devCwd, devCmd, url, steps, refreshProjects]);
 
   const toggleChip = (key: string) =>
     setChips((cur) => {
@@ -299,7 +367,8 @@ function App() {
   const shown = entries.filter((e) => {
     if (filter && !e.line.toLowerCase().includes(filter.toLowerCase())) return false;
     if (chips.size && !CHIPS.some((c) => chips.has(c.key) && c.test(e))) return false;
-    if (filterTarget && e.target && e.target !== filterTarget) return false;
+    // Always scope the timeline to the active pane (untargeted entries, e.g. repro, still show).
+    if (active && e.target && e.target !== active.id) return false;
     return true;
   });
 
@@ -308,16 +377,14 @@ function App() {
       <div className="toolbar">
         <div className="bar">
           <div className="tabs">
-            <span className={`tab${filterTarget === null ? " active" : ""}`} onClick={() => setFilterTarget(null)}>
-              all
-            </span>
             {panes.map((p) => (
               <span
                 key={p.id}
-                className={`tab${p.active ? " active" : ""}${p.dev?.running ? " run" : ""}`}
+                className={`tab${p.active ? " active" : ""}${p.dev?.running ? " run" : ""}${
+                  !p.dev?.running && typeof p.dev?.exitCode === "number" && p.dev.exitCode !== 0 ? " fail" : ""
+                }`}
                 onClick={async () => {
                   await dl().paneSelect(p.id);
-                  setFilterTarget(p.id);
                   await refreshPanes();
                 }}
                 onDoubleClick={() => {
@@ -354,220 +421,218 @@ function App() {
                     void dl().paneClose(p.id).then(refreshPanes);
                   }}
                 >
-                  ×
+                  <X size={13} />
                 </span>
               </span>
             ))}
             <span className="tab add" onClick={() => void dl().paneNew().then(refreshPanes)}>
-              + pane
+              <Plus size={13} /> pane
             </span>
           </div>
 
           <div className="spacer" />
 
-          <span
-            className={`chip${devRunning ? " run" : ""}${devFailed ? " fail" : ""}`}
-            title={dev?.cmd || dev?.cwd ? `${dev?.cmd ?? "(auto)"}\n${dev?.cwd ?? ""}` : "no dev config"}
-          >
-            {devRunning
-              ? `● ${dev?.name ?? active?.label ?? "dev"}`
-              : devFailed
-                ? `✗ exited (code ${dev?.exitCode})`
-                : dev?.cmd || dev?.cwd
-                  ? "dev: stopped"
-                  : "dev: not configured"}
-          </span>
-          <div className="group">
-            <IconBtn tip="start / stop dev server (▶)" onClick={() => void onPlay()}>
-              {devRunning ? "⏹" : "▶"}
-            </IconBtn>
-            <IconBtn tip="restart dev server" onClick={() => void dl().devRestart().then(refreshPanes)}>
-              ⟳
-            </IconBtn>
-            <IconBtn tip="refresh page (⌘R)" onClick={() => void dl().reload(false)}>
-              ⟲
-            </IconBtn>
-            <IconBtn tip="hard refresh (⌘⇧R)" onClick={() => void dl().reload(true)}>
-              ⤓
-            </IconBtn>
-            <IconBtn tip="screenshot → timeline" onClick={() => void dl().screenshot()}>
-              📷
-            </IconBtn>
-          </div>
-          <div className="sep" />
-          <div className="group">
-            <IconBtn tip="settings (⌘,)" onClick={() => setSettingsOpen((v) => !v)}>
-              ⚙
-            </IconBtn>
-            <IconBtn
-              tip="pop active pane into its own window"
-              onClick={async () => {
-                if (active && !active.popped) await dl().panePop(active.id);
-                await refreshPanes();
-              }}
-            >
-              ⤢
-            </IconBtn>
-          </div>
+          <IconBtn tip="settings (⌘,)" onClick={() => setSettingsOpen((v) => !v)}>
+            <Settings size={15} />
+          </IconBtn>
         </div>
 
         {settingsOpen && (
           <div className="settings">
             <div className="row">
-              <input
-                ref={urlRef}
-                placeholder="3000  or  http://localhost:3000  →  Enter"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && void navigate()}
-              />
-              <button onClick={() => void navigate()}>go</button>
-              <select
-                value={selProject}
-                onChange={(e) => {
-                  setSelProject(e.target.value);
-                  if (e.target.value) fillFromProject(e.target.value);
-                }}
-              >
-                <option value="">— project —</option>
+              <span className="field-label">project</span>
+              <select value={selProject} onChange={(e) => void openProject(e.target.value)}>
+                <option value="">— open a saved project —</option>
                 {projects.map((p) => (
                   <option key={p.name} value={p.name}>
                     {p.name}
                   </option>
                 ))}
               </select>
-              <button
-                onClick={async () => {
-                  if (!selProject) return;
-                  fillFromProject(selProject);
-                  const res = await dl().openProject(selProject);
-                  await labelActive(res.name);
-                  saveSession();
-                  await refreshPanes();
-                }}
-              >
-                open
-              </button>
-              <input placeholder="save as…" style={{ maxWidth: 120 }} value={pname} onChange={(e) => setPname(e.target.value)} />
-              <button
-                onClick={async () => {
-                  if (!pname.trim() || !devCwd.trim()) return;
-                  await dl().projectAdd({ name: pname.trim(), cwd: devCwd.trim(), cmd: devCmd.trim() || undefined, url: url.trim() || undefined, steps });
-                  await refreshProjects();
-                }}
-              >
-                save
+              <button className="labeled" title="save the active pane as a project (rename on its tab)" onClick={() => void saveProject()}>
+                <Save size={13} /> save
               </button>
             </div>
             <div className="row">
-              <input placeholder="dev cmd (blank = auto-detect)" value={devCmd} onChange={(e) => setDevCmd(e.target.value)} />
+              <span className="field-label">dev</span>
+              <input
+                placeholder="cmd (blank = auto-detect)"
+                value={devCmd}
+                onChange={(e) => setDevCmd(e.target.value)}
+                onBlur={() => void applyDevConfig(devCmd, devCwd)}
+              />
               <button
-                title="browse"
+                title="browse for project folder"
                 onClick={async () => {
                   const dir = await dl().pickFolder();
                   if (!dir) return;
                   setDevCwd(dir);
-                  if (!pname.trim()) setPname(dir.split("/").filter(Boolean).pop() ?? "");
+                  await applyDevConfig(devCmd, dir);
                 }}
               >
-                📁
+                <FolderOpen size={14} />
               </button>
-              <input placeholder="project cwd" value={devCwd} onChange={(e) => setDevCwd(e.target.value)} />
-              <button
-                onClick={async () => {
-                  await dl().setDevConfig({ cmd: devCmd.trim() || undefined, cwd: devCwd.trim() || undefined });
-                  await refreshPanes();
-                }}
-              >
-                set dev config
-              </button>
+              <input
+                placeholder="project folder (cwd)"
+                value={devCwd}
+                onChange={(e) => setDevCwd(e.target.value)}
+                onBlur={() => void applyDevConfig(devCmd, devCwd)}
+              />
             </div>
           </div>
         )}
       </div>
 
+      {!active?.popped && (
+      <div className="browser-bar">
+        <IconBtn tip="back" disabled={!active?.nav?.canBack} onClick={() => void dl().back().then(refreshPanes)}>
+          <ArrowLeft size={15} />
+        </IconBtn>
+        <IconBtn tip="forward" disabled={!active?.nav?.canForward} onClick={() => void dl().forward().then(refreshPanes)}>
+          <ArrowRight size={15} />
+        </IconBtn>
+        <IconBtn tip="reload page (⌘R)" onClick={() => void dl().reload(false)}>
+          <RotateCw size={15} />
+        </IconBtn>
+        <IconBtn tip="hard reload — ignore cache (⌘⇧R)" onClick={() => void dl().reload(true)}>
+          <RefreshCw size={15} />
+        </IconBtn>
+        <input
+          ref={urlRef}
+          className="address"
+          placeholder="3000  or  http://localhost:3000  —  ↵ to open"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && void navigate()}
+        />
+        <IconBtn tip="screenshot → timeline" onClick={() => void dl().screenshot()}>
+          <Camera size={15} />
+        </IconBtn>
+        <IconBtn
+          tip="pop active pane into its own window"
+          onClick={async () => {
+            if (active && !active.popped) await dl().panePop(active.id);
+            await refreshPanes();
+          }}
+        >
+          <ExternalLink size={15} />
+        </IconBtn>
+      </div>
+      )}
+
       <div className="body">
-        <div className="pane-area" ref={paneAreaRef}>
+        <div className="pane-area" ref={paneAreaRef} style={fillTimeline ? { display: "none" } : undefined}>
           {panes.length === 0 && <div className="hint">no pane — open a project or add a pane (+)</div>}
         </div>
 
-        {!sidebarHidden && <div className={`divider${dragging ? " drag" : ""}`} onMouseDown={startDrag} />}
+        {!sidebarHidden && !fillTimeline && <div className={`divider${dragging ? " drag" : ""}`} onMouseDown={startDrag} />}
 
-        <div className={`sidebar${sidebarHidden ? " hidden" : ""}`} style={{ width: sidebarHidden ? 0 : sidebarWidth }}>
-          <div className="repro-head">
-            <strong>repro</strong>
-            <button onClick={() => setSteps((s) => [...s, { kind: "navigate" }])}>+ step</button>
-            <button onClick={() => void runRepro(steps)}>run ▶</button>
-            <span className="chip" style={{ border: "none", opacity: 0.7 }}>
-              {reproStatus}
-            </span>
-            <button className="collapse-btn" title="collapse timeline (⌘B)" onClick={() => setSidebarHidden(true)}>
-              ›
-            </button>
-          </div>
-          <div className="steps">
-            {steps.map((s, i) => (
-              <ReproStepRow
-                key={i}
-                step={s}
-                onChange={(ns) => setSteps((cur) => cur.map((x, j) => (j === i ? ns : x)))}
-                onDelete={() => setSteps((cur) => cur.filter((_, j) => j !== i))}
-              />
-            ))}
-          </div>
-
-          <div className="filterbar">
-            <input placeholder="filter (substring)…" value={filter} onChange={(e) => setFilter(e.target.value)} />
-            <div className="chips">
-              {CHIPS.map((c) => (
-                <span key={c.key} className={`fchip${chips.has(c.key) ? " on" : ""}`} onClick={() => toggleChip(c.key)}>
-                  {c.label}
-                </span>
-              ))}
-            </div>
-            <button
-              onClick={async () => {
-                await dl().clear();
-                setEntries([]);
-              }}
-            >
-              clear
-            </button>
-          </div>
-
-          <div className="list-wrap">
-            <div
-              className="list"
-              id="list"
-              ref={listRef}
-              onScroll={(e) => {
-                const el = e.currentTarget;
-                setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
-              }}
-            >
-              {shown.map((e, i) => (
-                <LogRow key={`${e.seq}:${i}`} e={e} onZoom={setLightbox} />
-              ))}
-            </div>
-            {!atBottom && (
-              <button
-                className="pill"
-                onClick={() => {
-                  const el = listRef.current;
-                  if (el) el.scrollTop = el.scrollHeight;
-                  setAtBottom(true);
-                }}
-              >
-                ↓ latest
+        <div
+          className={`sidebar${sidebarHidden ? " hidden" : ""}`}
+          style={sidebarHidden ? { width: 0 } : fillTimeline ? { flex: 1 } : { width: sidebarWidth }}
+        >
+          <div className="panel-head">
+            <div className="segmented">
+              <button className={`seg${panelTab === "logs" ? " on" : ""}`} onClick={() => setPanelTab("logs")}>
+                logs
               </button>
-            )}
+              <button className={`seg${panelTab === "repro" ? " on" : ""}`} onClick={() => setPanelTab("repro")}>
+                repro
+              </button>
+            </div>
+            <span className="spacer" />
+            {devFailed && <span className="dev-status fail">✗ exited {dev?.exitCode}</span>}
+            <IconBtn tip="start / stop dev server" onClick={() => void onPlay()}>
+              {devRunning ? <Square size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
+            </IconBtn>
+            <IconBtn tip="restart dev server" onClick={() => void dl().devRestart().then(refreshPanes)}>
+              <Power size={15} />
+            </IconBtn>
+            <button className="collapse-btn" title="collapse timeline (⌘B)" onClick={() => setSidebarHidden(true)}>
+              <PanelRightClose size={15} />
+            </button>
           </div>
+
+          {panelTab === "repro" ? (
+            <>
+              <div className="repro-head">
+                <button className="labeled" onClick={() => setSteps((s) => [...s, { kind: "navigate" }])}>
+                  <Plus size={13} /> step
+                </button>
+                <button className="labeled" onClick={() => void runRepro(steps)}>
+                  <Play size={13} /> run
+                </button>
+                <span className="chip" style={{ border: "none", opacity: 0.7 }}>
+                  {reproStatus}
+                </span>
+              </div>
+              <div className="steps">
+                {steps.map((s, i) => (
+                  <ReproStepRow
+                    key={i}
+                    step={s}
+                    onChange={(ns) => setSteps((cur) => cur.map((x, j) => (j === i ? ns : x)))}
+                    onDelete={() => setSteps((cur) => cur.filter((_, j) => j !== i))}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="filterbar">
+                <input placeholder="filter (substring)…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+                <div className="chips">
+                  {CHIPS.map((c) => (
+                    <span key={c.key} className={`fchip${chips.has(c.key) ? " on" : ""}`} onClick={() => toggleChip(c.key)}>
+                      {c.label}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  onClick={async () => {
+                    await dl().clear();
+                    setEntries([]);
+                  }}
+                >
+                  clear
+                </button>
+              </div>
+
+              <div className="list-wrap">
+                <div
+                  className="list"
+                  id="list"
+                  ref={listRef}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
+                  }}
+                >
+                  {shown.map((e, i) => (
+                    <LogRow key={`${e.seq}:${i}`} e={e} onZoom={setLightbox} />
+                  ))}
+                </div>
+                {!atBottom && (
+                  <button
+                    className="pill"
+                    onClick={() => {
+                      const el = listRef.current;
+                      if (el) el.scrollTop = el.scrollHeight;
+                      setAtBottom(true);
+                    }}
+                  >
+                    <ArrowDown size={13} /> latest
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {sidebarHidden && (
           <div className="edge">
             <div className="handle" title="show timeline (⌘B)" onClick={() => setSidebarHidden(false)}>
-              ‹
+              <PanelRightOpen size={14} />
             </div>
           </div>
         )}
@@ -609,10 +674,102 @@ function ReproStepRow({ step, onChange, onDelete }: { step: Step; onChange: (s: 
       {k !== "none" && <input placeholder={ph} value={a1} onChange={(e) => set1(e.target.value)} />}
       {k === "type" && <input placeholder="text" value={step.text ?? ""} onChange={(e) => onChange({ ...step, text: e.target.value })} />}
       <span className="del" onClick={onDelete}>
-        ×
+        <X size={13} />
       </span>
     </div>
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+// A popped-out pane loads this same bundle with ?pop=<id> — render just its browser bar + view.
+function PopApp({ paneId }: { paneId: string }) {
+  const [pane, setPane] = useState<Pane | null>(null);
+  const [url, setUrl] = useState("");
+  const paneAreaRef = useRef<HTMLDivElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
+
+  const refresh = useCallback(async () => {
+    setPane((await dl().panes()).find((p) => p.id === paneId) ?? null);
+  }, [paneId]);
+
+  useEffect(() => {
+    void refresh();
+    return dl().onPanesChanged(() => void refresh());
+  }, [refresh]);
+
+  useEffect(() => {
+    setUrl(pane?.url && pane.url !== "about:blank" ? pane.url : "");
+  }, [pane?.url]);
+
+  useEffect(() => {
+    const el = paneAreaRef.current;
+    if (!el) return;
+    const report = () => {
+      const r = el.getBoundingClientRect();
+      void dl().setBoundsFor(paneId, { x: r.left, y: r.top, width: r.width, height: r.height });
+    };
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    window.addEventListener("resize", report);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", report);
+    };
+  }, [paneId]);
+
+  // Intercept ⌘R so it reloads the PAGE, not the pop window's chrome.
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (!ev.metaKey) return;
+      if (ev.key.toLowerCase() === "r") {
+        ev.preventDefault();
+        void dl().reloadFor(paneId, ev.shiftKey);
+      } else if (ev.key.toLowerCase() === "l") {
+        ev.preventDefault();
+        urlRef.current?.focus();
+        urlRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [paneId]);
+
+  const navigate = () => {
+    const u = normalizeUrl(url);
+    if (u) void dl().navigateFor(paneId, u);
+  };
+
+  return (
+    <Tooltip.Provider delayDuration={250}>
+      <div className="browser-bar">
+        <IconBtn tip="back" disabled={!pane?.nav?.canBack} onClick={() => void dl().backFor(paneId).then(refresh)}>
+          <ArrowLeft size={15} />
+        </IconBtn>
+        <IconBtn tip="forward" disabled={!pane?.nav?.canForward} onClick={() => void dl().forwardFor(paneId).then(refresh)}>
+          <ArrowRight size={15} />
+        </IconBtn>
+        <IconBtn tip="reload page (⌘R)" onClick={() => void dl().reloadFor(paneId, false)}>
+          <RotateCw size={15} />
+        </IconBtn>
+        <IconBtn tip="hard reload — ignore cache (⌘⇧R)" onClick={() => void dl().reloadFor(paneId, true)}>
+          <RefreshCw size={15} />
+        </IconBtn>
+        <input
+          ref={urlRef}
+          className="address"
+          placeholder="3000  or  http://localhost:3000  —  ↵ to open"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && navigate()}
+        />
+        <IconBtn tip="screenshot → timeline" onClick={() => void dl().screenshotFor(paneId)}>
+          <Camera size={15} />
+        </IconBtn>
+      </div>
+      <div className="pane-area" ref={paneAreaRef} style={{ flex: 1 }} />
+    </Tooltip.Provider>
+  );
+}
+
+const popId = new URLSearchParams(location.search).get("pop");
+createRoot(document.getElementById("root")!).render(popId ? <PopApp paneId={popId} /> : <App />);

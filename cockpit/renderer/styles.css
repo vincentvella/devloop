@@ -65,7 +65,15 @@
   button.icon {
     width: 28px;
     padding: 4px 0;
-    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* buttons with an icon + text label */
+  button.labeled {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   button:disabled {
     opacity: 0.4;
@@ -117,6 +125,12 @@
     flex: 1;
     min-width: 90px;
   }
+  .field-label {
+    flex: none;
+    width: 44px;
+    text-align: right;
+    color: var(--color-dim);
+  }
 
   .tabs {
     display: flex;
@@ -155,6 +169,14 @@
     background: var(--color-ok);
     box-shadow: 0 0 5px var(--color-ok);
   }
+  .tab.fail .dot {
+    background: var(--color-bad);
+    box-shadow: 0 0 5px var(--color-bad);
+  }
+  .dev-status.fail {
+    color: #ffa198;
+    white-space: nowrap;
+  }
   .tab .name {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -168,6 +190,8 @@
     opacity: 0.45;
     padding: 0 2px;
     border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
   }
   .tab .x:hover {
     opacity: 1;
@@ -193,6 +217,18 @@
   .chip.fail {
     color: #ffa198;
     border-color: var(--color-bad);
+  }
+
+  .browser-bar {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 5px 10px;
+    background: var(--color-bg2);
+    border-bottom: 1px solid var(--color-edge);
+  }
+  .address {
+    flex: 1;
   }
 
   .body {
@@ -238,11 +274,39 @@
   }
 
 
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 6px;
+  }
+  .segmented {
+    display: inline-flex;
+    border: 1px solid var(--color-edge);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .seg {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 3px 14px;
+    color: var(--color-dim);
+    cursor: pointer;
+  }
+  .seg:hover {
+    background: var(--color-raise);
+  }
+  .seg.on {
+    background: var(--color-raise);
+    color: var(--color-fg);
+  }
+
   .repro-head {
     display: flex;
     gap: 8px;
     align-items: center;
-    padding: 8px 10px 4px;
+    padding: 4px 10px;
   }
   .collapse-btn {
     margin-left: auto;
@@ -251,7 +315,8 @@
     color: var(--color-dim);
     cursor: pointer;
     padding: 0 4px;
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
   }
   .collapse-btn:hover {
     color: var(--color-fg);
@@ -260,16 +325,16 @@
 
   /* thin gutter on the right edge (reserved so the native pane view can't cover the handle) */
   .edge {
-    width: 16px;
+    width: 26px;
     flex: none;
     position: relative;
   }
-  /* small handle pinned near the top (aligns with the in-sidebar collapse button) */
+  /* handle pinned near the top (aligns with the in-sidebar collapse button) */
   .edge .handle {
     position: absolute;
     top: 8px;
     right: 0;
-    width: 16px;
+    width: 26px;
     height: 52px;
     display: flex;
     align-items: center;
@@ -309,6 +374,8 @@
     cursor: pointer;
     opacity: 0.5;
     padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
   }
   .step .del:hover {
     opacity: 1;
@@ -373,6 +440,9 @@
     padding: 4px 12px;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .logrow {
