@@ -289,7 +289,7 @@ export class BrowserManager implements IBrowserManager {
       width: 1000,
       height: 720,
       show: !this.offscreen,
-      title: `devloop — ${p.label ?? id}`,
+      title: `Devloop — ${p.label ?? id}`,
       webPreferences: { preload: this.popChrome.preloadPath, contextIsolation: true, sandbox: false, offscreen: this.offscreen },
     });
     win.contentView.addChildView(p.view);

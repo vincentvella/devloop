@@ -150,7 +150,7 @@ function createWindows(): void {
     width: 1280,
     height: 820,
     show: !SELFTEST,
-    title: "devloop",
+    title: "Devloop",
     webPreferences: {
       preload: join(BASE, "preload.cjs"),
       contextIsolation: true,
@@ -258,7 +258,7 @@ function wireIpc(): void {
 const WELCOME =
   "data:text/html;charset=utf-8," +
   encodeURIComponent(
-    `<html><body style="margin:0;font:14px ui-monospace,monospace;background:#0d1117;color:#8b949e;display:grid;place-items:center;height:100vh"><div style="text-align:center"><div style="font-size:18px;color:#c9d1d9">devloop — app pane</div><div style="margin-top:8px">Enter a URL in the timeline window's bar, or dev_start a project.</div></div></body></html>`,
+    `<html><body style="margin:0;font:14px ui-monospace,monospace;background:#0d1117;color:#8b949e;display:grid;place-items:center;height:100vh"><div style="text-align:center"><div style="font-size:18px;color:#c9d1d9">Devloop — app pane</div><div style="margin-top:8px">Enter a URL in the timeline window's bar, or dev_start a project.</div></div></body></html>`,
   );
 
 function log(msg: string): void {
@@ -275,6 +275,7 @@ async function main() {
       app.exit(2);
     }, 30_000);
   }
+  app.setName("Devloop");
   log("waiting for app ready…");
   await app.whenReady();
   log("app ready; creating windows");
