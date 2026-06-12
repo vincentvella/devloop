@@ -73,6 +73,31 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "browser_hover",
+    description: "Hover the pointer over an element (triggers hover menus/tooltips).",
+    inputSchema: { type: "object", properties: { selector: { type: "string" } }, required: ["selector"] },
+  },
+  {
+    name: "browser_scroll",
+    description: "Scroll an element into view (selector), or the window to (x, y).",
+    inputSchema: { type: "object", properties: { selector: { type: "string" }, x: { type: "number" }, y: { type: "number" } } },
+  },
+  {
+    name: "browser_select",
+    description: "Set the value of a <select> (or input) and fire input/change. Pass the option's value.",
+    inputSchema: { type: "object", properties: { selector: { type: "string" }, value: { type: "string" } }, required: ["selector", "value"] },
+  },
+  {
+    name: "browser_press",
+    description: "Press a key (e.g. Enter, Escape, Tab, ArrowDown). Optionally focus a selector first.",
+    inputSchema: { type: "object", properties: { key: { type: "string" }, selector: { type: "string" } }, required: ["key"] },
+  },
+  {
+    name: "browser_wait_for_idle",
+    description: "Wait until network activity settles (no requests for idleMs). Returns { ok }.",
+    inputSchema: { type: "object", properties: { idleMs: { type: "number", description: "default 500" }, timeoutMs: { type: "number", description: "default 10000" } } },
+  },
+  {
     name: "browser_snapshot",
     description:
       "Structured snapshot of the active page: url, title, and the interactive + landmark elements " +
@@ -231,11 +256,15 @@ export const TOOLS: Tool[] = [
           items: {
             type: "object",
             properties: {
-              kind: { type: "string", enum: ["navigate", "click", "type", "eval", "wait", "none"] },
+              kind: { type: "string", enum: ["navigate", "click", "type", "hover", "scroll", "select", "press", "eval", "wait", "none"] },
               url: { type: "string", description: "for kind=navigate" },
-              selector: { type: "string", description: "for kind=click|type|wait" },
+              selector: { type: "string", description: "for kind=click|type|hover|select|wait (and optional for scroll/press)" },
               text: { type: "string", description: "for kind=type, or kind=wait (text to wait for)" },
               expression: { type: "string", description: "for kind=eval" },
+              key: { type: "string", description: "for kind=press (e.g. Enter, Escape, Tab)" },
+              value: { type: "string", description: "for kind=select" },
+              x: { type: "number", description: "for kind=scroll" },
+              y: { type: "number", description: "for kind=scroll" },
               timeoutMs: { type: "number", description: "for kind=wait" },
             },
             required: ["kind"],
@@ -245,11 +274,15 @@ export const TOOLS: Tool[] = [
           type: "object",
           description: "A single action (convenience for a one-step sequence). Ignored if `actions` is given.",
           properties: {
-            kind: { type: "string", enum: ["navigate", "click", "type", "eval", "wait", "none"] },
+            kind: { type: "string", enum: ["navigate", "click", "type", "hover", "scroll", "select", "press", "eval", "wait", "none"] },
             url: { type: "string", description: "for kind=navigate" },
-            selector: { type: "string", description: "for kind=click|type|wait" },
+            selector: { type: "string", description: "for kind=click|type|hover|select|wait (and optional for scroll/press)" },
             text: { type: "string", description: "for kind=type, or kind=wait (text to wait for)" },
             expression: { type: "string", description: "for kind=eval" },
+            key: { type: "string", description: "for kind=press" },
+            value: { type: "string", description: "for kind=select" },
+            x: { type: "number", description: "for kind=scroll" },
+            y: { type: "number", description: "for kind=scroll" },
             timeoutMs: { type: "number", description: "for kind=wait" },
           },
           required: ["kind"],
@@ -274,12 +307,16 @@ export const TOOLS: Tool[] = [
 ];
 
 interface ReproAction {
-  kind: "navigate" | "click" | "type" | "eval" | "wait" | "none";
+  kind: "navigate" | "click" | "type" | "hover" | "scroll" | "select" | "press" | "eval" | "wait" | "none";
   url?: string;
   selector?: string;
   text?: string;
   expression?: string;
   timeoutMs?: number;
+  key?: string;
+  value?: string;
+  x?: number;
+  y?: number;
 }
 
 async function performAction(a: ReproAction): Promise<unknown> {
@@ -293,6 +330,18 @@ async function performAction(a: ReproAction): Promise<unknown> {
     case "type":
       await browser.type(a.selector!, a.text ?? "");
       return { typed: a.selector };
+    case "hover":
+      await browser.hover(a.selector!);
+      return { hovered: a.selector };
+    case "scroll":
+      await browser.scroll({ selector: a.selector, x: a.x, y: a.y });
+      return { scrolled: true };
+    case "select":
+      await browser.select(a.selector!, a.value ?? a.text ?? "");
+      return { selected: a.value ?? a.text };
+    case "press":
+      await browser.press(a.key!, a.selector);
+      return { pressed: a.key };
     case "eval":
       return { value: await browser.evaluate(a.expression!) };
     case "wait":
@@ -384,6 +433,25 @@ export async function handleTool(name: string, args: Record<string, unknown>): P
       return json({ ok: true });
     case "browser_eval":
       return json({ value: await browser.evaluate(args.expression as string) });
+    case "browser_hover":
+      await browser.hover(args.selector as string);
+      return json({ hovered: args.selector });
+    case "browser_scroll":
+      await browser.scroll({ selector: args.selector as string | undefined, x: args.x as number | undefined, y: args.y as number | undefined });
+      return json({ ok: true });
+    case "browser_select":
+      await browser.select(args.selector as string, args.value as string);
+      return json({ selected: args.value });
+    case "browser_press":
+      await browser.press(args.key as string, args.selector as string | undefined);
+      return json({ pressed: args.key });
+    case "browser_wait_for_idle":
+      try {
+        await browser.waitForNetworkIdle(args.idleMs as number | undefined, args.timeoutMs as number | undefined);
+        return json({ ok: true });
+      } catch {
+        return json({ ok: false });
+      }
     case "browser_snapshot":
       return json(await browser.snapshot());
     case "browser_wait_for":

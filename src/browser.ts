@@ -13,10 +13,12 @@ import puppeteer, {
   type ConsoleMessage,
   type HTTPRequest,
   type HTTPResponse,
+  type KeyInput,
 } from "puppeteer";
 import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
 import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
+import { scrollJs, selectJs } from "./pageActions.ts";
 
 export interface BrowserOptions {
   headless: boolean;
@@ -212,6 +214,28 @@ export class PuppeteerBrowserController implements IBrowserController {
       (page) => this.withTimeout(page.type(selector, text), `type(${selector})`),
       `type(${selector})`,
     );
+  }
+
+  async hover(selector: string): Promise<void> {
+    await this.withRecovery((page) => this.withTimeout(page.hover(selector), `hover(${selector})`), `hover(${selector})`);
+  }
+
+  async scroll(opts: { selector?: string; x?: number; y?: number }): Promise<void> {
+    await this.withRecovery(async () => {
+      await this.evaluate(scrollJs(opts));
+    }, "scroll");
+  }
+
+  async select(selector: string, value: string): Promise<void> {
+    const ok = await this.evaluate(selectJs(selector, value));
+    if (!ok) throw new Error(`No element found for selector: ${selector}`);
+  }
+
+  async press(key: string, selector?: string): Promise<void> {
+    await this.withRecovery(async (page) => {
+      if (selector) await this.withTimeout(page.focus(selector), `focus(${selector})`);
+      await page.keyboard.press(key as KeyInput);
+    }, `press(${key})`);
   }
 
   /** Evaluate an expression in page context via raw CDP (sidesteps page CSP on eval). */

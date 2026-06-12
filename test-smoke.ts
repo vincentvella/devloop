@@ -41,6 +41,16 @@ console.log(
 const waitMiss = JSON.parse(await callText("browser_wait_for", { selector: "#nope", timeoutMs: 600 }));
 console.log(`wait_for(miss): ok=${waitMiss.ok} (expect false)`);
 
+// --- richer interactions: select / press / hover / scroll ---
+const ixPage = `data:text/html,<select id=s><option value=a>A</option><option value=b>B</option></select><input id=t onkeydown="if(event.key==='Enter')window.__p=1"><button id=h onmouseover="window.__h=1">h</button>`;
+await callText("browser_navigate", { url: ixPage });
+await callText("browser_select", { selector: "#s", value: "b" });
+await callText("browser_press", { key: "Enter", selector: "#t" });
+await callText("browser_hover", { selector: "#h" });
+await callText("browser_scroll", { y: 40 });
+const ixv = JSON.parse(JSON.parse(await callText("browser_eval", { expression: "JSON.stringify({sel:document.getElementById('s').value,pressed:!!window.__p,hovered:!!window.__h})" })).value);
+console.log(`\ninteractions: select=${ixv.sel === "b"} press=${ixv.pressed} hover=${ixv.hovered}`);
+
 // --- action sequence: navigate -> type -> click ---
 const formPage = `data:text/html,<input id=name><button id=go onclick="console.log('typed:'+document.getElementById('name').value)">go</button>`;
 const seq = JSON.parse(

@@ -11,6 +11,10 @@ export interface IBrowserController {
   screenshot(fullPage?: boolean): Promise<{ base64: string; mimeType: string }>;
   click(selector: string): Promise<void>;
   type(selector: string, text: string): Promise<void>;
+  hover(selector: string): Promise<void>;
+  scroll(opts: { selector?: string; x?: number; y?: number }): Promise<void>;
+  select(selector: string, value: string): Promise<void>;
+  press(key: string, selector?: string): Promise<void>;
   evaluate(expression: string): Promise<unknown>;
   /** Structured page snapshot (roles + names + usable selectors) for agents. */
   snapshot(): Promise<PageSnapshot>;

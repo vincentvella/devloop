@@ -13,6 +13,7 @@ import type { WebContents } from "electron";
 import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
 import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
+import { scrollJs, selectJs, focusJs, centerJs, hoverJs } from "./pageActions.ts";
 
 export interface ElectronBrowserOptions {
   networkErrorThreshold: number;
@@ -227,6 +228,42 @@ export class ElectronBrowserController implements IBrowserController {
         for (const ch of text) this.wc.sendInputEvent({ type: "char", keyCode: ch });
       })(),
       `type(${selector})`,
+    );
+  }
+
+  async hover(selector: string): Promise<void> {
+    await this.withTimeout(
+      (async () => {
+        const pt = (await this.wc.executeJavaScript(centerJs(selector))) as [number, number] | null;
+        if (!pt) throw new Error(`No element found for selector: ${selector}`);
+        // Real pointer move (drives CSS :hover) + JS hover events (drives JS menus; works offscreen).
+        this.wc.sendInputEvent({ type: "mouseMove", x: Math.round(pt[0]), y: Math.round(pt[1]) });
+        await this.wc.executeJavaScript(hoverJs(selector), true);
+      })(),
+      `hover(${selector})`,
+    );
+  }
+
+  async scroll(opts: { selector?: string; x?: number; y?: number }): Promise<void> {
+    await this.wc.executeJavaScript(scrollJs(opts), true);
+  }
+
+  async select(selector: string, value: string): Promise<void> {
+    const ok = (await this.wc.executeJavaScript(selectJs(selector, value), true)) as boolean;
+    if (!ok) throw new Error(`No element found for selector: ${selector}`);
+  }
+
+  async press(key: string, selector?: string): Promise<void> {
+    await this.withTimeout(
+      (async () => {
+        if (selector) {
+          const ok = (await this.wc.executeJavaScript(focusJs(selector), true)) as boolean;
+          if (!ok) throw new Error(`No element found for selector: ${selector}`);
+        }
+        this.wc.sendInputEvent({ type: "keyDown", keyCode: key });
+        this.wc.sendInputEvent({ type: "keyUp", keyCode: key });
+      })(),
+      `press(${key})`,
     );
   }
 

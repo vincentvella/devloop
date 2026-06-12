@@ -466,6 +466,18 @@ export class BrowserManager implements IBrowserManager {
   type(selector: string, text: string) {
     return this.active().type(selector, text);
   }
+  hover(selector: string) {
+    return this.active().hover(selector);
+  }
+  scroll(opts: { selector?: string; x?: number; y?: number }) {
+    return this.active().scroll(opts);
+  }
+  select(selector: string, value: string) {
+    return this.active().select(selector, value);
+  }
+  press(key: string, selector?: string) {
+    return this.active().press(key, selector);
+  }
   evaluate(expression: string) {
     return this.active().evaluate(expression);
   }
