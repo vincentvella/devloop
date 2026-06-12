@@ -103,6 +103,12 @@ check("diagnose counts errors", diag.errorCount >= 2);
 check("diagnose groups duplicates", diag.groups.some((g: any) => g.count >= 2));
 check("diagnose summary mentions errors", /error/i.test(diag.summary));
 
+// --- export_bundle ---
+console.log("\n# export_bundle");
+const bundle = await J("export_bundle", {});
+check("bundle has meta + diagnose + har + logs", !!bundle.meta && !!bundle.diagnose && !!bundle.har && bundle.logs.length > 0);
+check("bundle counts the grouped errors", bundle.meta.counts.errors >= 2);
+
 // --- repro sequence + abort ---
 console.log("\n# repro sequence + abort");
 const formPage = `data:text/html,<input id=name><button id=go onclick="console.log('typed:'+document.getElementById('name').value)">go</button>`;

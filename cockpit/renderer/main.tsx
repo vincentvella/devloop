@@ -673,6 +673,9 @@ function App() {
                 <button title="export captured network as a HAR file" onClick={() => void dl().exportHar()}>
                   HAR
                 </button>
+                <button title="export a shareable bug report (HTML)" onClick={() => void dl().exportBundle()}>
+                  report
+                </button>
                 <button
                   onClick={async () => {
                     await dl().clear();

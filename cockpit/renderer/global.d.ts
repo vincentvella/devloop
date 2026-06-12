@@ -90,6 +90,7 @@ export interface DevloopApi {
   screenshot: () => Promise<void>;
   pick: () => Promise<string | null>;
   clearStorage: (opts?: { allOrigins?: boolean }) => Promise<void>;
+  exportBundle: () => Promise<string | null>;
   exportHar: () => Promise<string | null>;
   navigateFor: (id: string, url: string) => Promise<{ url: string; status: number | null }>;
   backFor: (id: string) => Promise<void>;

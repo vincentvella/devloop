@@ -40,6 +40,7 @@ import { LogBuffer } from "../src/logBuffer.ts";
 import { projectName, type DevServerLike } from "../src/devServer.ts";
 import { TOOLS, handleTool, configureTools } from "../src/toolLayer.ts";
 import { listProjects, addProject, getProject, getSession, setSession, getPanes } from "../src/registry.ts";
+import { bundleToHtml } from "../src/bundle.ts";
 import { BrowserManager } from "./browserManager.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
@@ -220,6 +221,18 @@ function wireIpc(): void {
     });
     if (canceled || !filePath) return null;
     writeFileSync(filePath, har);
+    return filePath;
+  });
+  ipcMain.handle("devloop:exportBundle", async () => {
+    const res = await handleTool("export_bundle", {});
+    const bundle = JSON.parse((res.content[0] as { text?: string })?.text ?? "{}");
+    const html = bundleToHtml(bundle);
+    const { canceled, filePath } = await dialog.showSaveDialog(shellWin!, {
+      defaultPath: "devloop-report.html",
+      filters: [{ name: "HTML report", extensions: ["html"] }],
+    });
+    if (canceled || !filePath) return null;
+    writeFileSync(filePath, html);
     return filePath;
   });
   ipcMain.handle("devloop:screenshot", async () => {
@@ -580,6 +593,19 @@ async function runSelfTest() {
   const diagnoseOk = diag.errorCount >= 2 && diag.groups.some((g) => g.count >= 2) && diag.network.some((n) => n.status === 404);
   console.log(`SELFTEST diagnose: errors=${diag.errorCount} dupGroup=${diag.groups.some((g) => g.count >= 2)} net404=${diag.network.some((n) => n.status === 404)} ok=${diagnoseOk}`);
 
+  // 9f) export_bundle: capture a screenshot, then assemble the bundle (logs + screenshot + har + diagnose).
+  await tl.executeJavaScript("window.devloop.screenshot()");
+  await new Promise((r) => setTimeout(r, 400));
+  const bundle = JSON.parse((await handleTool("export_bundle", {})).content[0]!.text as string) as {
+    meta: { counts: { logs: number; errors: number; screenshots: number } };
+    diagnose: unknown;
+    har: unknown;
+    screenshots: unknown[];
+    logs: unknown[];
+  };
+  const bundleOk = !!bundle.diagnose && !!bundle.har && bundle.screenshots.length >= 1 && bundle.logs.length > 0 && bundle.meta.counts.errors >= 2;
+  console.log(`SELFTEST bundle: logs=${bundle.meta.counts.logs} screenshots=${bundle.screenshots.length} errors=${bundle.meta.counts.errors} ok=${bundleOk}`);
+
   // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
   manager.__crashActive();
   await new Promise((r) => setTimeout(r, 1500));
@@ -646,6 +672,7 @@ async function runSelfTest() {
     ["clear storage", clearOk],
     ["device emulation + throttle", emulateOk],
     ["diagnose (group + network)", diagnoseOk],
+    ["export bundle", bundleOk],
   ];
   for (const [name, c] of checks) console.log(`  ${c ? "✓" : "✗"} ${name}`);
   const failed = checks.filter(([, c]) => !c).map(([n]) => n);

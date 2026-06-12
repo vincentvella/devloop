@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("devloop", {
   screenshot: () => ipcRenderer.invoke("devloop:screenshot"),
   pick: () => ipcRenderer.invoke("devloop:pick"),
   clearStorage: (opts?: { allOrigins?: boolean }) => ipcRenderer.invoke("devloop:clearStorage", opts),
+  exportBundle: () => ipcRenderer.invoke("devloop:exportBundle"),
   exportHar: () => ipcRenderer.invoke("devloop:exportHar"),
   // pane-targeted variants (used by a popped-out pane's own browser bar)
   navigateFor: (id: string, url: string) => ipcRenderer.invoke("devloop:navigateFor", id, url),

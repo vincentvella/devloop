@@ -14,6 +14,7 @@ import { listProjects, addProject, removeProject, getProject } from "./registry.
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
 import { toHar } from "./har.ts";
 import { diagnose } from "./diagnose.ts";
+import { buildBundle } from "./bundle.ts";
 
 export interface ToolDeps {
   buffer: LogBuffer;
@@ -193,6 +194,12 @@ export const TOOLS: Tool[] = [
     name: "clear_logs",
     description: "Clear the event buffer. Call before reproducing an issue for a clean window.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "export_bundle",
+    description:
+      "Export a shareable bug-report bundle as one JSON object: the diagnose summary, the timeline (logs), captured screenshots, a HAR of network, and repro steps if provided. Optionally scope to an `app` / last `windowMs`.",
+    inputSchema: { type: "object", properties: { app: { type: "string" }, windowMs: { type: "number" } } },
   },
   {
     name: "diagnose",
@@ -560,6 +567,11 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       const targets = resolveTargets(args.app as string | undefined);
       const entries = buffer.query({ targets, limit: 5000 });
       return json(diagnose(entries, { windowMs: args.windowMs as number | undefined }));
+    }
+    case "export_bundle": {
+      const targets = resolveTargets(args.app as string | undefined);
+      const entries = buffer.query({ targets, limit: 5000 });
+      return json(buildBundle(entries, { app: args.app as string | undefined, windowMs: args.windowMs as number | undefined }));
     }
     case "dev_start": {
       const proj = args.project ? getProject(args.project as string) : undefined;
