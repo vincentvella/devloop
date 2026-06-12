@@ -5,3 +5,4 @@ release/
 *.tsbuildinfo
 *.log
 .DS_Store
+ROADMAP.md
