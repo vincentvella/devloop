@@ -53,6 +53,8 @@ export class PuppeteerBrowserController implements IBrowserController {
       headless: this.opts.headless,
       executablePath: this.opts.executablePath,
       defaultViewport: null,
+      // CI runners can't use Chrome's sandbox (no user namespaces); opt out via env.
+      args: process.env.DEVLOOP_NO_SANDBOX === "true" ? ["--no-sandbox", "--disable-setuid-sandbox"] : [],
     });
     const page = (await this.browser.pages())[0] ?? (await this.browser.newPage());
     await this.setupPage(page);

@@ -38,6 +38,7 @@
   },
   "scripts": {
     "start": "bun run src/index.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit && tsc -p cockpit/renderer/tsconfig.json",
     "mcp:build": "bun run scripts/build-mcp.ts",
     "app:build": "bun run cockpit/build.ts",
