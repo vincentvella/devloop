@@ -40,14 +40,17 @@ export const PICKER_JS = String.raw`(() => new Promise((resolve) => {
   const ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;border:2px solid #d2a8ff;background:rgba(210,168,255,0.15);border-radius:3px';
   document.documentElement.appendChild(ov);
-  let cur = null;
-  const move = (e) => { const el = document.elementFromPoint(e.clientX, e.clientY); if (!el || el === ov) return; cur = el; const r = el.getBoundingClientRect(); ov.style.left = r.left + 'px'; ov.style.top = r.top + 'px'; ov.style.width = r.width + 'px'; ov.style.height = r.height + 'px'; };
-  const done = (sel) => { document.removeEventListener('pointermove', move, true); document.removeEventListener('click', click, true); document.removeEventListener('keydown', key, true); ov.remove(); resolve(sel); };
+  let cur = null, lx = -1, ly = -1;
+  const paint = (x, y) => { if (x < 0) return; const el = document.elementFromPoint(x, y); if (!el || el === ov) return; cur = el; const r = el.getBoundingClientRect(); ov.style.left = r.left + 'px'; ov.style.top = r.top + 'px'; ov.style.width = r.width + 'px'; ov.style.height = r.height + 'px'; };
+  const move = (e) => { lx = e.clientX; ly = e.clientY; paint(lx, ly); };
+  const onScroll = () => paint(lx, ly); // track the element now under the cursor after scrolling
+  const done = (sel) => { document.removeEventListener('pointermove', move, true); document.removeEventListener('click', click, true); document.removeEventListener('keydown', key, true); document.removeEventListener('scroll', onScroll, true); ov.remove(); resolve(sel); };
   const click = (e) => { e.preventDefault(); e.stopPropagation(); const el = cur || document.elementFromPoint(e.clientX, e.clientY); done(el && el !== ov ? cssPath(el) : null); };
   const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); done(null); } };
   document.addEventListener('pointermove', move, true);
   document.addEventListener('click', click, true);
   document.addEventListener('keydown', key, true);
+  document.addEventListener('scroll', onScroll, true);
 }))()`;
 
 // Dispatch hover events to the element (fires JS-driven menus; works offscreen/headless).
