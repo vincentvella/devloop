@@ -146,6 +146,13 @@ if (fxUrl) {
   await callText("browser_throttle", { profile: "none" });
   const onl = await J("browser_eval", { expression: "fetch('/api/slow?ms=0').then(()=>'ok').catch(()=>'fail')" });
   check("throttle none restores fetch", onl.value === "ok");
+
+  // source-map resolution: load a minified+source-mapped bundle that throws → resolve to original src
+  await callText("clear_logs");
+  await callText("browser_navigate", { url: fxUrl.replace(/\/$/, "") + "/sm" });
+  await sleep(1200); // page error + async source-map fetch/resolve
+  const perr = (await J("get_logs", { stream: "pageerror", limit: 10 })).entries.find((e: any) => e.detail?.resolvedStack);
+  check("pageerror stack resolved to original source", !!perr && perr.detail.resolvedStack.some((f: any) => /sm-src/.test(f.source)));
 }
 await callText("dev_stop");
 

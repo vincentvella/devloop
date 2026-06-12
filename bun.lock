@@ -4,9 +4,11 @@
     "": {
       "name": "devloop-mcp",
       "dependencies": {
+        "@jridgewell/trace-mapping": "^0.3.31",
         "puppeteer": "^25.1.0",
       },
       "devDependencies": {
+        "@jridgewell/gen-mapping": "^0.3.13",
         "@modelcontextprotocol/sdk": "^1.18.0",
         "@radix-ui/react-dialog": "^1.1.16",
         "@radix-ui/react-dropdown-menu": "^2.1.17",

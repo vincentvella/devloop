@@ -19,11 +19,17 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Devloop Fi
   <script>console.log('fixture-loaded')</script>
 </body></html>`;
 
+// A minified, source-mapped bundle that throws on load — for the source-map test.
+const smBundle = await Bun.build({ entrypoints: [import.meta.dir + "/sm-src.ts"], target: "browser", sourcemap: "inline", minify: true });
+const smJs = smBundle.success ? await smBundle.outputs[0]!.text() : "throw new Error('build failed')";
+
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 0),
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === "/api/boom") return Response.json({ error: "intentional 500" }, { status: 500 });
+    if (url.pathname === "/app.js") return new Response(smJs, { headers: { "content-type": "text/javascript" } });
+    if (url.pathname === "/sm") return new Response('<!doctype html><title>sm</title><script src="/app.js"></script>', { headers: { "content-type": "text/html" } });
     if (url.pathname === "/api/slow") {
       await new Promise((r) => setTimeout(r, Number(url.searchParams.get("ms") ?? 300)));
       return new Response("slow ok");

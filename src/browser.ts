@@ -21,6 +21,7 @@ import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
 import { scrollJs, selectJs } from "./pageActions.ts";
 import type { NetDetail } from "./har.ts";
 import { DEVICE_PRESETS, THROTTLE } from "./emulation.ts";
+import { attachResolvedStack } from "./sourcemap.ts";
 
 /** Cap a captured body/string to keep the buffer light. */
 const cap = (s?: string, max = 2048): string | undefined => (s == null ? undefined : s.length > max ? s.slice(0, max) + `… (+${s.length - max})` : s);
@@ -128,9 +129,8 @@ export class PuppeteerBrowserController implements IBrowserController {
 
     page.on("pageerror", (raw) => {
       const err = raw as Error;
-      this.buffer.push("browser", "pageerror", `${err.name}: ${err.message}`, {
-        stack: err.stack,
-      });
+      const entry = this.buffer.push("browser", "pageerror", `${err.name}: ${err.message}`, { stack: err.stack });
+      if (err.stack) void attachResolvedStack(entry, err.stack); // de-minify via source maps (best-effort)
     });
 
     page.on("requestfailed", (req: HTTPRequest) => {

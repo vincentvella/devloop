@@ -16,6 +16,7 @@ import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
 import { scrollJs, selectJs, focusJs, centerJs, hoverJs, PICKER_JS } from "./pageActions.ts";
 import type { NetDetail } from "./har.ts";
 import { DEVICE_PRESETS, THROTTLE } from "./emulation.ts";
+import { attachResolvedStack } from "./sourcemap.ts";
 
 export interface ElectronBrowserOptions {
   networkErrorThreshold: number;
@@ -54,8 +55,8 @@ export class ElectronBrowserController implements IBrowserController {
   ) {}
 
   /** Tag every push from this pane with its target id. */
-  private emit(stream: string, line: string, detail?: unknown): void {
-    this.buffer.push("browser", stream, line, detail, this.id);
+  private emit(stream: string, line: string, detail?: unknown): LogEntry {
+    return this.buffer.push("browser", stream, line, detail, this.id);
   }
 
   async start(): Promise<void> {
@@ -107,7 +108,9 @@ export class ElectronBrowserController implements IBrowserController {
       case "Runtime.exceptionThrown": {
         const d = params.exceptionDetails ?? {};
         const ex = d.exception ?? {};
-        this.emit("pageerror", ex.description ?? d.text ?? "uncaught exception", { text: d.text });
+        const stack: string | undefined = ex.description ?? d.text;
+        const entry = this.emit("pageerror", stack ?? "uncaught exception", { text: d.text });
+        if (stack) void attachResolvedStack(entry, stack); // de-minify via source maps (best-effort)
         break;
       }
       case "Network.requestWillBeSent": {
