@@ -36,6 +36,7 @@
   "engines": {
     "node": ">=18"
   },
+  "trustedDependencies": ["electron"],
   "scripts": {
     "start": "bun run src/index.ts",
     "test": "bun test",

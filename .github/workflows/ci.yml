@@ -6,19 +6,48 @@ on:
   pull_request:
 
 jobs:
-  check:
+  # Fast lane: types, unit tests, and that both bundles build / parse.
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Typecheck (core + renderer)
         run: bun run typecheck
-      - name: Build cockpit bundle
-        run: bun run app:build
-      - name: Build stdio MCP (node-runnable)
-        run: bun run mcp:build
+      - name: Unit tests
+        run: bun test
+      - name: Build cockpit + stdio bundles
+        run: bun run app:build && bun run mcp:build
       - name: Sanity-check the published bundle parses under node
         run: node --check dist/index.cjs
+
+  # Behavioral: drive the real stdio (Puppeteer) server end-to-end against the fixture.
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      DEVLOOP_NO_SANDBOX: "true" # CI Chrome can't use the sandbox
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Install Chrome for Puppeteer
+        run: bunx puppeteer browsers install chrome
+      - name: Smoke test (stdio MCP + fixture)
+        run: bun run test-smoke.ts
+
+  # Behavioral: the offscreen Electron cockpit selftest (macOS — no xvfb needed).
+  selftest:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
+      - name: Cockpit selftest (offscreen Electron)
+        run: bun run app:selftest
