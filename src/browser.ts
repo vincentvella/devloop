@@ -284,6 +284,25 @@ export class PuppeteerBrowserController implements IBrowserController {
     return (await this.evaluate(SNAPSHOT_JS)) as PageSnapshot;
   }
 
+  async clearStorage(_opts: { allOrigins?: boolean } = {}): Promise<void> {
+    await this.withRecovery(async (page) => {
+      if (this.cdp) {
+        await this.cdp.send("Network.clearBrowserCookies");
+        try {
+          const u = new URL(page.url());
+          if (u.protocol.startsWith("http")) await this.cdp.send("Storage.clearDataForOrigin", { origin: u.origin, storageTypes: "all" });
+        } catch {
+          /* opaque origin (about:blank/data:) */
+        }
+      }
+      try {
+        await page.evaluate("try{localStorage.clear();sessionStorage.clear();}catch(e){}");
+      } catch {
+        /* no accessible storage */
+      }
+    }, "clearStorage");
+  }
+
   async waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }> {
     const timeout = opts.timeoutMs ?? 10_000;
     const start = Date.now();

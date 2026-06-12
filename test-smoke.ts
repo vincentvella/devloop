@@ -58,6 +58,10 @@ await callText("browser_scroll", { y: 40 });
 const ixv = JSON.parse(JSON.parse(await callText("browser_eval", { expression: "JSON.stringify({sel:document.getElementById('s').value,pressed:!!window.__p,hovered:!!window.__h})" })).value);
 console.log(`\ninteractions: select=${ixv.sel === "b"} press=${ixv.pressed} hover=${ixv.hovered}`);
 
+// --- clear storage (exercise the Puppeteer path) ---
+const cs = JSON.parse(await callText("browser_clear_storage"));
+console.log(`clear_storage: ok=${cs.ok}`);
+
 // --- action sequence: navigate -> type -> click ---
 const formPage = `data:text/html,<input id=name><button id=go onclick="console.log('typed:'+document.getElementById('name').value)">go</button>`;
 const seq = JSON.parse(

@@ -89,6 +89,7 @@ export interface DevloopApi {
   forward: () => Promise<void>;
   screenshot: () => Promise<void>;
   pick: () => Promise<string | null>;
+  clearStorage: (opts?: { allOrigins?: boolean }) => Promise<void>;
   exportHar: () => Promise<string | null>;
   navigateFor: (id: string, url: string) => Promise<{ url: string; status: number | null }>;
   backFor: (id: string) => Promise<void>;

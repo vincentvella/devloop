@@ -20,6 +20,8 @@ export interface IBrowserController {
   snapshot(): Promise<PageSnapshot>;
   /** Wait until a selector appears or text is present. */
   waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }>;
+  /** Clear cookies/localStorage/IndexedDB/cache for the current origin (or the whole session). */
+  clearStorage(opts?: { allOrigins?: boolean }): Promise<void>;
   waitForNetworkIdle(idleMs?: number, timeoutMs?: number): Promise<void>;
   currentUrl(): string;
   close(): Promise<void>;

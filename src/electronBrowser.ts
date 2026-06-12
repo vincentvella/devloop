@@ -302,6 +302,34 @@ export class ElectronBrowserController implements IBrowserController {
     return (await this.wc.executeJavaScript(PICKER_JS, true)) as string | null;
   }
 
+  async clearStorage(opts: { allOrigins?: boolean } = {}): Promise<void> {
+    const ses = this.wc.session;
+    const storages: Electron.ClearStorageDataOptions["storages"] = [
+      "cookies",
+      "localstorage",
+      "indexdb",
+      "cachestorage",
+      "serviceworkers",
+      "websql",
+      "shadercache",
+      "filesystem",
+    ];
+    let origin: string | undefined;
+    try {
+      const u = new URL(this.wc.getURL());
+      if (u.protocol.startsWith("http")) origin = u.origin;
+    } catch {
+      /* opaque origin */
+    }
+    await ses.clearStorageData(opts.allOrigins || !origin ? { storages } : { origin, storages });
+    await ses.clearCache();
+    try {
+      await this.wc.executeJavaScript("try{localStorage.clear();sessionStorage.clear();}catch(e){}", true);
+    } catch {
+      /* no accessible storage */
+    }
+  }
+
   async waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }> {
     const timeout = opts.timeoutMs ?? 10_000;
     const start = Date.now();

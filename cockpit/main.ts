@@ -210,6 +210,7 @@ function wireIpc(): void {
     if (shot.base64) buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, id);
   });
   ipcMain.handle("devloop:pick", () => manager.pick());
+  ipcMain.handle("devloop:clearStorage", (_e, opts) => manager.clearStorage(opts));
   ipcMain.handle("devloop:exportHar", async () => {
     const res = await handleTool("export_har", {});
     const har = (res.content[0] as { text?: string })?.text ?? "{}";
@@ -543,6 +544,16 @@ async function runSelfTest() {
   const harOk = !!nd?.requestHeaders && !!nd?.responseHeaders && har.log.entries.length >= 1 && harHas404;
   console.log(`SELFTEST HAR: entries=${har.log.entries.length} 404=${harHas404} reqH=${!!nd?.requestHeaders} resH=${!!nd?.responseHeaders} ok=${harOk}`);
 
+  // 9c) clear storage: set localStorage on a real http origin, clear, verify it's gone.
+  await manager.navigate(`http://localhost:${chosenPort}/devloop-clear-test`);
+  await new Promise((r) => setTimeout(r, 300));
+  await handleTool("browser_eval", { expression: "localStorage.setItem('__cs','yes')" });
+  const csBefore = JSON.parse((await handleTool("browser_eval", { expression: "localStorage.getItem('__cs')" })).content[0]!.text as string).value as string | null;
+  await handleTool("browser_clear_storage", {});
+  const csAfter = JSON.parse((await handleTool("browser_eval", { expression: "localStorage.getItem('__cs')" })).content[0]!.text as string).value as string | null;
+  const clearOk = csBefore === "yes" && csAfter === null;
+  console.log(`SELFTEST clear-storage: before=${csBefore} after=${csAfter} ok=${clearOk}`);
+
   // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
   manager.__crashActive();
   await new Promise((r) => setTimeout(r, 1500));
@@ -605,7 +616,8 @@ async function runSelfTest() {
     snapshotOk &&
     ixOk &&
     pickOk &&
-    harOk;
+    harOk &&
+    clearOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").

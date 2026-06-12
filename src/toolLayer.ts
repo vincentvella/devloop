@@ -94,6 +94,12 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: "object", properties: { key: { type: "string" }, selector: { type: "string" } }, required: ["key"] },
   },
   {
+    name: "browser_clear_storage",
+    description:
+      "Clear the active page's storage — cookies, localStorage, IndexedDB, cache, service workers — for the current origin (set allOrigins to wipe the whole browser session). Use to log out or test a fresh-user flow; reload afterward.",
+    inputSchema: { type: "object", properties: { allOrigins: { type: "boolean", description: "Wipe the entire session, not just the current origin." } } },
+  },
+  {
     name: "browser_wait_for_idle",
     description: "Wait until network activity settles (no requests for idleMs). Returns { ok }.",
     inputSchema: { type: "object", properties: { idleMs: { type: "number", description: "default 500" }, timeoutMs: { type: "number", description: "default 10000" } } },
@@ -454,6 +460,9 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
     case "browser_press":
       await browser.press(args.key as string, args.selector as string | undefined);
       return json({ pressed: args.key });
+    case "browser_clear_storage":
+      await browser.clearStorage({ allOrigins: args.allOrigins as boolean | undefined });
+      return json({ ok: true });
     case "browser_wait_for_idle":
       try {
         await browser.waitForNetworkIdle(args.idleMs as number | undefined, args.timeoutMs as number | undefined);

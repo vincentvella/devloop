@@ -487,6 +487,9 @@ export class BrowserManager implements IBrowserManager {
   pick() {
     return this.active().pick();
   }
+  clearStorage(opts?: { allOrigins?: boolean }) {
+    return this.active().clearStorage(opts);
+  }
   waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }) {
     return this.active().waitFor(opts);
   }

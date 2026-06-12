@@ -21,6 +21,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Crosshair,
+  Eraser,
 } from "lucide-react";
 import type { Entry, Pane, Project, Step } from "./global";
 
@@ -554,6 +555,9 @@ function App() {
         </IconBtn>
         <IconBtn tip="hard reload — ignore cache (⌘⇧R)" onClick={() => void dl().reload(true)}>
           <RefreshCw size={15} />
+        </IconBtn>
+        <IconBtn tip="clear site data (cookies/localStorage) + reload" onClick={() => void dl().clearStorage().then(() => dl().reload(false))}>
+          <Eraser size={15} />
         </IconBtn>
         <input
           ref={urlRef}
