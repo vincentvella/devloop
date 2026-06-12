@@ -47,6 +47,7 @@ import { TOOLS, handleTool, configureTools } from "../src/toolLayer.ts";
 import { listProjects, addProject, getProject, getSession, setSession, getPanes } from "../src/registry.ts";
 import { bundleToHtml } from "../src/bundle.ts";
 import { BrowserManager } from "./browserManager.ts";
+import { initAutoUpdate, type Updater } from "./updater.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
 const SELFTEST = process.env.DEVLOOP_SELFTEST === "1";
@@ -56,6 +57,7 @@ const buffer = new LogBuffer(Number(process.env.DEVLOOP_LOG_CAPACITY ?? 5000));
 
 let shellWin: BrowserWindow | undefined;
 let manager: BrowserManager;
+let updater: Updater | undefined;
 let httpServer: ReturnType<typeof createServer> | undefined;
 let cleanedUp = false;
 
@@ -190,6 +192,7 @@ function wireIpc(): void {
     return true;
   });
   ipcMain.handle("devloop:navigate", (_e, url: string) => manager.navigate(url));
+  ipcMain.handle("devloop:checkForUpdates", () => updater?.check(true));
 
   // Per-pane dev lifecycle (top-bar controls act on the active pane).
   ipcMain.handle("devloop:devStatus", () => manager.devStatus());
@@ -379,6 +382,9 @@ async function main() {
   log("app ready; creating windows");
   createWindows();
   wireIpc();
+  // Auto-update: check GitHub on launch (packaged + signed builds only) and prompt.
+  updater = initAutoUpdate({ win: shellWin, log, enabled: app.isPackaged && !SELFTEST });
+  void updater.check();
   await initExtensions(); // load extensions into the panes' session before panes navigate
   log("starting browser manager (first pane)");
 

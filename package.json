@@ -1,6 +1,6 @@
 {
   "name": "devloop-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Unified dev-loop: one MCP server exposing browser control + dev-server logs on a correlated timeline. Headless (stdio) or Electron cockpit (HTTP).",
   "type": "module",
   "main": "out/main.cjs",
@@ -72,6 +72,7 @@
     "electron": "^42.3.3",
     "electron-builder": "^26.15.2",
     "electron-chrome-web-store": "^0.13.0",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^1.17.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

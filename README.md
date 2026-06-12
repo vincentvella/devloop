@@ -44,7 +44,7 @@ claude mcp add devloop --scope user -- npx -y devloop-mcp
 
 (Published as [`devloop-mcp`](https://www.npmjs.com/package/devloop-mcp) on npm; Puppeteer fetches Chromium on first install.)
 
-**Cockpit (desktop app)** — grab the installer for your OS from [Releases](https://github.com/vincentvella/devloop/releases) (`.dmg` / `.exe` / `.AppImage`).
+**Cockpit (desktop app)** — grab the installer for your OS from [Releases](https://github.com/vincentvella/devloop/releases) (`.dmg` / `.exe` / `.AppImage`). macOS ships both Apple Silicon (`arm64`) and Intel (`x64`) builds. The app checks GitHub for a newer release on launch and prompts before downloading or installing — or trigger it yourself from **settings → updates → check for updates**.
 
 **From source** (dev) — requires [bun](https://bun.sh):
 

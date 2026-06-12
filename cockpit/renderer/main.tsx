@@ -591,6 +591,12 @@ function App() {
                 ))}
               </div>
             )}
+            <div className="row">
+              <span className="field-label">updates</span>
+              <button className="labeled" title="check GitHub for a newer Devloop release" onClick={() => void dl().checkForUpdates()}>
+                <RefreshCw size={13} /> check for updates
+              </button>
+            </div>
           </div>
         )}
       </div>

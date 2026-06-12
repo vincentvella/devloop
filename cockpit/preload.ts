@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("devloop", {
   devStatus: () => ipcRenderer.invoke("devloop:devStatus"),
   clear: () => ipcRenderer.invoke("devloop:clear"),
   navigate: (url: string) => ipcRenderer.invoke("devloop:navigate", url),
+  checkForUpdates: () => ipcRenderer.invoke("devloop:checkForUpdates"),
   devStart: (opts: { cmd?: string; cwd?: string }) => ipcRenderer.invoke("devloop:devStart", opts),
   devStop: () => ipcRenderer.invoke("devloop:devStop"),
   devRestart: () => ipcRenderer.invoke("devloop:devRestart"),

@@ -84,6 +84,7 @@ export interface DevloopApi {
   devStop: () => Promise<boolean>;
   devRestart: () => Promise<DevStatus>;
   setDevConfig: (opts: { cmd?: string; cwd?: string }) => Promise<void>;
+  checkForUpdates: () => Promise<void>;
   reload: (hard: boolean) => Promise<void>;
   back: () => Promise<void>;
   forward: () => Promise<void>;
