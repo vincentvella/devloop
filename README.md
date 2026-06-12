@@ -54,7 +54,7 @@ bun run app          # build + launch the Electron cockpit
 bun run start        # or run the stdio MCP directly
 ```
 
-## Tools (29)
+## Tools (31)
 
 **Dev server** — runtime, no per-project registration needed
 - `dev_start({ project?, cmd?, cwd? })` — start a dev server and tee its logs. Specify it three ways: a saved registry `project`; explicit `cmd`+`cwd`; or neither (`cwd` defaults to the server's dir, `cmd` auto-detected from `package.json` scripts: `dev`/`develop`/`web`/`start`/`serve`).
@@ -69,6 +69,8 @@ bun run start        # or run the stdio MCP directly
 - `browser_hover({ selector })` · `browser_scroll({ selector? | x?, y? })` · `browser_select({ selector, value })` · `browser_press({ key, selector? })` — keys like `Enter`/`Escape`/`Tab`/`ArrowDown`.
 - `browser_wait_for_idle({ idleMs?, timeoutMs? })` — wait until network settles.
 - `browser_clear_storage({ allOrigins? })` — clear cookies / localStorage / IndexedDB / cache / service workers for the current origin (or the whole session) — log out / test a fresh user.
+- `browser_emulate({ device? | width?, height?, mobile?, deviceScaleFactor?, userAgent?, reset? })` — emulate a device/viewport (`device`: `iphone`/`ipad`/`pixel`, or custom; `reset` → desktop).
+- `browser_throttle({ profile })` — network conditions: `slow-3g` / `fast-3g` / `offline` / `none`.
 - `browser_eval({ expression })` — runs in page context (not blocked by CSP)
 - `browser_snapshot()` — structured page snapshot: url, title, and interactive/landmark elements (role, accessible name, value/state, heading level) each with a CSS selector `ref` usable by `browser_click`/`browser_type`. **Prefer this over a screenshot** to find/target elements reliably.
 - `browser_wait_for({ selector?, text?, timeoutMs? })` — wait until a selector appears or text is present (after a navigation/async render). Returns `{ ok, waitedMs }`.

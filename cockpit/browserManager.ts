@@ -490,6 +490,12 @@ export class BrowserManager implements IBrowserManager {
   clearStorage(opts?: { allOrigins?: boolean }) {
     return this.active().clearStorage(opts);
   }
+  emulate(opts: { device?: string; width?: number; height?: number; deviceScaleFactor?: number; mobile?: boolean; userAgent?: string; reset?: boolean }) {
+    return this.active().emulate(opts);
+  }
+  throttle(profile: string) {
+    return this.active().throttle(profile);
+  }
   waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }) {
     return this.active().waitFor(opts);
   }

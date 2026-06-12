@@ -94,6 +94,28 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: "object", properties: { key: { type: "string" }, selector: { type: "string" } }, required: ["key"] },
   },
   {
+    name: "browser_emulate",
+    description:
+      "Emulate a device/viewport. Pass a `device` preset (iphone|ipad|pixel), or custom `width`+`height` (with optional `mobile`, `deviceScaleFactor`, `userAgent`). `reset: true` restores a desktop viewport.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        device: { type: "string", enum: ["iphone", "ipad", "pixel"] },
+        width: { type: "number" },
+        height: { type: "number" },
+        mobile: { type: "boolean" },
+        deviceScaleFactor: { type: "number" },
+        userAgent: { type: "string" },
+        reset: { type: "boolean" },
+      },
+    },
+  },
+  {
+    name: "browser_throttle",
+    description: "Throttle network conditions: slow-3g | fast-3g | offline | none (reset).",
+    inputSchema: { type: "object", properties: { profile: { type: "string", enum: ["slow-3g", "fast-3g", "offline", "none"] } }, required: ["profile"] },
+  },
+  {
     name: "browser_clear_storage",
     description:
       "Clear the active page's storage — cookies, localStorage, IndexedDB, cache, service workers — for the current origin (set allOrigins to wipe the whole browser session). Use to log out or test a fresh-user flow; reload afterward.",
@@ -462,6 +484,20 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       return json({ pressed: args.key });
     case "browser_clear_storage":
       await browser.clearStorage({ allOrigins: args.allOrigins as boolean | undefined });
+      return json({ ok: true });
+    case "browser_emulate":
+      await browser.emulate({
+        device: args.device as string | undefined,
+        width: args.width as number | undefined,
+        height: args.height as number | undefined,
+        deviceScaleFactor: args.deviceScaleFactor as number | undefined,
+        mobile: args.mobile as boolean | undefined,
+        userAgent: args.userAgent as string | undefined,
+        reset: args.reset as boolean | undefined,
+      });
+      return json({ ok: true });
+    case "browser_throttle":
+      await browser.throttle(args.profile as string);
       return json({ ok: true });
     case "browser_wait_for_idle":
       try {

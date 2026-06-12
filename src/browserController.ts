@@ -22,6 +22,10 @@ export interface IBrowserController {
   waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }>;
   /** Clear cookies/localStorage/IndexedDB/cache for the current origin (or the whole session). */
   clearStorage(opts?: { allOrigins?: boolean }): Promise<void>;
+  /** Emulate a device/viewport (preset or custom; reset restores desktop). */
+  emulate(opts: { device?: string; width?: number; height?: number; deviceScaleFactor?: number; mobile?: boolean; userAgent?: string; reset?: boolean }): Promise<void>;
+  /** Throttle network conditions by named profile (slow-3g / fast-3g / offline / none). */
+  throttle(profile: string): Promise<void>;
   waitForNetworkIdle(idleMs?: number, timeoutMs?: number): Promise<void>;
   currentUrl(): string;
   close(): Promise<void>;

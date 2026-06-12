@@ -15,6 +15,7 @@ import type { IBrowserController } from "./browserController.ts";
 import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
 import { scrollJs, selectJs, focusJs, centerJs, hoverJs, PICKER_JS } from "./pageActions.ts";
 import type { NetDetail } from "./har.ts";
+import { DEVICE_PRESETS, THROTTLE } from "./emulation.ts";
 
 export interface ElectronBrowserOptions {
   networkErrorThreshold: number;
@@ -300,6 +301,31 @@ export class ElectronBrowserController implements IBrowserController {
   /** Interactive picker (cockpit only): resolves a selector when the user clicks an element, or null on Escape. */
   async pick(): Promise<string | null> {
     return (await this.wc.executeJavaScript(PICKER_JS, true)) as string | null;
+  }
+
+  async emulate(opts: { device?: string; width?: number; height?: number; deviceScaleFactor?: number; mobile?: boolean; userAgent?: string; reset?: boolean }): Promise<void> {
+    const dbg = this.wc.debugger;
+    if (opts.reset) {
+      await dbg.sendCommand("Emulation.clearDeviceMetricsOverride");
+      await dbg.sendCommand("Emulation.setTouchEmulationEnabled", { enabled: false });
+      return;
+    }
+    const d = opts.device ? DEVICE_PRESETS[opts.device] : undefined;
+    if (opts.device && !d) throw new Error(`unknown device preset "${opts.device}" (have: ${Object.keys(DEVICE_PRESETS).join(", ")})`);
+    const width = d?.width ?? opts.width;
+    const height = d?.height ?? opts.height;
+    if (!width || !height) throw new Error("emulate needs a device preset or width+height");
+    const mobile = d?.mobile ?? opts.mobile ?? false;
+    await dbg.sendCommand("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: d?.deviceScaleFactor ?? opts.deviceScaleFactor ?? 1, mobile });
+    await dbg.sendCommand("Emulation.setTouchEmulationEnabled", { enabled: mobile });
+    const ua = d?.userAgent ?? opts.userAgent;
+    if (ua) await dbg.sendCommand("Emulation.setUserAgentOverride", { userAgent: ua });
+  }
+
+  async throttle(profile: string): Promise<void> {
+    const c = THROTTLE[profile];
+    if (!c) throw new Error(`unknown throttle profile "${profile}" (have: ${Object.keys(THROTTLE).join(", ")})`);
+    await this.wc.debugger.sendCommand("Network.emulateNetworkConditions", c);
   }
 
   async clearStorage(opts: { allOrigins?: boolean } = {}): Promise<void> {

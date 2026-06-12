@@ -83,6 +83,16 @@ check("hover fires mouseover", ixv.hovered === true);
 console.log("\n# clear storage");
 check("clear_storage ok", (await J("browser_clear_storage")).ok === true);
 
+// --- device emulation ---
+console.log("\n# emulation");
+await callText("browser_navigate", { url: 'data:text/html,<meta name="viewport" content="width=device-width"><h1>vp</h1>' });
+await callText("browser_emulate", { device: "iphone" });
+const vp = JSON.parse((await J("browser_eval", { expression: "JSON.stringify({w:innerWidth})" })).value);
+check("emulate iphone → 390px viewport", vp.w === 390);
+await callText("browser_emulate", { reset: true });
+const vp2 = JSON.parse((await J("browser_eval", { expression: "JSON.stringify({w:innerWidth})" })).value);
+check("emulate reset → wide viewport", vp2.w >= 1000);
+
 // --- repro sequence + abort ---
 console.log("\n# repro sequence + abort");
 const formPage = `data:text/html,<input id=name><button id=go onclick="console.log('typed:'+document.getElementById('name').value)">go</button>`;
@@ -112,6 +122,14 @@ if (fxUrl) {
   await sleep(600);
   const fnet = await J("get_logs", { stream: "network", limit: 30 });
   check("fixture /api/boom captured as 500 with body", fnet.entries.some((e: any) => (e.detail?.url ?? "").includes("/api/boom") && e.detail?.status === 500));
+
+  // throttle: offline blocks a (local) fetch; none restores it
+  await callText("browser_throttle", { profile: "offline" });
+  const offl = await J("browser_eval", { expression: "fetch('/api/slow?ms=0').then(()=>'ok').catch(()=>'fail')" });
+  check("throttle offline blocks fetch", offl.value === "fail");
+  await callText("browser_throttle", { profile: "none" });
+  const onl = await J("browser_eval", { expression: "fetch('/api/slow?ms=0').then(()=>'ok').catch(()=>'fail')" });
+  check("throttle none restores fetch", onl.value === "ok");
 }
 await callText("dev_stop");
 

@@ -20,6 +20,7 @@ import type { IBrowserController } from "./browserController.ts";
 import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
 import { scrollJs, selectJs } from "./pageActions.ts";
 import type { NetDetail } from "./har.ts";
+import { DEVICE_PRESETS, THROTTLE } from "./emulation.ts";
 
 /** Cap a captured body/string to keep the buffer light. */
 const cap = (s?: string, max = 2048): string | undefined => (s == null ? undefined : s.length > max ? s.slice(0, max) + `… (+${s.length - max})` : s);
@@ -284,6 +285,33 @@ export class PuppeteerBrowserController implements IBrowserController {
 
   async snapshot(): Promise<PageSnapshot> {
     return (await this.evaluate(SNAPSHOT_JS)) as PageSnapshot;
+  }
+
+  async emulate(opts: { device?: string; width?: number; height?: number; deviceScaleFactor?: number; mobile?: boolean; userAgent?: string; reset?: boolean }): Promise<void> {
+    await this.withRecovery(async (page) => {
+      if (opts.reset) {
+        await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+        return;
+      }
+      const d = opts.device ? DEVICE_PRESETS[opts.device] : undefined;
+      if (opts.device && !d) throw new Error(`unknown device preset "${opts.device}" (have: ${Object.keys(DEVICE_PRESETS).join(", ")})`);
+      const width = d?.width ?? opts.width;
+      const height = d?.height ?? opts.height;
+      if (!width || !height) throw new Error("emulate needs a device preset or width+height");
+      const mobile = d?.mobile ?? opts.mobile ?? false;
+      await page.setViewport({ width, height, deviceScaleFactor: d?.deviceScaleFactor ?? opts.deviceScaleFactor ?? 1, isMobile: mobile, hasTouch: mobile });
+      const ua = d?.userAgent ?? opts.userAgent;
+      if (ua) await page.setUserAgent(ua);
+    }, "emulate");
+  }
+
+  async throttle(profile: string): Promise<void> {
+    const c = THROTTLE[profile];
+    if (!c) throw new Error(`unknown throttle profile "${profile}" (have: ${Object.keys(THROTTLE).join(", ")})`);
+    await this.withRecovery(async () => {
+      if (!this.cdp) throw new Error("browser not started");
+      await this.cdp.send("Network.emulateNetworkConditions", c);
+    }, "throttle");
   }
 
   async clearStorage(_opts: { allOrigins?: boolean } = {}): Promise<void> {

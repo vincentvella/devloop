@@ -554,6 +554,20 @@ async function runSelfTest() {
   const clearOk = csBefore === "yes" && csAfter === null;
   console.log(`SELFTEST clear-storage: before=${csBefore} after=${csAfter} ok=${clearOk}`);
 
+  // 9d) device emulation + network throttling.
+  await manager.navigate('data:text/html,<meta name="viewport" content="width=device-width"><h1>vp</h1>');
+  await handleTool("browser_emulate", { device: "iphone" });
+  const ew = JSON.parse((await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string).value as string;
+  await handleTool("browser_emulate", { reset: true });
+  const ew2 = JSON.parse((await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string).value as string;
+  const emuOk = ew === "390" && Number(ew2) > 390;
+  await handleTool("browser_throttle", { profile: "offline" });
+  const thOff = JSON.parse((await handleTool("browser_eval", { expression: `fetch('http://localhost:${chosenPort}/x').then(()=>'ok').catch(()=>'fail')` })).content[0]!.text as string).value as string;
+  await handleTool("browser_throttle", { profile: "none" });
+  const thOn = JSON.parse((await handleTool("browser_eval", { expression: `fetch('http://localhost:${chosenPort}/x').then(()=>'ok').catch(()=>'fail')` })).content[0]!.text as string).value as string;
+  const emulateOk = emuOk && thOff === "fail" && thOn === "ok";
+  console.log(`SELFTEST emulate/throttle: vp=${ew}→${ew2} offline=${thOff} none=${thOn} ok=${emulateOk}`);
+
   // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
   manager.__crashActive();
   await new Promise((r) => setTimeout(r, 1500));
@@ -618,6 +632,7 @@ async function runSelfTest() {
     ["element picker", pickOk],
     ["HAR export", harOk],
     ["clear storage", clearOk],
+    ["device emulation + throttle", emulateOk],
   ];
   for (const [name, c] of checks) console.log(`  ${c ? "✓" : "✗"} ${name}`);
   const failed = checks.filter(([, c]) => !c).map(([n]) => n);
