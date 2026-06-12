@@ -543,6 +543,98 @@
     border-radius: 6px;
     padding: 3px 7px;
     font-size: 11px;
-    z-index: 20;
+    z-index: 50; /* above modals (31) so tooltips inside a modal aren't clipped behind it */
+  }
+
+  /* Settings modals (wrench = active pane, gear = global) */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 30;
+  }
+  .modal-content {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(440px, 92vw);
+    max-height: 86vh;
+    overflow: auto;
+    background: var(--color-bg2);
+    border: 1px solid var(--color-edge);
+    border-radius: 12px;
+    padding: 18px 20px 20px;
+    z-index: 31;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  }
+  .modal-content .settings {
+    gap: 10px;
+  }
+  /* full-width primary action (e.g. browse the Web Store) */
+  .btn-block {
+    width: 100%;
+    justify-content: center;
+    padding: 7px 8px;
+  }
+  .btn-primary {
+    background: color-mix(in srgb, var(--color-accent) 16%, var(--color-raise));
+    border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-edge));
+    color: #f0e6ff;
+  }
+  .btn-primary:hover {
+    background: color-mix(in srgb, var(--color-accent) 26%, var(--color-raise));
+  }
+  /* installed-extension tags */
+  .ext-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ext-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+    padding: 3px 7px 3px 10px;
+    border: 1px solid var(--color-edge);
+    border-radius: 7px;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-size: 12px;
+  }
+  .ext-chip .x {
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-dim);
+    cursor: pointer;
+  }
+  .ext-chip .x:hover {
+    color: var(--color-bad);
+  }
+  .ext-empty {
+    color: var(--color-dim);
+    font-size: 12px;
+    font-style: italic;
+  }
+  .modal-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+  .modal-section {
+    color: var(--color-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 4px;
+  }
+  .modal-section:not(:first-child) {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-edge);
   }
 }

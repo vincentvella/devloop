@@ -85,6 +85,7 @@ export interface DevloopApi {
   devRestart: () => Promise<DevStatus>;
   setDevConfig: (opts: { cmd?: string; cwd?: string }) => Promise<void>;
   checkForUpdates: () => Promise<void>;
+  openExtensions: () => Promise<void>;
   reload: (hard: boolean) => Promise<void>;
   back: () => Promise<void>;
   forward: () => Promise<void>;
@@ -119,6 +120,7 @@ export interface DevloopApi {
   session: () => Promise<Session>;
   sessionSave: (s: Session) => Promise<void>;
   onPanesChanged: (cb: () => void) => () => void;
+  onExtChanged: (cb: () => void) => () => void;
   onPush: (cb: (e: Entry) => void) => () => void;
 }
 

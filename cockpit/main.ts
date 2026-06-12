@@ -23,7 +23,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
-import { installExtension, uninstallExtension, loadAllExtensions } from "electron-chrome-web-store";
+import { installExtension, uninstallExtension, loadAllExtensions, installChromeWebStore } from "electron-chrome-web-store";
 import { extensionIdFromInput } from "../src/extensions.ts";
 import { getUnpackedExtensions, setUnpackedExtensions } from "../src/registry.ts";
 import { PANE_PARTITION } from "./browserManager.ts";
@@ -193,6 +193,7 @@ function wireIpc(): void {
   });
   ipcMain.handle("devloop:navigate", (_e, url: string) => manager.navigate(url));
   ipcMain.handle("devloop:checkForUpdates", () => updater?.check(true));
+  ipcMain.handle("devloop:openExtensions", () => openExtensionsWindow());
 
   // Per-pane dev lifecycle (top-bar controls act on the active pane).
   ipcMain.handle("devloop:devStatus", () => manager.devStatus());
@@ -341,12 +342,54 @@ function log(msg: string): void {
 
 // --- chrome extensions (loaded into the panes' session, not the shell's) ---
 const EXT_DIR = join(process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop"), "extensions");
+const WEB_STORE_URL = "https://chromewebstore.google.com/";
 const unpackedById = new Map<string, string>(); // loaded unpacked extension id → source dir
 const extSession = () => session.fromPartition(PANE_PARTITION);
+let extWin: BrowserWindow | undefined;
+
+/**
+ * Browse the real Chrome Web Store in its own window (not a project pane — panes
+ * carry the timeline). It uses the panes' session, so the preload + "Add to
+ * Chrome" interception set up by installChromeWebStore apply and installs land
+ * in the same session our panes use.
+ */
+function openExtensionsWindow(): void {
+  if (extWin && !extWin.isDestroyed()) {
+    extWin.focus();
+    return;
+  }
+  extWin = new BrowserWindow({
+    // The Web Store layout has a ~1248px min-width before it reflows; below that
+    // it scrolls horizontally (real Chrome does too). useContentSize makes these
+    // the web viewport dimensions (not the outer frame), so the page actually fits.
+    width: 1280,
+    height: 860,
+    minWidth: 1024,
+    useContentSize: true,
+    center: true,
+    title: "Devloop — Extensions",
+    icon: [join(BASE, "../assets/icon.png"), join(BASE, "assets/icon.png")].find(existsSync),
+    webPreferences: { partition: PANE_PARTITION, contextIsolation: true, sandbox: false },
+  });
+  extWin.on("closed", () => (extWin = undefined));
+  void extWin.loadURL(WEB_STORE_URL);
+}
 const extList = () => extSession().extensions.getAllExtensions().map((e) => ({ id: e.id, name: e.name, version: e.version }));
 
 async function initExtensions(): Promise<void> {
   const ses = extSession();
+  // Enable the real Chrome Web Store inside our panes' session: this intercepts
+  // the store's "Add to Chrome" button and installs into EXT_DIR. It registers
+  // its own preload (chrome-web-store.preload.js, copied beside main.cjs by the
+  // build) into this session. loadExtensions:false — we load persisted ones below.
+  try {
+    await installChromeWebStore({ session: ses, extensionsPath: EXT_DIR, loadExtensions: false, allowUnpackedExtensions: true });
+  } catch (e) {
+    log(`extensions: web store setup failed: ${e}`);
+  }
+  // Surface store installs (Add to Chrome) to the renderer so the list stays live.
+  ses.extensions.on("extension-loaded", () => shellWin?.webContents.send("devloop:extChanged"));
+  ses.extensions.on("extension-unloaded", () => shellWin?.webContents.send("devloop:extChanged"));
   try {
     await loadAllExtensions(ses, EXT_DIR, { allowUnpacked: true }); // store extensions persisted under EXT_DIR
   } catch (e) {

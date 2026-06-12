@@ -25,6 +25,14 @@ for (const r of results) {
 
 cpSync("cockpit/renderer/index.html", "out/renderer/index.html");
 
+// electron-chrome-web-store registers its preload by resolving it next to the
+// running main file (__dirname). main.cjs lives in out/, so the preload must too
+// — otherwise the store's "Add to Chrome" button does nothing.
+cpSync(
+  "node_modules/electron-chrome-web-store/dist/chrome-web-store.preload.js",
+  "out/chrome-web-store.preload.js",
+);
+
 // Compile Tailwind → out/renderer/styles.css
 const tw = Bun.spawnSync([
   "bunx",

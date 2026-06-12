@@ -10,6 +10,8 @@ import {
   RefreshCw,
   Camera,
   Settings,
+  Wrench,
+  Puzzle,
   ExternalLink,
   PanelRightClose,
   PanelRightOpen,
@@ -169,7 +171,8 @@ function App() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [filter, setFilter] = useState("");
   const [chips, setChips] = useState<Set<string>>(new Set());
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
+  const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(460);
   const [dragging, setDragging] = useState(false);
@@ -233,9 +236,11 @@ function App() {
     })();
     const offPush = dl().onPush((e) => setEntries((cur) => [...cur.slice(-1999), e]));
     const offPanes = dl().onPanesChanged(() => void refreshPanes());
+    const offExt = dl().onExtChanged(() => void dl().extList().then(setExts));
     return () => {
       offPush();
       offPanes();
+      offExt();
     };
   }, [refreshPanes, refreshProjects]);
 
@@ -255,7 +260,7 @@ function App() {
       ro.disconnect();
       window.removeEventListener("resize", report);
     };
-  }, [sidebarHidden, settingsOpen, sidebarWidth, panes.length, fillTimeline]);
+  }, [sidebarHidden, sidebarWidth, panes.length, fillTimeline]);
 
   // smart auto-scroll: only stick to bottom if already near it.
   useEffect(() => {
@@ -263,9 +268,11 @@ function App() {
     if (el && atBottom) el.scrollTop = el.scrollHeight;
   }, [entries, atBottom]);
 
+  // The browser pane is a native view layered above the DOM, so any DOM overlay
+  // (lightbox or a settings modal) must detach it first or it renders behind.
   useEffect(() => {
-    void dl().overlay(lightbox !== null);
-  }, [lightbox]);
+    void dl().overlay(lightbox !== null || wrenchOpen || settingsOpen);
+  }, [lightbox, wrenchOpen, settingsOpen]);
 
   const saveSession = useCallback(() => {
     void dl().sessionSave({ cmd: devCmd.trim(), cwd: devCwd.trim(), steps, project: selProject });
@@ -304,7 +311,7 @@ function App() {
   const onPlay = useCallback(async () => {
     if (devRunning) await dl().devStop();
     else if (!dev?.cmd && !dev?.cwd) {
-      setSettingsOpen(true);
+      setWrenchOpen(true); // no dev config yet → open the pane's wrench to set it
       return;
     } else {
       try {
@@ -494,111 +501,17 @@ function App() {
 
           <div className="spacer" />
 
-          <IconBtn tip="settings (⌘,)" onClick={() => setSettingsOpen((v) => !v)}>
+          <IconBtn tip="extensions — browse the Chrome Web Store" onClick={() => void dl().openExtensions()}>
+            <Puzzle size={15} />
+          </IconBtn>
+          <IconBtn tip="pane settings — project & dev server" onClick={() => setWrenchOpen(true)}>
+            <Wrench size={15} />
+          </IconBtn>
+          <IconBtn tip="settings (⌘,) — extensions & updates" onClick={() => setSettingsOpen(true)}>
             <Settings size={15} />
           </IconBtn>
         </div>
 
-        {settingsOpen && (
-          <div className="settings">
-            <div className="row">
-              <span className="field-label">project</span>
-              <select value={selProject} onChange={(e) => void openProject(e.target.value)}>
-                <option value="">— open a saved project —</option>
-                {projects.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <button className="labeled" title="save the active pane as a project (rename on its tab)" onClick={() => void saveProject()}>
-                <Save size={13} /> save
-              </button>
-            </div>
-            <div className="row">
-              <span className="field-label">dev</span>
-              <input
-                placeholder="cmd (blank = auto-detect)"
-                value={devCmd}
-                onChange={(e) => setDevCmd(e.target.value)}
-                onBlur={() => void applyDevConfig(devCmd, devCwd)}
-              />
-              <button
-                title="browse for project folder"
-                onClick={async () => {
-                  const dir = await dl().pickFolder();
-                  if (!dir) return;
-                  setDevCwd(dir);
-                  await applyDevConfig(devCmd, dir);
-                }}
-              >
-                <FolderOpen size={14} />
-              </button>
-              <input
-                placeholder="project folder (cwd)"
-                value={devCwd}
-                onChange={(e) => setDevCwd(e.target.value)}
-                onBlur={() => void applyDevConfig(devCmd, devCwd)}
-              />
-            </div>
-            <div className="row">
-              <span className="field-label">ext</span>
-              <input
-                placeholder="Chrome Web Store id or URL"
-                value={extInput}
-                onChange={(e) => setExtInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter" || !extInput.trim()) return;
-                  void dl()
-                    .extInstall(extInput.trim())
-                    .then((list) => {
-                      setExts(list);
-                      setExtInput("");
-                    })
-                    .catch((err) => setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`));
-                }}
-              />
-              <button
-                className="labeled"
-                title="install from the Chrome Web Store"
-                onClick={() => {
-                  if (!extInput.trim()) return;
-                  void dl()
-                    .extInstall(extInput.trim())
-                    .then((list) => {
-                      setExts(list);
-                      setExtInput("");
-                    })
-                    .catch((err) => setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`));
-                }}
-              >
-                <Plus size={13} /> install
-              </button>
-              <button title="load an unpacked extension folder" onClick={() => void dl().extLoadUnpacked().then((l) => l && setExts(l))}>
-                <FolderOpen size={14} />
-              </button>
-            </div>
-            {exts.length > 0 && (
-              <div className="row" style={{ flexWrap: "wrap" }}>
-                <span className="field-label" />
-                {exts.map((x) => (
-                  <span key={x.id} className="fchip" title={`${x.id} · v${x.version}`}>
-                    {x.name}{" "}
-                    <span className="x" style={{ cursor: "pointer" }} onClick={() => void dl().extRemove(x.id).then(setExts)}>
-                      <X size={12} />
-                    </span>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="row">
-              <span className="field-label">updates</span>
-              <button className="labeled" title="check GitHub for a newer Devloop release" onClick={() => void dl().checkForUpdates()}>
-                <RefreshCw size={13} /> check for updates
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {!active?.popped && (
@@ -791,6 +704,139 @@ function App() {
           <Dialog.Content className="lightbox-content" onClick={() => setLightbox(null)}>
             <Dialog.Title className="sr-only">Screenshot</Dialog.Title>
             {lightbox && <img src={lightbox} />}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Wrench — settings for the active pane (project + dev server). */}
+      <Dialog.Root open={wrenchOpen} onOpenChange={setWrenchOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="modal-overlay" />
+          <Dialog.Content className="modal-content" aria-describedby={undefined}>
+            <Dialog.Title className="modal-title">
+              <Wrench size={14} /> {active?.label ?? "pane"} — project & dev
+            </Dialog.Title>
+            <div className="settings">
+              <div className="row">
+                <span className="field-label">project</span>
+                <select value={selProject} onChange={(e) => void openProject(e.target.value)}>
+                  <option value="">— open a saved project —</option>
+                  {projects.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="labeled" title="save the active pane as a project (rename on its tab)" onClick={() => void saveProject()}>
+                  <Save size={13} /> save
+                </button>
+              </div>
+              <div className="row">
+                <span className="field-label">dev</span>
+                <input
+                  placeholder="cmd (blank = auto-detect)"
+                  value={devCmd}
+                  onChange={(e) => setDevCmd(e.target.value)}
+                  onBlur={() => void applyDevConfig(devCmd, devCwd)}
+                />
+                <button
+                  title="browse for project folder"
+                  onClick={async () => {
+                    const dir = await dl().pickFolder();
+                    if (!dir) return;
+                    setDevCwd(dir);
+                    await applyDevConfig(devCmd, dir);
+                  }}
+                >
+                  <FolderOpen size={14} />
+                </button>
+                <input
+                  placeholder="project folder (cwd)"
+                  value={devCwd}
+                  onChange={(e) => setDevCwd(e.target.value)}
+                  onBlur={() => void applyDevConfig(devCmd, devCwd)}
+                />
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Gear — global settings (extensions + updates), shared across panes. */}
+      <Dialog.Root open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="modal-overlay" />
+          <Dialog.Content className="modal-content" aria-describedby={undefined}>
+            <Dialog.Title className="modal-title">
+              <Settings size={14} /> Settings
+            </Dialog.Title>
+            <div className="settings">
+              <div className="modal-section">extensions</div>
+              <button
+                className="labeled btn-block btn-primary"
+                title="open the Chrome Web Store in its own window — click ‘Add to Chrome’ to install"
+                onClick={() => {
+                  setSettingsOpen(false);
+                  void dl().openExtensions();
+                }}
+              >
+                <Puzzle size={14} /> browse the Chrome Web Store
+              </button>
+              <div className="row">
+                <input
+                  placeholder="…or paste a Web Store id / URL"
+                  value={extInput}
+                  onChange={(e) => setExtInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || !extInput.trim()) return;
+                    void dl()
+                      .extInstall(extInput.trim())
+                      .then((list) => {
+                        setExts(list);
+                        setExtInput("");
+                      })
+                      .catch((err) => setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`));
+                  }}
+                />
+                <button
+                  className="labeled"
+                  title="install from the pasted id / URL"
+                  onClick={() => {
+                    if (!extInput.trim()) return;
+                    void dl()
+                      .extInstall(extInput.trim())
+                      .then((list) => {
+                        setExts(list);
+                        setExtInput("");
+                      })
+                      .catch((err) => setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`));
+                  }}
+                >
+                  <Plus size={13} /> install
+                </button>
+                <IconBtn tip="Load an unpacked extension — pick its folder" onClick={() => void dl().extLoadUnpacked().then((l) => l && setExts(l))}>
+                  <FolderOpen size={14} />
+                </IconBtn>
+              </div>
+              {exts.length > 0 ? (
+                <div className="ext-list">
+                  {exts.map((x) => (
+                    <span key={x.id} className="ext-chip" title={`${x.id} · v${x.version}`}>
+                      {x.name}
+                      <span className="x" title="remove" onClick={() => void dl().extRemove(x.id).then(setExts)}>
+                        <X size={13} />
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="ext-empty">No extensions installed yet.</div>
+              )}
+              <div className="modal-section">updates</div>
+              <button className="labeled" title="check GitHub for a newer Devloop release" onClick={() => void dl().checkForUpdates()}>
+                <RefreshCw size={13} /> check for updates
+              </button>
+            </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

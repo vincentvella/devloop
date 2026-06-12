@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("devloop", {
   clear: () => ipcRenderer.invoke("devloop:clear"),
   navigate: (url: string) => ipcRenderer.invoke("devloop:navigate", url),
   checkForUpdates: () => ipcRenderer.invoke("devloop:checkForUpdates"),
+  openExtensions: () => ipcRenderer.invoke("devloop:openExtensions"),
   devStart: (opts: { cmd?: string; cwd?: string }) => ipcRenderer.invoke("devloop:devStart", opts),
   devStop: () => ipcRenderer.invoke("devloop:devStop"),
   devRestart: () => ipcRenderer.invoke("devloop:devRestart"),
@@ -55,6 +56,11 @@ contextBridge.exposeInMainWorld("devloop", {
     const handler = () => cb();
     ipcRenderer.on("devloop:panesChanged", handler);
     return () => ipcRenderer.removeListener("devloop:panesChanged", handler);
+  },
+  onExtChanged: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on("devloop:extChanged", handler);
+    return () => ipcRenderer.removeListener("devloop:extChanged", handler);
   },
   onPush: (cb: (entry: unknown) => void) => {
     const handler = (_e: unknown, entry: unknown) => cb(entry);
