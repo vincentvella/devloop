@@ -44,3 +44,9 @@ test("panes round-trip with a safe default", () => {
   expect(reg.getPanes().panes.length).toBe(1);
   expect(reg.getPanes().activeIndex).toBe(0);
 });
+
+test("unpacked extensions round-trip + dedupe", () => {
+  expect(reg.getUnpackedExtensions()).toEqual([]);
+  reg.setUnpackedExtensions(["/a", "/b", "/a"]);
+  expect(reg.getUnpackedExtensions()).toEqual(["/a", "/b"]);
+});

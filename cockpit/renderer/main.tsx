@@ -187,6 +187,8 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [panelTab, setPanelTab] = useState<"logs" | "repro">("logs");
   const [picking, setPicking] = useState(false);
+  const [exts, setExts] = useState<{ id: string; name: string; version: string }[]>([]);
+  const [extInput, setExtInput] = useState("");
 
   const paneAreaRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -226,6 +228,7 @@ function App() {
       if (s.project) setSelProject(s.project);
       await refreshPanes();
       await refreshProjects();
+      setExts(await dl().extList());
       setLoaded(true);
     })();
     const offPush = dl().onPush((e) => setEntries((cur) => [...cur.slice(-1999), e]));
@@ -538,6 +541,56 @@ function App() {
                 onBlur={() => void applyDevConfig(devCmd, devCwd)}
               />
             </div>
+            <div className="row">
+              <span className="field-label">ext</span>
+              <input
+                placeholder="Chrome Web Store id or URL"
+                value={extInput}
+                onChange={(e) => setExtInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || !extInput.trim()) return;
+                  void dl()
+                    .extInstall(extInput.trim())
+                    .then((list) => {
+                      setExts(list);
+                      setExtInput("");
+                    })
+                    .catch((err) => setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`));
+                }}
+              />
+              <button
+                className="labeled"
+                title="install from the Chrome Web Store"
+                onClick={() => {
+                  if (!extInput.trim()) return;
+                  void dl()
+                    .extInstall(extInput.trim())
+                    .then((list) => {
+                      setExts(list);
+                      setExtInput("");
+                    })
+                    .catch((err) => setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`));
+                }}
+              >
+                <Plus size={13} /> install
+              </button>
+              <button title="load an unpacked extension folder" onClick={() => void dl().extLoadUnpacked().then((l) => l && setExts(l))}>
+                <FolderOpen size={14} />
+              </button>
+            </div>
+            {exts.length > 0 && (
+              <div className="row" style={{ flexWrap: "wrap" }}>
+                <span className="field-label" />
+                {exts.map((x) => (
+                  <span key={x.id} className="fchip" title={`${x.id} · v${x.version}`}>
+                    {x.name}{" "}
+                    <span className="x" style={{ cursor: "pointer" }} onClick={() => void dl().extRemove(x.id).then(setExts)}>
+                      <X size={12} />
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

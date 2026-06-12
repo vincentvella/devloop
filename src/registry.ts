@@ -109,3 +109,20 @@ export function setPanes(state: PanesState): void {
   mkdirSync(DIR, { recursive: true });
   writeFileSync(PANES_FILE, JSON.stringify(state, null, 2));
 }
+
+const EXT_FILE = join(DIR, "unpacked-extensions.json");
+
+/** Paths of unpacked extensions to reload on launch (store extensions persist themselves). */
+export function getUnpackedExtensions(): string[] {
+  try {
+    const parsed = JSON.parse(readFileSync(EXT_FILE, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setUnpackedExtensions(paths: string[]): void {
+  mkdirSync(DIR, { recursive: true });
+  writeFileSync(EXT_FILE, JSON.stringify([...new Set(paths)], null, 2));
+}

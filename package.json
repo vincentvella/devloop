@@ -36,7 +36,9 @@
   "engines": {
     "node": ">=18"
   },
-  "trustedDependencies": ["electron"],
+  "trustedDependencies": [
+    "electron"
+  ],
   "scripts": {
     "start": "bun run src/index.ts",
     "test": "bun test",
@@ -71,6 +73,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwindcss": "^4.3.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "electron-chrome-web-store": "^0.13.0"
   }
 }

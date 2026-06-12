@@ -14,6 +14,10 @@ import type { LogBuffer } from "../src/logBuffer.ts";
 import type { IBrowserManager, PaneInfo } from "../src/browserController.ts";
 import { getPanes, setPanes } from "../src/registry.ts";
 import { DevServer, detectDevCommand, type DevStatus } from "../src/devServer.ts";
+
+/** Persistent session shared by all panes — separate from the shell's default session so
+ *  loaded extensions (and their content scripts) never inject into the cockpit UI itself. */
+export const PANE_PARTITION = "persist:devloop-panes";
 import { ElectronBrowserController, type ElectronBrowserOptions } from "../src/electronBrowser.ts";
 
 interface Pane {
@@ -205,7 +209,7 @@ export class BrowserManager implements IBrowserManager {
   // --- pane management ---
   async newPane(url?: string, label?: string, cmd?: string, cwd?: string): Promise<PaneInfo> {
     const id = `pane-${++this.counter}`;
-    const view = new WebContentsView({ webPreferences: { sandbox: false, offscreen: this.offscreen } });
+    const view = new WebContentsView({ webPreferences: { partition: PANE_PARTITION, sandbox: false, offscreen: this.offscreen } });
     await view.webContents.loadURL("about:blank");
     const ctl = new ElectronBrowserController(this.buffer, view.webContents, this.opts, id);
     await ctl.start();

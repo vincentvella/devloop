@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld("devloop", {
   pick: () => ipcRenderer.invoke("devloop:pick"),
   clearStorage: (opts?: { allOrigins?: boolean }) => ipcRenderer.invoke("devloop:clearStorage", opts),
   exportBundle: () => ipcRenderer.invoke("devloop:exportBundle"),
+  extList: () => ipcRenderer.invoke("devloop:extList"),
+  extInstall: (input: string) => ipcRenderer.invoke("devloop:extInstall", input),
+  extLoadUnpacked: () => ipcRenderer.invoke("devloop:extLoadUnpacked"),
+  extRemove: (id: string) => ipcRenderer.invoke("devloop:extRemove", id),
   exportHar: () => ipcRenderer.invoke("devloop:exportHar"),
   // pane-targeted variants (used by a popped-out pane's own browser bar)
   navigateFor: (id: string, url: string) => ipcRenderer.invoke("devloop:navigateFor", id, url),

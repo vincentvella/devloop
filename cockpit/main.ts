@@ -17,11 +17,16 @@
 // and it just spams the timeline. (Set before any window/view is created.)
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
-import { app, BrowserWindow, ipcMain, dialog, nativeImage } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, nativeImage, session } from "electron";
 import { createServer, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { installExtension, uninstallExtension, loadAllExtensions } from "electron-chrome-web-store";
+import { extensionIdFromInput } from "../src/extensions.ts";
+import { getUnpackedExtensions, setUnpackedExtensions } from "../src/registry.ts";
+import { PANE_PARTITION } from "./browserManager.ts";
 
 // Where main.cjs/preload.cjs/renderer live. Bun inlines __dirname to the SOURCE dir,
 // so we can't use it. Packaged: <app.asar>/out via getAppPath(). Dev (`electron
@@ -93,7 +98,8 @@ async function startHttp(): Promise<void> {
     if (!req.url?.startsWith("/mcp")) {
       res.statusCode = 404;
       res.setHeader("Access-Control-Allow-Origin", "*"); // so cross-origin probes get the response
-      return res.end("not found");
+      res.setHeader("Content-Type", "text/html; charset=utf-8"); // an HTML doc so content scripts inject
+      return res.end("<!doctype html><title>404</title>not found");
     }
     const sid = req.headers["mcp-session-id"] as string | undefined;
 
@@ -235,6 +241,42 @@ function wireIpc(): void {
     writeFileSync(filePath, html);
     return filePath;
   });
+  // --- extensions ---
+  ipcMain.handle("devloop:extList", () => extList());
+  ipcMain.handle("devloop:extInstall", async (_e, input: string) => {
+    const id = extensionIdFromInput(String(input));
+    if (!id) throw new Error("not a valid extension id or Chrome Web Store URL");
+    await installExtension(id, { session: extSession(), extensionsPath: EXT_DIR });
+    return extList();
+  });
+  ipcMain.handle("devloop:extLoadUnpacked", async () => {
+    const r = await dialog.showOpenDialog(shellWin!, { properties: ["openDirectory"], title: "Select an unpacked extension folder" });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const dir = r.filePaths[0];
+    const ext = await extSession().extensions.loadExtension(dir, { allowFileAccess: true });
+    unpackedById.set(ext.id, dir);
+    setUnpackedExtensions([...getUnpackedExtensions(), dir]);
+    return extList();
+  });
+  ipcMain.handle("devloop:extRemove", async (_e, id: string) => {
+    try {
+      extSession().extensions.removeExtension(id);
+    } catch {
+      /* not loaded */
+    }
+    if (unpackedById.has(id)) {
+      const dir = unpackedById.get(id)!;
+      unpackedById.delete(id);
+      setUnpackedExtensions(getUnpackedExtensions().filter((p) => p !== dir));
+    } else {
+      try {
+        await uninstallExtension(id, { session: extSession(), extensionsPath: EXT_DIR });
+      } catch {
+        /* store uninstall best-effort */
+      }
+    }
+    return extList();
+  });
   ipcMain.handle("devloop:screenshot", async () => {
     const shot = await manager.screenshot(false);
     const active = manager.listPanes().find((p) => p.active);
@@ -294,6 +336,29 @@ function log(msg: string): void {
   process.stderr.write(`[cockpit] ${msg}\n`);
 }
 
+// --- chrome extensions (loaded into the panes' session, not the shell's) ---
+const EXT_DIR = join(process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop"), "extensions");
+const unpackedById = new Map<string, string>(); // loaded unpacked extension id → source dir
+const extSession = () => session.fromPartition(PANE_PARTITION);
+const extList = () => extSession().extensions.getAllExtensions().map((e) => ({ id: e.id, name: e.name, version: e.version }));
+
+async function initExtensions(): Promise<void> {
+  const ses = extSession();
+  try {
+    await loadAllExtensions(ses, EXT_DIR, { allowUnpacked: true }); // store extensions persisted under EXT_DIR
+  } catch (e) {
+    log(`extensions: store load failed: ${e}`);
+  }
+  for (const dir of getUnpackedExtensions()) {
+    try {
+      const ext = await ses.extensions.loadExtension(dir, { allowFileAccess: true });
+      unpackedById.set(ext.id, dir);
+    } catch (e) {
+      log(`extensions: unpacked reload failed (${dir}): ${e}`);
+    }
+  }
+}
+
 // --- boot ------------------------------------------------------------------
 async function main() {
   if (SELFTEST) {
@@ -314,6 +379,7 @@ async function main() {
   log("app ready; creating windows");
   createWindows();
   wireIpc();
+  await initExtensions(); // load extensions into the panes' session before panes navigate
   log("starting browser manager (first pane)");
 
   manager = new BrowserManager(
@@ -606,6 +672,21 @@ async function runSelfTest() {
   const bundleOk = !!bundle.diagnose && !!bundle.har && bundle.screenshots.length >= 1 && bundle.logs.length > 0 && bundle.meta.counts.errors >= 2;
   console.log(`SELFTEST bundle: logs=${bundle.meta.counts.logs} screenshots=${bundle.screenshots.length} errors=${bundle.meta.counts.errors} ok=${bundleOk}`);
 
+  // 9g) chrome extension: load the unpacked fixture into the panes' session; its content script marks pages.
+  let extLoadedOk = false;
+  const extPath = [join(BASE, "../test/fixture-ext"), join(BASE, "test/fixture-ext")].find(existsSync);
+  try {
+    const loaded = await extSession().extensions.loadExtension(extPath!, { allowFileAccess: true });
+    const listed = extSession().extensions.getAllExtensions().some((x) => x.id === loaded.id && x.name === "devloop-test-ext");
+    await manager.navigate(`http://localhost:${chosenPort}/ext-check`);
+    await new Promise((r) => setTimeout(r, 700));
+    const marked = JSON.parse((await handleTool("browser_eval", { expression: "String(document.documentElement.getAttribute('data-devloop-ext'))" })).content[0]!.text as string).value as string;
+    extLoadedOk = listed && marked === "loaded";
+    console.log(`SELFTEST extension: listed=${listed} contentScriptRan=${marked === "loaded"} ok=${extLoadedOk}`);
+  } catch (e) {
+    console.log(`SELFTEST extension FAILED (path=${extPath}): ${e}`);
+  }
+
   // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
   manager.__crashActive();
   await new Promise((r) => setTimeout(r, 1500));
@@ -673,6 +754,7 @@ async function runSelfTest() {
     ["device emulation + throttle", emulateOk],
     ["diagnose (group + network)", diagnoseOk],
     ["export bundle", bundleOk],
+    ["chrome extension (unpacked)", extLoadedOk],
   ];
   for (const [name, c] of checks) console.log(`  ${c ? "✓" : "✗"} ${name}`);
   const failed = checks.filter(([, c]) => !c).map(([n]) => n);

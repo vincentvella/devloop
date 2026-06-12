@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "devloop-test-ext",
+  "version": "1.0.0",
+  "description": "Fixture extension for devloop tests — marks pages it runs on.",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}

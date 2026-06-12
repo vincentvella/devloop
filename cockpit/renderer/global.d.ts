@@ -91,6 +91,10 @@ export interface DevloopApi {
   pick: () => Promise<string | null>;
   clearStorage: (opts?: { allOrigins?: boolean }) => Promise<void>;
   exportBundle: () => Promise<string | null>;
+  extList: () => Promise<{ id: string; name: string; version: string }[]>;
+  extInstall: (input: string) => Promise<{ id: string; name: string; version: string }[]>;
+  extLoadUnpacked: () => Promise<{ id: string; name: string; version: string }[] | null>;
+  extRemove: (id: string) => Promise<{ id: string; name: string; version: string }[]>;
   exportHar: () => Promise<string | null>;
   navigateFor: (id: string, url: string) => Promise<{ url: string; status: number | null }>;
   backFor: (id: string) => Promise<void>;
