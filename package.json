@@ -43,8 +43,8 @@
     "app:build": "bun run cockpit/build.ts",
     "app": "bun run app:build && electron out/main.cjs",
     "app:selftest": "bun run app:build && DEVLOOP_SELFTEST=1 electron out/main.cjs",
-    "dist": "bun run app:build && electron-builder",
-    "dist:mac": "bun run app:build && electron-builder --mac",
+    "dist": "bun run app:build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+    "dist:mac": "bun run app:build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
     "dist:win": "bun run app:build && electron-builder --win",
     "dist:linux": "bun run app:build && electron-builder --linux",
     "prepublishOnly": "bun run mcp:build"

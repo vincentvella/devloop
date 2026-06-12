@@ -24,11 +24,14 @@ asar: true
 mac:
   icon: assets/icon.icns
   category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
+  notarize: true # via App Store Connect API key (APPLE_API_KEY/_ID/_ISSUER env in CI)
   target:
     - dmg
     - zip
-  # Unsigned for now; release CI can add signing/notarization later.
-  identity: null
 
 win:
   icon: assets/icon.ico
