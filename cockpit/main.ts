@@ -20,7 +20,7 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 import { app, BrowserWindow, ipcMain, dialog, nativeImage } from "electron";
 import { createServer, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 
 // Where main.cjs/preload.cjs/renderer live. Bun inlines __dirname to the SOURCE dir,
@@ -210,6 +210,17 @@ function wireIpc(): void {
     if (shot.base64) buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, id);
   });
   ipcMain.handle("devloop:pick", () => manager.pick());
+  ipcMain.handle("devloop:exportHar", async () => {
+    const res = await handleTool("export_har", {});
+    const har = (res.content[0] as { text?: string })?.text ?? "{}";
+    const { canceled, filePath } = await dialog.showSaveDialog(shellWin!, {
+      defaultPath: "devloop.har",
+      filters: [{ name: "HAR", extensions: ["har"] }],
+    });
+    if (canceled || !filePath) return null;
+    writeFileSync(filePath, har);
+    return filePath;
+  });
   ipcMain.handle("devloop:screenshot", async () => {
     const shot = await manager.screenshot(false);
     const active = manager.listPanes().find((p) => p.active);
@@ -525,6 +536,13 @@ async function runSelfTest() {
   const bodyOk = typeof body === "string" && body.includes("not found");
   console.log(`SELFTEST network body: status=${(net?.detail as { status?: number })?.status} body=${JSON.stringify(body)}`);
 
+  // 9b) enriched network detail + HAR export.
+  const nd = net?.detail as { requestHeaders?: unknown; responseHeaders?: unknown; durationMs?: number } | undefined;
+  const har = JSON.parse((await handleTool("export_har", {})).content[0]!.text as string) as { log: { entries: { response?: { status?: number } }[] } };
+  const harHas404 = har.log.entries.some((en) => en.response?.status === 404);
+  const harOk = !!nd?.requestHeaders && !!nd?.responseHeaders && har.log.entries.length >= 1 && harHas404;
+  console.log(`SELFTEST HAR: entries=${har.log.entries.length} 404=${harHas404} reqH=${!!nd?.requestHeaders} resH=${!!nd?.responseHeaders} ok=${harOk}`);
+
   // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
   manager.__crashActive();
   await new Promise((r) => setTimeout(r, 1500));
@@ -586,7 +604,8 @@ async function runSelfTest() {
     appScopeOk &&
     snapshotOk &&
     ixOk &&
-    pickOk;
+    pickOk &&
+    harOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").

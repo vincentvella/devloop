@@ -487,6 +487,18 @@
   .logrow.warn .tag {
     color: var(--color-warn);
   }
+  /* network status tiers (tag color) */
+  .logrow.s2 .tag { color: var(--color-ok); }
+  .logrow.s3 .tag { color: var(--color-info); }
+  .logrow.s4 .tag { color: var(--color-warn); }
+  .logrow.s5 .tag { color: var(--color-bad); }
+  .logrow .net-ms { color: var(--color-dim); }
+  .net-detail { margin-top: 4px; padding: 6px 8px; background: var(--color-bg2); border: 1px solid var(--color-edge); border-radius: 6px; }
+  .net-h { color: var(--color-dim); margin: 2px 0; }
+  .net-sec { margin-top: 4px; }
+  .net-hdr { white-space: pre-wrap; word-break: break-all; }
+  .net-k { color: var(--color-accent); }
+  .net-body { margin: 2px 0 0; max-height: 9em; overflow: auto; white-space: pre-wrap; word-break: break-word; background: var(--color-bg); border: 1px solid var(--color-edge); border-radius: 4px; padding: 4px 6px; }
   .logrow .msg.clamp {
     max-height: 4.5em;
     overflow: hidden;

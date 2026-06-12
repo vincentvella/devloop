@@ -55,11 +55,20 @@ function normalizeUrl(input: string): string {
 function isErr(e: Entry): boolean {
   return (
     e.stream === "pageerror" ||
-    e.stream === "network" ||
+    (e.stream === "network" && (!!e.detail?.failure || e.detail?.status === undefined || (e.detail?.status ?? 0) >= 400)) ||
     (e.stream === "console" && /\[error\]/.test(e.line)) ||
     (e.source === "server" && /error|exception|traceback|unhandled/i.test(e.line)) ||
     (e.source === "repro" && e.line.includes("✗"))
   );
+}
+/** Status-tier class for a network row's tag. */
+function netTier(e: Entry): string | undefined {
+  if (e.stream !== "network") return undefined;
+  const d = e.detail;
+  if (d?.failure) return "s5";
+  const s = d?.status;
+  if (s == null) return undefined;
+  return s >= 500 ? "s5" : s >= 400 ? "s4" : s >= 300 ? "s3" : "s2";
 }
 const fmtTime = (ts: number) => {
   const d = new Date(ts);
@@ -78,12 +87,31 @@ const CHIPS: { key: string; label: string; test: (e: Entry) => boolean }[] = [
 let reproUid = -1; // unique negative keys for client-side repro rows
 
 // --- log row (own expand state) -------------------------------------------
+function HeaderList({ title, h }: { title: string; h?: Record<string, string> }) {
+  const keys = h ? Object.keys(h) : [];
+  if (!keys.length) return null;
+  return (
+    <div className="net-sec">
+      <div className="net-h">{title}</div>
+      {keys.map((k) => (
+        <div key={k} className="net-hdr">
+          <span className="net-k">{k}:</span> {h![k]}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
   const [open, setOpen] = useState(false);
-  const long = e.line.length > 220 || (e.line.match(/\n/g)?.length ?? 0) > 2;
+  const isNet = e.stream === "network" && !!e.detail?.url;
+  const long = !isNet && (e.line.length > 220 || (e.line.match(/\n/g)?.length ?? 0) > 2);
   const cls = ["logrow", e.source];
   if (isErr(e)) cls.push("err");
   else if (e.stream === "console" && e.line.includes("[warning]")) cls.push("warn");
+  const tier = netTier(e);
+  if (tier) cls.push(tier);
+  const d = e.detail;
   return (
     <div className={cls.join(" ")}>
       <span className="ts">{fmtTime(e.ts)}</span>
@@ -91,8 +119,36 @@ function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
         {e.source}:{e.stream}
       </span>
       {e.target && <span className="tgt">{e.target}</span>}
-      {e.stream === "screenshot" && e.detail?.image ? (
-        <img className="shot" src={e.detail.image} onClick={() => onZoom(e.detail!.image!)} />
+      {e.stream === "screenshot" && d?.image ? (
+        <img className="shot" src={d.image} onClick={() => onZoom(d.image!)} />
+      ) : isNet ? (
+        <span className="msg net">
+          <span onClick={() => setOpen((v) => !v)} title="click for request/response details" style={{ cursor: "pointer" }}>
+            {e.line}
+            {d?.durationMs != null ? <span className="net-ms"> · {Math.round(d.durationMs)}ms</span> : null}
+          </span>
+          {open && (
+            <div className="net-detail">
+              <div className="net-h">
+                {d?.method} {d?.status ?? ""} {d?.statusText ?? d?.failure ?? ""} · {d?.resourceType ?? ""} {d?.mimeType ? "· " + d.mimeType : ""}
+              </div>
+              <HeaderList title="request headers" h={d?.requestHeaders} />
+              {d?.requestBody ? (
+                <div className="net-sec">
+                  <div className="net-h">request body</div>
+                  <pre className="net-body">{d.requestBody}</pre>
+                </div>
+              ) : null}
+              <HeaderList title="response headers" h={d?.responseHeaders} />
+              {d?.responseBody ? (
+                <div className="net-sec">
+                  <div className="net-h">response body</div>
+                  <pre className="net-body">{d.responseBody}</pre>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </span>
       ) : (
         <span
           className={`msg${long && !open ? " clamp" : ""}`}
@@ -610,6 +666,9 @@ function App() {
                     </span>
                   ))}
                 </div>
+                <button title="export captured network as a HAR file" onClick={() => void dl().exportHar()}>
+                  HAR
+                </button>
                 <button
                   onClick={async () => {
                     await dl().clear();

@@ -54,7 +54,7 @@ bun run app          # build + launch the Electron cockpit
 bun run start        # or run the stdio MCP directly
 ```
 
-## Tools (27)
+## Tools (28)
 
 **Dev server** — runtime, no per-project registration needed
 - `dev_start({ project?, cmd?, cwd? })` — start a dev server and tee its logs. Specify it three ways: a saved registry `project`; explicit `cmd`+`cwd`; or neither (`cwd` defaults to the server's dir, `cmd` auto-detected from `package.json` scripts: `dev`/`develop`/`web`/`start`/`serve`).
@@ -75,7 +75,8 @@ bun run start        # or run the stdio MCP directly
 **Logs & correlation**
 - `get_logs({ source?, stream?, grep?, app?, sinceSeq?, limit? })` — unified tail. `source` is `server`|`browser`; `stream` is `stdout`/`stderr`/`console`/`network`/`pageerror`. `app` scopes to one project's logs — it matches a pane's **label** (project name) or id (see `pane_list`) and filters *both* that pane's server and browser logs, regardless of which pane is active. Pass the last `seq` as `sinceSeq` to tail incrementally.
 - `get_logs_around({ ts, windowMs?, source?, app? })` — **the correlation tool**: all events within ±`windowMs` of a timestamp, time-ordered across both sources (optionally scoped to one `app`).
-- Logged **network** events (failures + status ≥ `DEVLOOP_NET_THRESHOLD`) carry the request `postData` and a capped, base64-decoded `responseBody` in their `detail` (Electron substrate).
+- Logged **network** events (failures + status ≥ `DEVLOOP_NET_THRESHOLD`; set the threshold to `0` to capture everything) carry rich `detail` on **both substrates**: method, status, resource type, mime, duration, request + response **headers**, and capped request/response **bodies**.
+- `export_har({ app? })` — export captured network as a **HAR 1.2** document (import into Chrome DevTools / Charles). Scope to one `app` if you like.
 - `clear_logs()` — reset before reproducing an issue.
 - `repro({ actions | action, waitFor?, settleMs?, stepSettleMs?, idleMs?, timeoutMs?, continueOnError?, clear? })` — **reproduce-and-correlate**: clears the buffer, performs one action or a **sequence**, waits, and returns everything that happened on both sides across the sequence — with per-step results (`steps[]`), a `byStream` count, and a pre-filtered `errors` list.
   - `actions: [{kind, ...}]` — kinds: `navigate`/`click`/`type`/`hover`/`scroll`/`select`/`press`/`eval`/`wait`/`none`. `action` (singular) = one-step convenience.
@@ -137,7 +138,7 @@ bun run app:selftest # headless integration test (no visible windows)
   - **project** — dropdown of saved projects; **picking one opens it immediately** (fills cmd/cwd/url + repro steps, then dev-starts + navigates). **💾 save** snapshots the active pane as a project named by its tab label (rename on the tab).
   - **dev** — `cmd` (blank = auto-detect) + **📁 folder** picker + `cwd`. **Auto-saved to the active pane on blur** (and on folder pick) — no separate "apply" button; after that the top-bar **▶** is pre-wired.
 - **Side panel** (collapsible) — a segmented **logs / repro** control:
-  - **logs** — the live event list (per-source coloring, timestamps, pane tags, click-to-expand long rows, screenshot thumbnails → Radix-`Dialog` lightbox) under a sticky filter bar: substring filter + chips (`server`/`console`/`network`/`errors`/`repro`), a `↓ latest` pill, and `clear`. **Always scoped to the active pane.**
+  - **logs** — the live event list (per-source coloring, timestamps, pane tags, click-to-expand long rows, screenshot thumbnails → Radix-`Dialog` lightbox). **Network rows** are status-tier colored (2xx/3xx/4xx/5xx) and expand to show method/status/duration + request/response **headers and bodies**. Sticky filter bar: substring filter + chips (`server`/`console`/`network`/`errors`/`repro`), a `↓ latest` pill, **HAR** export, and `clear`. **Always scoped to the active pane.**
   - **repro** — the **repro builder** (`+ step` / `pick` / `run`); **pick** lets you click an element in the page to capture a stable selector straight into a click step; results land in the **logs** timeline (it auto-switches there) with per-step ✓/✗ and the correlated error list.
   - Collapse via the `›` in the panel header; re-expand via a small **hover handle** on the right edge. Popping the active pane into its own window **fills the freed space with the timeline**. Drag the divider to resize.
 - **Pop-out window** — `⤢` (right of the URL bar) detaches the active pane into its **own browser window with its own bar** (back/forward/reload/hard-reload/address/screenshot), driving that pane by id; the live URL tracks navigations and `⌘R` reloads the page. Closing it re-docks the pane.

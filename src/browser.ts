@@ -19,6 +19,10 @@ import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
 import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
 import { scrollJs, selectJs } from "./pageActions.ts";
+import type { NetDetail } from "./har.ts";
+
+/** Cap a captured body/string to keep the buffer light. */
+const cap = (s?: string, max = 2048): string | undefined => (s == null ? undefined : s.length > max ? s.slice(0, max) + `… (+${s.length - max})` : s);
 
 export interface BrowserOptions {
   headless: boolean;
@@ -127,22 +131,43 @@ export class PuppeteerBrowserController implements IBrowserController {
     });
 
     page.on("requestfailed", (req: HTTPRequest) => {
-      this.buffer.push(
-        "browser",
-        "network",
-        `FAILED ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "unknown"}`,
-        { url: req.url(), method: req.method(), failure: req.failure()?.errorText },
-      );
+      this.buffer.push("browser", "network", `FAILED ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "unknown"}`, {
+        kind: "network",
+        url: req.url(),
+        method: req.method(),
+        resourceType: req.resourceType(),
+        requestHeaders: req.headers(),
+        requestBody: cap(req.postData()),
+        startedAt: Date.now(),
+        failure: req.failure()?.errorText,
+      } satisfies NetDetail);
     });
 
-    page.on("response", (res: HTTPResponse) => {
+    page.on("response", async (res: HTTPResponse) => {
       const status = res.status();
       if (status < this.opts.networkErrorThreshold) return; // skip the healthy noise
-      this.buffer.push("browser", "network", `${status} ${res.request().method()} ${res.url()}`, {
+      const req = res.request();
+      let responseBody: string | undefined;
+      try {
+        const buf = await res.buffer();
+        responseBody = buf.includes(0) ? `<binary ${buf.length} bytes>` : cap(buf.toString("utf8"));
+      } catch {
+        /* no body (redirect/304/etc.) */
+      }
+      this.buffer.push("browser", "network", `${status} ${req.method()} ${res.url()}`, {
+        kind: "network",
         url: res.url(),
         status,
-        method: res.request().method(),
-      });
+        statusText: res.statusText(),
+        method: req.method(),
+        resourceType: req.resourceType(),
+        mimeType: res.headers()["content-type"],
+        requestHeaders: req.headers(),
+        responseHeaders: res.headers(),
+        requestBody: cap(req.postData()),
+        responseBody,
+        startedAt: Date.now(),
+      } satisfies NetDetail);
     });
   }
 

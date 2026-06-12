@@ -27,6 +27,13 @@ const repro = JSON.parse(await callText("repro", { action: { kind: "navigate", u
 console.log(`\nrepro: waitFor=${repro.waitFor} note=${repro.waitNote ?? "-"} total=${repro.total} errorCount=${repro.errorCount} byStream=${JSON.stringify(repro.byStream)}`);
 for (const e of repro.errors) console.log(`  ERROR [${e.source}:${e.stream}] ${e.line}`);
 
+// --- network detail + HAR export ---
+const netLogs = JSON.parse(await callText("get_logs", { stream: "network", limit: 20 }));
+const nsample = netLogs.entries.find((e: any) => e.detail?.url);
+console.log(`\nnetwork detail: present=${!!nsample} reqHeaders=${!!nsample?.detail?.requestHeaders} status/failure=${nsample?.detail?.status ?? nsample?.detail?.failure}`);
+const har = JSON.parse(await callText("export_har"));
+console.log(`HAR: entries=${har.log.entries.length} firstUrl=${har.log.entries[0]?.request?.url ?? "-"} hasReqHeaders=${(har.log.entries[0]?.request?.headers?.length ?? 0) > 0}`);
+
 // --- snapshot + wait_for ---
 const snapPage = `data:text/html,<h1>Title</h1><label for=q>Search</label><input id=q><button id=go aria-label="Go now">Go</button>`;
 await callText("browser_navigate", { url: snapPage });

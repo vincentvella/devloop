@@ -12,6 +12,7 @@ import { type LogBuffer, type LogSource } from "./logBuffer.ts";
 import { detectDevCommand, type DevServerLike } from "./devServer.ts";
 import { listProjects, addProject, removeProject, getProject } from "./registry.ts";
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
+import { toHar } from "./har.ts";
 
 export interface ToolDeps {
   buffer: LogBuffer;
@@ -163,6 +164,14 @@ export const TOOLS: Tool[] = [
     name: "clear_logs",
     description: "Clear the event buffer. Call before reproducing an issue for a clean window.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "export_har",
+    description:
+      "Export captured network requests as a HAR 1.2 document (importable into Chrome DevTools / Charles). " +
+      "Covers logged network — failures + responses with status ≥ DEVLOOP_NET_THRESHOLD (set the threshold to 0 to capture everything). " +
+      "Optionally scope to one `app` (pane label/id).",
+    inputSchema: { type: "object", properties: { app: { type: "string" } } },
   },
   {
     name: "dev_start",
@@ -416,7 +425,7 @@ function resolveTargets(app: string | undefined): string[] | undefined {
   return matched.map((p) => p.id);
 }
 
-export async function handleTool(name: string, args: Record<string, unknown>): Promise<CallToolResult> {
+export async function handleTool(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
   const { buffer, browser, devServer } = deps;
   switch (name) {
     case "browser_navigate":
@@ -484,6 +493,11 @@ export async function handleTool(name: string, args: Record<string, unknown>): P
     case "clear_logs":
       buffer.clear();
       return json({ ok: true, latestSeq: buffer.latestSeq });
+    case "export_har": {
+      const targets = resolveTargets(args.app as string | undefined);
+      const entries = buffer.query({ stream: "network", targets, limit: 5000 });
+      return json(toHar(entries));
+    }
     case "dev_start": {
       const proj = args.project ? getProject(args.project as string) : undefined;
       if (args.project && !proj) throw new Error(`no saved project named "${args.project}"`);

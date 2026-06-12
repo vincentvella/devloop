@@ -1,3 +1,19 @@
+export interface NetDetail {
+  kind?: string;
+  url?: string;
+  method?: string;
+  status?: number;
+  statusText?: string;
+  resourceType?: string;
+  mimeType?: string;
+  durationMs?: number;
+  requestHeaders?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+  requestBody?: string;
+  responseBody?: string;
+  failure?: string;
+}
+
 export interface Entry {
   seq: number;
   ts: number;
@@ -5,7 +21,7 @@ export interface Entry {
   stream: string;
   line: string;
   target?: string;
-  detail?: { image?: string };
+  detail?: ({ image?: string } & NetDetail) | undefined;
 }
 
 export interface DevStatus {
@@ -73,6 +89,7 @@ export interface DevloopApi {
   forward: () => Promise<void>;
   screenshot: () => Promise<void>;
   pick: () => Promise<string | null>;
+  exportHar: () => Promise<string | null>;
   navigateFor: (id: string, url: string) => Promise<{ url: string; status: number | null }>;
   backFor: (id: string) => Promise<void>;
   forwardFor: (id: string) => Promise<void>;

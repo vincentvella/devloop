@@ -14,6 +14,7 @@ import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
 import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
 import { scrollJs, selectJs, focusJs, centerJs, hoverJs, PICKER_JS } from "./pageActions.ts";
+import type { NetDetail } from "./har.ts";
 
 export interface ElectronBrowserOptions {
   networkErrorThreshold: number;
@@ -36,7 +37,10 @@ export class ElectronBrowserController implements IBrowserController {
   private inflight = 0;
   private lastActivity = 0;
   private lastDocStatus: number | null = null;
-  private readonly requests = new Map<string, { url: string; method: string; postData?: string }>();
+  private readonly requests = new Map<
+    string,
+    { url: string; method: string; postData?: string; headers?: Record<string, string>; type?: string; startedAt: number }
+  >();
   /** Network entries awaiting their response body (fetched on loadingFinished). */
   private readonly pendingBodies = new Map<string, LogEntry>();
   private listening = false;
@@ -112,6 +116,9 @@ export class ElectronBrowserController implements IBrowserController {
           url: params.request.url,
           method: params.request.method,
           postData: params.request.postData,
+          headers: params.request.headers,
+          type: params.type,
+          startedAt: Date.now(),
         });
         break;
       }
@@ -120,13 +127,21 @@ export class ElectronBrowserController implements IBrowserController {
         if (params.type === "Document") this.lastDocStatus = status;
         if (status >= this.opts.networkErrorThreshold) {
           const req = this.requests.get(params.requestId);
-          const entry = this.buffer.push(
-            "browser",
-            "network",
-            `${status} ${req?.method ?? ""} ${params.response.url}`.trim(),
-            { url: params.response.url, status, method: req?.method, requestBody: cap(req?.postData) },
-            this.id,
-          );
+          const detail: NetDetail = {
+            kind: "network",
+            url: params.response.url,
+            status,
+            statusText: params.response.statusText,
+            method: req?.method,
+            resourceType: params.type ?? req?.type,
+            mimeType: params.response.mimeType,
+            startedAt: req?.startedAt,
+            durationMs: req ? Date.now() - req.startedAt : undefined,
+            requestHeaders: req?.headers,
+            responseHeaders: params.response.headers,
+            requestBody: cap(req?.postData),
+          };
+          const entry = this.buffer.push("browser", "network", `${status} ${req?.method ?? ""} ${params.response.url}`.trim(), detail, this.id);
           this.pendingBodies.set(params.requestId, entry); // body fetched on loadingFinished
         }
         break;
@@ -147,11 +162,17 @@ export class ElectronBrowserController implements IBrowserController {
         this.lastActivity = Date.now();
         const req = this.requests.get(params.requestId);
         this.requests.delete(params.requestId);
-        this.emit(
-          "network",
-          `FAILED ${req?.method ?? ""} ${req?.url ?? params.requestId} — ${params.errorText}`,
-          { url: req?.url, failure: params.errorText, requestBody: cap(req?.postData) },
-        );
+        this.emit("network", `FAILED ${req?.method ?? ""} ${req?.url ?? params.requestId} — ${params.errorText}`, {
+          kind: "network",
+          url: req?.url ?? params.requestId,
+          method: req?.method,
+          resourceType: req?.type,
+          startedAt: req?.startedAt,
+          durationMs: req ? Date.now() - req.startedAt : undefined,
+          requestHeaders: req?.headers,
+          requestBody: cap(req?.postData),
+          failure: params.errorText,
+        } satisfies NetDetail);
         this.pendingBodies.delete(params.requestId);
         break;
       }
