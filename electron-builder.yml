@@ -29,9 +29,13 @@ mac:
   entitlements: assets/entitlements.mac.plist
   entitlementsInherit: assets/entitlements.mac.plist
   notarize: true # via App Store Connect API key (APPLE_API_KEY/_ID/_ISSUER env in CI)
+  # Build both Apple Silicon (arm64) and Intel (x64) installers. The macOS runner
+  # is arm64, but electron-builder downloads the x64 Electron and cross-packages it.
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
 
 win:
   icon: assets/icon.ico
