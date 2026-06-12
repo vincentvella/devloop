@@ -484,6 +484,9 @@ export class BrowserManager implements IBrowserManager {
   snapshot() {
     return this.active().snapshot();
   }
+  pick() {
+    return this.active().pick();
+  }
   waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }) {
     return this.active().waitFor(opts);
   }

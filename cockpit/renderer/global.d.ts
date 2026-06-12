@@ -72,6 +72,7 @@ export interface DevloopApi {
   back: () => Promise<void>;
   forward: () => Promise<void>;
   screenshot: () => Promise<void>;
+  pick: () => Promise<string | null>;
   navigateFor: (id: string, url: string) => Promise<{ url: string; status: number | null }>;
   backFor: (id: string) => Promise<void>;
   forwardFor: (id: string) => Promise<void>;

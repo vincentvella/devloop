@@ -13,7 +13,7 @@ import type { WebContents } from "electron";
 import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
 import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
-import { scrollJs, selectJs, focusJs, centerJs, hoverJs } from "./pageActions.ts";
+import { scrollJs, selectJs, focusJs, centerJs, hoverJs, PICKER_JS } from "./pageActions.ts";
 
 export interface ElectronBrowserOptions {
   networkErrorThreshold: number;
@@ -274,6 +274,11 @@ export class ElectronBrowserController implements IBrowserController {
 
   async snapshot(): Promise<PageSnapshot> {
     return (await this.wc.executeJavaScript(SNAPSHOT_JS, true)) as PageSnapshot;
+  }
+
+  /** Interactive picker (cockpit only): resolves a selector when the user clicks an element, or null on Escape. */
+  async pick(): Promise<string | null> {
+    return (await this.wc.executeJavaScript(PICKER_JS, true)) as string | null;
   }
 
   async waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }> {

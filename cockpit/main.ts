@@ -209,6 +209,7 @@ function wireIpc(): void {
     const shot = await manager.screenshotFor(id);
     if (shot.base64) buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, id);
   });
+  ipcMain.handle("devloop:pick", () => manager.pick());
   ipcMain.handle("devloop:screenshot", async () => {
     const shot = await manager.screenshot(false);
     const active = manager.listPanes().find((p) => p.active);
@@ -503,6 +504,15 @@ async function runSelfTest() {
   const ixOk = ixv.sel === "b" && ixv.p && ixv.h;
   console.log(`SELFTEST interactions: select=${ixv.sel === "b"} press=${ixv.p} hover=${ixv.h} ok=${ixOk}`);
 
+  // 8f) element picker: pick() resolves the selector of the element the user clicks.
+  await manager.navigate("data:text/html,<button id=pk>pick me</button>");
+  const pickPromise = manager.pick();
+  await new Promise((r) => setTimeout(r, 300)); // let the picker install its listeners
+  await manager.click("#pk"); // a real click resolves the picker
+  const picked = await pickPromise;
+  const pickOk = picked === "#pk";
+  console.log(`SELFTEST picker: picked=${picked} ok=${pickOk}`);
+
   // 9) network body: fetch the cockpit's own HTTP server for a 404 (subresource → reliable body).
   await manager.navigate(
     `data:text/html,<script>fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`,
@@ -575,7 +585,8 @@ async function runSelfTest() {
     shotOk &&
     appScopeOk &&
     snapshotOk &&
-    ixOk;
+    ixOk &&
+    pickOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").

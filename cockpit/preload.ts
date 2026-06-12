@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("devloop", {
   back: () => ipcRenderer.invoke("devloop:back"),
   forward: () => ipcRenderer.invoke("devloop:forward"),
   screenshot: () => ipcRenderer.invoke("devloop:screenshot"),
+  pick: () => ipcRenderer.invoke("devloop:pick"),
   // pane-targeted variants (used by a popped-out pane's own browser bar)
   navigateFor: (id: string, url: string) => ipcRenderer.invoke("devloop:navigateFor", id, url),
   backFor: (id: string) => ipcRenderer.invoke("devloop:backFor", id),

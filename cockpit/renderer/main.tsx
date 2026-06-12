@@ -20,6 +20,7 @@ import {
   Save,
   ArrowLeft,
   ArrowRight,
+  Crosshair,
 } from "lucide-react";
 import type { Entry, Pane, Project, Step } from "./global";
 
@@ -128,6 +129,7 @@ function App() {
   const [atBottom, setAtBottom] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [panelTab, setPanelTab] = useState<"logs" | "repro">("logs");
+  const [picking, setPicking] = useState(false);
 
   const paneAreaRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -558,6 +560,26 @@ function App() {
               <div className="repro-head">
                 <button className="labeled" onClick={() => setSteps((s) => [...s, { kind: "navigate" }])}>
                   <Plus size={13} /> step
+                </button>
+                <button
+                  className="labeled"
+                  title="pick an element in the page → adds a click step"
+                  disabled={picking}
+                  onClick={async () => {
+                    setPicking(true);
+                    setReproStatus("pick an element… (Esc cancels)");
+                    try {
+                      const sel = await dl().pick();
+                      if (sel) {
+                        setSteps((s) => [...s, { kind: "click", selector: sel }]);
+                        setReproStatus(`picked ${sel}`);
+                      } else setReproStatus("pick cancelled");
+                    } finally {
+                      setPicking(false);
+                    }
+                  }}
+                >
+                  <Crosshair size={13} /> {picking ? "picking…" : "pick"}
                 </button>
                 <button className="labeled" onClick={() => void runRepro(steps)}>
                   <Play size={13} /> run
