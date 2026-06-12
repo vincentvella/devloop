@@ -73,6 +73,28 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "browser_snapshot",
+    description:
+      "Structured snapshot of the active page: url, title, and the interactive + landmark elements " +
+      "(role, accessible name, value/state, heading level) each with a CSS selector `ref` you can pass " +
+      "to browser_click / browser_type. Prefer this over a screenshot to find and target elements reliably.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "browser_wait_for",
+    description:
+      "Wait until a CSS selector appears or text is present on the page (e.g. after a navigation or async render). " +
+      "Returns { ok, waitedMs } — ok=false on timeout.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: { type: "string", description: "CSS selector to wait for." },
+        text: { type: "string", description: "Substring of page text to wait for (if no selector)." },
+        timeoutMs: { type: "number", description: "Default 10000." },
+      },
+    },
+  },
+  {
     name: "get_logs",
     description:
       "Return recent events from the unified buffer (server stdout/stderr + browser " +
@@ -209,11 +231,12 @@ export const TOOLS: Tool[] = [
           items: {
             type: "object",
             properties: {
-              kind: { type: "string", enum: ["navigate", "click", "type", "eval", "none"] },
+              kind: { type: "string", enum: ["navigate", "click", "type", "eval", "wait", "none"] },
               url: { type: "string", description: "for kind=navigate" },
-              selector: { type: "string", description: "for kind=click|type" },
-              text: { type: "string", description: "for kind=type" },
+              selector: { type: "string", description: "for kind=click|type|wait" },
+              text: { type: "string", description: "for kind=type, or kind=wait (text to wait for)" },
               expression: { type: "string", description: "for kind=eval" },
+              timeoutMs: { type: "number", description: "for kind=wait" },
             },
             required: ["kind"],
           },
@@ -222,11 +245,12 @@ export const TOOLS: Tool[] = [
           type: "object",
           description: "A single action (convenience for a one-step sequence). Ignored if `actions` is given.",
           properties: {
-            kind: { type: "string", enum: ["navigate", "click", "type", "eval", "none"] },
+            kind: { type: "string", enum: ["navigate", "click", "type", "eval", "wait", "none"] },
             url: { type: "string", description: "for kind=navigate" },
-            selector: { type: "string", description: "for kind=click|type" },
-            text: { type: "string", description: "for kind=type" },
+            selector: { type: "string", description: "for kind=click|type|wait" },
+            text: { type: "string", description: "for kind=type, or kind=wait (text to wait for)" },
             expression: { type: "string", description: "for kind=eval" },
+            timeoutMs: { type: "number", description: "for kind=wait" },
           },
           required: ["kind"],
         },
@@ -250,11 +274,12 @@ export const TOOLS: Tool[] = [
 ];
 
 interface ReproAction {
-  kind: "navigate" | "click" | "type" | "eval" | "none";
+  kind: "navigate" | "click" | "type" | "eval" | "wait" | "none";
   url?: string;
   selector?: string;
   text?: string;
   expression?: string;
+  timeoutMs?: number;
 }
 
 async function performAction(a: ReproAction): Promise<unknown> {
@@ -270,6 +295,8 @@ async function performAction(a: ReproAction): Promise<unknown> {
       return { typed: a.selector };
     case "eval":
       return { value: await browser.evaluate(a.expression!) };
+    case "wait":
+      return browser.waitFor({ selector: a.selector, text: a.text, timeoutMs: a.timeoutMs });
     case "none":
       return { noop: true };
   }
@@ -357,6 +384,16 @@ export async function handleTool(name: string, args: Record<string, unknown>): P
       return json({ ok: true });
     case "browser_eval":
       return json({ value: await browser.evaluate(args.expression as string) });
+    case "browser_snapshot":
+      return json(await browser.snapshot());
+    case "browser_wait_for":
+      return json(
+        await browser.waitFor({
+          selector: args.selector as string | undefined,
+          text: args.text as string | undefined,
+          timeoutMs: args.timeoutMs as number | undefined,
+        }),
+      );
     case "get_logs": {
       const targets = resolveTargets(args.app as string | undefined);
       const entries = buffer.query({

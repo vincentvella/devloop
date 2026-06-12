@@ -54,7 +54,7 @@ bun run app          # build + launch the Electron cockpit
 bun run start        # or run the stdio MCP directly
 ```
 
-## Tools (20)
+## Tools (22)
 
 **Dev server** — runtime, no per-project registration needed
 - `dev_start({ project?, cmd?, cwd? })` — start a dev server and tee its logs. Specify it three ways: a saved registry `project`; explicit `cmd`+`cwd`; or neither (`cwd` defaults to the server's dir, `cmd` auto-detected from `package.json` scripts: `dev`/`develop`/`web`/`start`/`serve`).
@@ -67,6 +67,8 @@ bun run start        # or run the stdio MCP directly
 - `browser_click({ selector })`
 - `browser_type({ selector, text })`
 - `browser_eval({ expression })` — runs in page context (not blocked by CSP)
+- `browser_snapshot()` — structured page snapshot: url, title, and interactive/landmark elements (role, accessible name, value/state, heading level) each with a CSS selector `ref` usable by `browser_click`/`browser_type`. **Prefer this over a screenshot** to find/target elements reliably.
+- `browser_wait_for({ selector?, text?, timeoutMs? })` — wait until a selector appears or text is present (after a navigation/async render). Returns `{ ok, waitedMs }`.
 
 **Logs & correlation**
 - `get_logs({ source?, stream?, grep?, app?, sinceSeq?, limit? })` — unified tail. `source` is `server`|`browser`; `stream` is `stdout`/`stderr`/`console`/`network`/`pageerror`. `app` scopes to one project's logs — it matches a pane's **label** (project name) or id (see `pane_list`) and filters *both* that pane's server and browser logs, regardless of which pane is active. Pass the last `seq` as `sinceSeq` to tail incrementally.
@@ -74,7 +76,7 @@ bun run start        # or run the stdio MCP directly
 - Logged **network** events (failures + status ≥ `DEVLOOP_NET_THRESHOLD`) carry the request `postData` and a capped, base64-decoded `responseBody` in their `detail` (Electron substrate).
 - `clear_logs()` — reset before reproducing an issue.
 - `repro({ actions | action, waitFor?, settleMs?, stepSettleMs?, idleMs?, timeoutMs?, continueOnError?, clear? })` — **reproduce-and-correlate**: clears the buffer, performs one action or a **sequence**, waits, and returns everything that happened on both sides across the sequence — with per-step results (`steps[]`), a `byStream` count, and a pre-filtered `errors` list.
-  - `actions: [{kind, ...}]` — kinds: `navigate`/`click`/`type`/`eval`/`none`. `action` (singular) = one-step convenience.
+  - `actions: [{kind, ...}]` — kinds: `navigate`/`click`/`type`/`eval`/`wait`/`none` (`wait` takes `selector`|`text`+`timeoutMs`). `action` (singular) = one-step convenience.
   - Waits `stepSettleMs` (default 300) between steps, `settleMs` (default 1000) after the last. `waitFor: "networkidle"` waits until no network activity for `idleMs` (default 500) up to `timeoutMs` (default 10000) — **use it for slow/streaming responses** (Expo's first web bundle takes ~12s). On timeout you still get what landed, with a `waitNote`.
   - `continueOnError` (default false) — otherwise stops at the failing step (`stoppedAtStep`).
 

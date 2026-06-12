@@ -469,6 +469,12 @@ export class BrowserManager implements IBrowserManager {
   evaluate(expression: string) {
     return this.active().evaluate(expression);
   }
+  snapshot() {
+    return this.active().snapshot();
+  }
+  waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }) {
+    return this.active().waitFor(opts);
+  }
   waitForNetworkIdle(idleMs?: number, timeoutMs?: number) {
     return this.active().waitForNetworkIdle(idleMs, timeoutMs);
   }

@@ -27,6 +27,20 @@ const repro = JSON.parse(await callText("repro", { action: { kind: "navigate", u
 console.log(`\nrepro: waitFor=${repro.waitFor} note=${repro.waitNote ?? "-"} total=${repro.total} errorCount=${repro.errorCount} byStream=${JSON.stringify(repro.byStream)}`);
 for (const e of repro.errors) console.log(`  ERROR [${e.source}:${e.stream}] ${e.line}`);
 
+// --- snapshot + wait_for ---
+const snapPage = `data:text/html,<h1>Title</h1><label for=q>Search</label><input id=q><button id=go aria-label="Go now">Go</button>`;
+await callText("browser_navigate", { url: snapPage });
+await callText("browser_wait_for", { selector: "#go" });
+const snap = JSON.parse(await callText("browser_snapshot"));
+const byRole = (r: string) => snap.nodes.filter((n: any) => n.role === r);
+console.log(`\nsnapshot: ${snap.nodes.length} nodes`);
+for (const n of snap.nodes) console.log(`  ${n.role} "${n.name}" → ${n.ref}`);
+console.log(
+  `snapshot checks: heading=${byRole("heading").length > 0} textbox-named=${byRole("textbox").some((n: any) => n.name === "Search")} button-named=${byRole("button").some((n: any) => n.name === "Go now")} refIsId=${byRole("button")[0]?.ref === "#go"}`,
+);
+const waitMiss = JSON.parse(await callText("browser_wait_for", { selector: "#nope", timeoutMs: 600 }));
+console.log(`wait_for(miss): ok=${waitMiss.ok} (expect false)`);
+
 // --- action sequence: navigate -> type -> click ---
 const formPage = `data:text/html,<input id=name><button id=go onclick="console.log('typed:'+document.getElementById('name').value)">go</button>`;
 const seq = JSON.parse(

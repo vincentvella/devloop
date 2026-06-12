@@ -3,6 +3,8 @@
  * stdio mode) and the Electron `webContents` (cockpit mode) implement this, so
  * the MCP tool layer is agnostic to which one is behind it.
  */
+import type { PageSnapshot } from "./pageSnapshot.ts";
+
 export interface IBrowserController {
   start(): Promise<void>;
   navigate(url: string): Promise<{ url: string; status: number | null }>;
@@ -10,6 +12,10 @@ export interface IBrowserController {
   click(selector: string): Promise<void>;
   type(selector: string, text: string): Promise<void>;
   evaluate(expression: string): Promise<unknown>;
+  /** Structured page snapshot (roles + names + usable selectors) for agents. */
+  snapshot(): Promise<PageSnapshot>;
+  /** Wait until a selector appears or text is present. */
+  waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }>;
   waitForNetworkIdle(idleMs?: number, timeoutMs?: number): Promise<void>;
   currentUrl(): string;
   close(): Promise<void>;

@@ -16,6 +16,7 @@ import puppeteer, {
 } from "puppeteer";
 import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
+import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
 
 export interface BrowserOptions {
   headless: boolean;
@@ -228,6 +229,25 @@ export class PuppeteerBrowserController implements IBrowserController {
       }
       return result.result.value;
     }, "evaluate");
+  }
+
+  async snapshot(): Promise<PageSnapshot> {
+    return (await this.evaluate(SNAPSHOT_JS)) as PageSnapshot;
+  }
+
+  async waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }> {
+    const timeout = opts.timeoutMs ?? 10_000;
+    const start = Date.now();
+    if (!opts.selector && !opts.text) throw new Error("waitFor needs a selector or text");
+    try {
+      await this.withRecovery(async (page) => {
+        if (opts.selector) await page.waitForSelector(opts.selector, { timeout });
+        else await page.waitForFunction(`!!document.body && document.body.innerText.includes(${JSON.stringify(opts.text)})`, { timeout });
+      }, "waitFor");
+      return { ok: true, waitedMs: Date.now() - start };
+    } catch {
+      return { ok: false, waitedMs: Date.now() - start };
+    }
   }
 
   currentUrl(): string {

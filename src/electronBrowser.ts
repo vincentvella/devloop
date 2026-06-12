@@ -12,6 +12,7 @@
 import type { WebContents } from "electron";
 import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
+import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
 
 export interface ElectronBrowserOptions {
   networkErrorThreshold: number;
@@ -232,6 +233,30 @@ export class ElectronBrowserController implements IBrowserController {
   async evaluate(expression: string): Promise<unknown> {
     // executeJavaScript runs in the page's main world and is not blocked by CSP.
     return this.wc.executeJavaScript(expression, true);
+  }
+
+  async snapshot(): Promise<PageSnapshot> {
+    return (await this.wc.executeJavaScript(SNAPSHOT_JS, true)) as PageSnapshot;
+  }
+
+  async waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }> {
+    const timeout = opts.timeoutMs ?? 10_000;
+    const start = Date.now();
+    const check = opts.selector
+      ? `!!document.querySelector(${JSON.stringify(opts.selector)})`
+      : opts.text
+        ? `!!document.body && document.body.innerText.includes(${JSON.stringify(opts.text)})`
+        : null;
+    if (!check) throw new Error("waitFor needs a selector or text");
+    while (Date.now() - start < timeout) {
+      try {
+        if (await this.wc.executeJavaScript(`(${check})`, true)) return { ok: true, waitedMs: Date.now() - start };
+      } catch {
+        /* page mid-navigation; retry */
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return { ok: false, waitedMs: Date.now() - start };
   }
 
   async waitForNetworkIdle(idleMs = 500, timeoutMs = 10_000): Promise<void> {

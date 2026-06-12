@@ -480,6 +480,16 @@ async function runSelfTest() {
   const appScopeOk = scoped.entries.length > 0 && scoped.entries.every((e) => e.target === activeId);
   console.log(`SELFTEST app-scope: app=${activeId} entries=${scoped.entries.length} allTagged=${appScopeOk}`);
 
+  // 8d) browser_snapshot + browser_wait_for (+ a repro 'wait' step).
+  await manager.navigate("data:text/html,<h1>snap</h1><label for=q>Find</label><input id=q><button id=b aria-label='Tap'>x</button>");
+  const waitRes = JSON.parse((await handleTool("browser_wait_for", { selector: "#b", timeoutMs: 3000 })).content[0]!.text as string) as { ok: boolean };
+  const snap = JSON.parse((await handleTool("browser_snapshot")).content[0]!.text as string) as { nodes: { ref: string; role: string; name: string }[] };
+  const hasBtn = snap.nodes.some((n) => n.ref === "#b" && n.role === "button" && n.name === "Tap");
+  const hasInput = snap.nodes.some((n) => n.ref === "#q" && n.role === "textbox" && n.name === "Find");
+  const reproWait = JSON.parse((await handleTool("repro", { action: { kind: "wait", selector: "#b", timeoutMs: 3000 }, waitFor: "settle", settleMs: 200 })).content[0]!.text as string) as { stepCount: number };
+  const snapshotOk = waitRes.ok && hasBtn && hasInput && reproWait.stepCount === 1;
+  console.log(`SELFTEST snapshot: nodes=${snap.nodes.length} waitOk=${waitRes.ok} btn=${hasBtn} input=${hasInput} reproWait=${reproWait.stepCount} ok=${snapshotOk}`);
+
   // 9) network body: fetch the cockpit's own HTTP server for a 404 (subresource → reliable body).
   await manager.navigate(
     `data:text/html,<script>fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`,
@@ -550,7 +560,8 @@ async function runSelfTest() {
     robustOk &&
     failOk &&
     shotOk &&
-    appScopeOk;
+    appScopeOk &&
+    snapshotOk;
   console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").
