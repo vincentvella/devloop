@@ -593,32 +593,40 @@ async function runSelfTest() {
   const shotOk = typeof shotImg === "string" && shotImg.startsWith("data:image/png");
   console.log(`SELFTEST screenshot: present=${!!shotEntry} ok=${shotOk}`);
 
-  const ok =
-    api === "object" &&
-    mcpReproOk &&
-    got &&
-    inTool &&
-    rendererSees.includes("selftest-proj") &&
-    paneList.panes.length >= 2 &&
-    taggedRight &&
-    popOk &&
-    redockOk &&
-    builderOk &&
-    nameOk &&
-    persistOk &&
-    perPaneOk &&
-    bodyOk &&
-    recovered &&
-    robustOk &&
-    failOk &&
-    shotOk &&
-    appScopeOk &&
-    snapshotOk &&
-    ixOk &&
-    pickOk &&
-    harOk &&
-    clearOk;
-  console.log(ok ? "SELFTEST OK" : "SELFTEST FAIL");
+  const checks: [string, boolean][] = [
+    ["renderer api present", api === "object"],
+    ["mcp-over-http repro", mcpReproOk],
+    ["renderer→buffer flow", got],
+    ["in-process tool call", inTool],
+    ["registry visible to renderer", rendererSees.includes("selftest-proj")],
+    ["multiple panes", paneList.panes.length >= 2],
+    ["per-pane event tagging", taggedRight],
+    ["pop-out", popOk],
+    ["re-dock", redockOk],
+    ["repro builder inline render", builderOk],
+    ["derived project name", nameOk],
+    ["pane persistence", persistOk],
+    ["per-pane dev server-log tagging", perPaneOk],
+    ["network response body", bodyOk],
+    ["self-heal after renderer crash", recovered],
+    ["robustness (close-all → dev action)", robustOk],
+    ["dev failed-state exit code", failOk],
+    ["screenshot → timeline", shotOk],
+    ["app-scoped get_logs", appScopeOk],
+    ["browser_snapshot + wait_for", snapshotOk],
+    ["interactions (select/press/hover)", ixOk],
+    ["element picker", pickOk],
+    ["HAR export", harOk],
+    ["clear storage", clearOk],
+  ];
+  for (const [name, c] of checks) console.log(`  ${c ? "✓" : "✗"} ${name}`);
+  const failed = checks.filter(([, c]) => !c).map(([n]) => n);
+  if (failed.length) {
+    console.log(`SELFTEST FAIL (${failed.length}): ${failed.join(", ")}`);
+    app.exit(1); // non-zero so CI gates on it
+    return;
+  }
+  console.log("SELFTEST OK");
   // Exit via the real user path — close the control window with panes still open.
   // This exercises pane-close → onChange teardown (regression: "Object has been destroyed").
   shellWin!.close();

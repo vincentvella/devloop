@@ -1,0 +1,7 @@
+{
+  "name": "devloop-fixture",
+  "private": true,
+  "scripts": {
+    "dev": "bun run server.ts"
+  }
+}
