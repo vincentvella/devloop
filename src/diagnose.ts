@@ -1,0 +1,86 @@
+/**
+ * "What's broken right now" — group/dedupe error entries and collect network
+ * failures from the buffer, with an agent-readable summary. Pure over LogEntry[].
+ */
+import type { LogEntry } from "./logBuffer.ts";
+import type { NetDetail } from "./har.ts";
+
+export interface ErrorGroup {
+  source: string;
+  stream: string;
+  sample: string; // first raw line of the group
+  count: number;
+  firstTs: number;
+  lastTs: number;
+  targets: string[];
+}
+
+export interface NetFailure {
+  method?: string;
+  url: string;
+  status?: number;
+  failure?: string;
+  count: number;
+}
+
+export interface DiagnoseResult {
+  windowMs: number | null;
+  errorCount: number;
+  groups: ErrorGroup[];
+  network: NetFailure[];
+  summary: string;
+}
+
+const isServerError = (e: LogEntry) => e.source === "server" && /error|exception|traceback|unhandled|fatal|\bpanic\b/i.test(e.line);
+const isConsoleError = (e: LogEntry) => e.source === "browser" && e.stream === "console" && /\[error\]/i.test(e.line);
+const isPageError = (e: LogEntry) => e.stream === "pageerror";
+const isNetFailure = (e: LogEntry) => {
+  if (e.stream !== "network") return false;
+  const d = e.detail as NetDetail | undefined;
+  return !!d && (!!d.failure || d.status === undefined || (d.status ?? 0) >= 400);
+};
+
+const signature = (e: LogEntry) => `${e.source}:${e.stream}:${e.line.replace(/\d+/g, "#").replace(/\s+/g, " ").trim().slice(0, 200)}`;
+
+export function diagnose(entries: LogEntry[], opts: { windowMs?: number | null; now?: number } = {}): DiagnoseResult {
+  const windowMs = opts.windowMs ?? null;
+  const now = opts.now ?? Date.now();
+  const considered = windowMs == null ? entries : entries.filter((e) => now - e.ts <= windowMs);
+
+  const groups = new Map<string, ErrorGroup>();
+  const network = new Map<string, NetFailure>();
+  let errorCount = 0;
+
+  for (const e of considered) {
+    if (isNetFailure(e)) {
+      errorCount++;
+      const d = e.detail as NetDetail;
+      const key = `${d.method ?? ""} ${d.url} ${d.status ?? d.failure ?? ""}`;
+      const g = network.get(key) ?? { method: d.method, url: d.url, status: d.status, failure: d.failure, count: 0 };
+      g.count++;
+      network.set(key, g);
+    } else if (isPageError(e) || isConsoleError(e) || isServerError(e)) {
+      errorCount++;
+      const sig = signature(e);
+      const g = groups.get(sig) ?? { source: e.source, stream: e.stream, sample: e.line, count: 0, firstTs: e.ts, lastTs: e.ts, targets: [] };
+      g.count++;
+      g.firstTs = Math.min(g.firstTs, e.ts);
+      g.lastTs = Math.max(g.lastTs, e.ts);
+      if (e.target && !g.targets.includes(e.target)) g.targets.push(e.target);
+      groups.set(sig, g);
+    }
+  }
+
+  const groupList = [...groups.values()].sort((a, b) => b.count - a.count);
+  const netList = [...network.values()].sort((a, b) => b.count - a.count);
+  const summary =
+    errorCount === 0
+      ? "no errors detected"
+      : `${errorCount} error${errorCount > 1 ? "s" : ""}${windowMs ? ` in the last ${Math.round(windowMs / 1000)}s` : ""}: ` +
+        [
+          ...groupList.slice(0, 3).map((g) => `${g.count}× ${g.sample.slice(0, 80)}`),
+          ...netList.slice(0, 3).map((n) => `${n.count}× ${n.status ?? n.failure} ${n.method ?? ""} ${n.url}`),
+        ].join("; ");
+
+  return { windowMs, errorCount, groups: groupList, network: netList, summary };
+}

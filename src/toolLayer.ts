@@ -13,6 +13,7 @@ import { detectDevCommand, type DevServerLike } from "./devServer.ts";
 import { listProjects, addProject, removeProject, getProject } from "./registry.ts";
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
 import { toHar } from "./har.ts";
+import { diagnose } from "./diagnose.ts";
 
 export interface ToolDeps {
   buffer: LogBuffer;
@@ -192,6 +193,18 @@ export const TOOLS: Tool[] = [
     name: "clear_logs",
     description: "Clear the event buffer. Call before reproducing an issue for a clean window.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "diagnose",
+    description:
+      "Triage what's broken right now: groups repeated errors (browser console/page errors + server errors) with counts, lists failed/4xx-5xx network requests, and returns a one-line summary. Optionally limit to the last `windowMs` and/or one `app`. Start here before digging through get_logs.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        windowMs: { type: "number", description: "Only consider events from the last N ms (default: all)." },
+        app: { type: "string", description: "Scope to one app/project (pane label or id)." },
+      },
+    },
   },
   {
     name: "export_har",
@@ -542,6 +555,11 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       const targets = resolveTargets(args.app as string | undefined);
       const entries = buffer.query({ stream: "network", targets, limit: 5000 });
       return json(toHar(entries));
+    }
+    case "diagnose": {
+      const targets = resolveTargets(args.app as string | undefined);
+      const entries = buffer.query({ targets, limit: 5000 });
+      return json(diagnose(entries, { windowMs: args.windowMs as number | undefined }));
     }
     case "dev_start": {
       const proj = args.project ? getProject(args.project as string) : undefined;

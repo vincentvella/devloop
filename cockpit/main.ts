@@ -568,6 +568,18 @@ async function runSelfTest() {
   const emulateOk = emuOk && thOff === "fail" && thOn === "ok";
   console.log(`SELFTEST emulate/throttle: vp=${ew}→${ew2} offline=${thOff} none=${thOn} ok=${emulateOk}`);
 
+  // 9e) diagnose: group duplicate errors + collect network failures.
+  await handleTool("clear_logs", {});
+  await manager.navigate(`data:text/html,<script>console.error('[boom] beta');console.error('[boom] beta');fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`);
+  await new Promise((r) => setTimeout(r, 700));
+  const diag = JSON.parse((await handleTool("diagnose", {})).content[0]!.text as string) as {
+    errorCount: number;
+    groups: { count: number }[];
+    network: { status?: number }[];
+  };
+  const diagnoseOk = diag.errorCount >= 2 && diag.groups.some((g) => g.count >= 2) && diag.network.some((n) => n.status === 404);
+  console.log(`SELFTEST diagnose: errors=${diag.errorCount} dupGroup=${diag.groups.some((g) => g.count >= 2)} net404=${diag.network.some((n) => n.status === 404)} ok=${diagnoseOk}`);
+
   // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
   manager.__crashActive();
   await new Promise((r) => setTimeout(r, 1500));
@@ -633,6 +645,7 @@ async function runSelfTest() {
     ["HAR export", harOk],
     ["clear storage", clearOk],
     ["device emulation + throttle", emulateOk],
+    ["diagnose (group + network)", diagnoseOk],
   ];
   for (const [name, c] of checks) console.log(`  ${c ? "✓" : "✗"} ${name}`);
   const failed = checks.filter(([, c]) => !c).map(([n]) => n);

@@ -93,6 +93,16 @@ await callText("browser_emulate", { reset: true });
 const vp2 = JSON.parse((await J("browser_eval", { expression: "JSON.stringify({w:innerWidth})" })).value);
 check("emulate reset → wide viewport", vp2.w >= 1000);
 
+// --- diagnose (group/dedupe errors) ---
+console.log("\n# diagnose");
+await callText("clear_logs");
+await callText("browser_navigate", { url: "data:text/html,<script>console.error('[boom] alpha');console.error('[boom] alpha');setTimeout(()=>{throw new Error('DiagErr')},5)</script>" });
+await sleep(300);
+const diag = await J("diagnose", {});
+check("diagnose counts errors", diag.errorCount >= 2);
+check("diagnose groups duplicates", diag.groups.some((g: any) => g.count >= 2));
+check("diagnose summary mentions errors", /error/i.test(diag.summary));
+
 // --- repro sequence + abort ---
 console.log("\n# repro sequence + abort");
 const formPage = `data:text/html,<input id=name><button id=go onclick="console.log('typed:'+document.getElementById('name').value)">go</button>`;
