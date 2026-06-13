@@ -4,8 +4,16 @@
  * the MCP tool layer is agnostic to which one is behind it.
  */
 import type { PageSnapshot } from "./pageSnapshot.ts";
+import type { TargetKind } from "./target.ts";
 
-export interface IBrowserController {
+/**
+ * The contract every target substrate implements: a web page (Puppeteer/Chrome
+ * or Electron webContents) today, a React Native app (simulator) soon. The tool
+ * layer is agnostic to which is behind it and gates tools on `kind`'s capabilities.
+ */
+export interface ITargetController {
+  /** Which kind of target this is — drives capability gating in the tool layer. */
+  readonly kind: TargetKind;
   start(): Promise<void>;
   navigate(url: string): Promise<{ url: string; status: number | null }>;
   screenshot(fullPage?: boolean): Promise<{ base64: string; mimeType: string }>;
@@ -31,6 +39,9 @@ export interface IBrowserController {
   close(): Promise<void>;
 }
 
+/** @deprecated Web-centric alias; prefer ITargetController. Kept so existing imports compile. */
+export type IBrowserController = ITargetController;
+
 export interface PaneInfo {
   id: string;
   url: string;
@@ -50,7 +61,7 @@ export interface PaneInfo {
  * delegates the IBrowserController methods to the active one. The cockpit
  * implements this; the stdio (Puppeteer) controller is effectively single-pane.
  */
-export interface IBrowserManager extends IBrowserController {
+export interface IBrowserManager extends ITargetController {
   listPanes(): PaneInfo[];
   newPane(url?: string): Promise<PaneInfo>;
   selectPane(id: string): PaneInfo;

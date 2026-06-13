@@ -12,6 +12,7 @@ import { type LogBuffer, type LogSource } from "./logBuffer.ts";
 import { detectDevCommand, type DevServerLike } from "./devServer.ts";
 import { listProjects, addProject, removeProject, getProject } from "./registry.ts";
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
+import { isToolSupported, unsupportedToolMessage } from "./target.ts";
 import { toHar } from "./har.ts";
 import { diagnose } from "./diagnose.ts";
 import { buildBundle } from "./bundle.ts";
@@ -475,6 +476,12 @@ function resolveTargets(app: string | undefined): string[] | undefined {
 
 export async function handleTool(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
   const { buffer, browser, devServer } = deps;
+  // Gate browser_* tools on the active target's capabilities (e.g. a React Native
+  // target supports eval+screenshot but not snapshot/click yet) so an agent gets a
+  // clear message instead of a substrate error. Agnostic tools pass through.
+  if (!isToolSupported(browser.kind, name)) {
+    return { ...json({ error: unsupportedToolMessage(browser.kind, name), kind: browser.kind }), isError: true };
+  }
   switch (name) {
     case "browser_navigate":
       return json(await browser.navigate(args.url as string));

@@ -38,6 +38,7 @@ export interface BrowserOptions {
 }
 
 export class PuppeteerBrowserController implements IBrowserController {
+  readonly kind = "web" as const;
   private browser?: Browser;
   private page?: Page;
   private cdp?: CDPSession;

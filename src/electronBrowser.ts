@@ -36,6 +36,7 @@ interface RemoteObject {
 }
 
 export class ElectronBrowserController implements IBrowserController {
+  readonly kind = "web" as const;
   private inflight = 0;
   private lastActivity = 0;
   private lastDocStatus: number | null = null;

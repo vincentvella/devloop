@@ -12,6 +12,7 @@
 import { BrowserWindow, WebContentsView } from "electron";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import type { IBrowserManager, PaneInfo } from "../src/browserController.ts";
+import type { TargetKind } from "../src/target.ts";
 import { getPanes, setPanes } from "../src/registry.ts";
 import { DevServer, detectDevCommand, type DevStatus } from "../src/devServer.ts";
 
@@ -51,6 +52,13 @@ export class BrowserManager implements IBrowserManager {
   private restoring = false;
   private overlay = false; // when true, the active view is detached so a DOM overlay can show on top
   onChange?: () => void;
+
+  /** Target kind of the active pane (drives tool-layer capability gating). All
+   * panes are web today; becomes meaningful once RN panes land (Phase 1 item 11). */
+  get kind(): TargetKind {
+    const p = this.activeId ? this.panes.get(this.activeId) : undefined;
+    return p?.ctl.kind ?? "web";
+  }
 
   /** Detach/re-attach the active pane view so renderer DOM (e.g. a lightbox) can cover the area. */
   setOverlay(on: boolean): void {
