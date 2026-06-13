@@ -32,6 +32,8 @@ export interface ReactNativeOptions {
   captureScreenshot?: () => Promise<{ base64: string; mimeType: string }>;
   /** Override fetch (tests/harness). */
   fetchImpl?: typeof fetch;
+  /** Per-CDP-command timeout — guards against a stale/dead target wedging a call. Default 8s. */
+  sendTimeoutMs?: number;
 }
 
 const unsupported = (op: string): never => {
@@ -158,7 +160,16 @@ export class ReactNativeController implements IBrowserController {
       const ws = this.ws;
       if (!ws || ws.readyState !== WebSocket.OPEN) return resolve(undefined);
       const id = ++this.msgId;
-      this.pending.set(id, resolve);
+      // Time out rather than hang forever if we attached to a stale/dead target
+      // (seen live: a leftover target from before a reload accepts the socket but
+      // never answers). Resolves undefined so callers degrade instead of wedging.
+      const timer = setTimeout(() => {
+        if (this.pending.delete(id)) resolve(undefined);
+      }, this.opts.sendTimeoutMs ?? 8000);
+      this.pending.set(id, (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      });
       ws.send(JSON.stringify({ id, method, params }));
     });
   }

@@ -68,6 +68,13 @@ if (resolved?.length) console.log(`    resolved top frame → ${resolved[0]?.sou
 const shot = await rn.screenshot();
 check("screenshot captured (PNG base64)", shot.base64.length > 1000 && shot.mimeType === "image/png");
 
+// Clean up: our bundle-error trigger raises an on-device LogBox overlay. Dismiss
+// it so the harness doesn't leave a red screen on the app.
+await rn.evaluate(
+  "(()=>{try{const m=require('react-native/Libraries/LogBox/Data/LogBoxData');(m.clear||m.default.clear)();return 'cleared';}catch(e){return String(e);}})()",
+);
+await sleep(300);
+
 await rn.close();
 console.log(fails.length ? `\nRN-HARNESS FAIL (${fails.length}): ${fails.join(", ")}` : "\nRN-HARNESS OK (all checks passed)");
 process.exit(fails.length ? 1 : 0);
