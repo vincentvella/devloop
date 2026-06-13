@@ -5,7 +5,7 @@
  * return a correlated cross-source slice of the timeline.
  */
 
-export type LogSource = "server" | "browser";
+export type LogSource = "server" | "browser" | "native";
 
 export interface LogEntry {
   seq: number;

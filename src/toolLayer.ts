@@ -160,7 +160,7 @@ export const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        source: { type: "string", enum: ["server", "browser"] },
+        source: { type: "string", enum: ["server", "browser", "native"] },
         stream: { type: "string", description: "e.g. stdout, stderr, console, network, pageerror" },
         grep: { type: "string", description: "Case-insensitive regex (or substring if invalid)." },
         app: {
@@ -185,7 +185,7 @@ export const TOOLS: Tool[] = [
       properties: {
         ts: { type: "number", description: "Center timestamp (ms since epoch)." },
         windowMs: { type: "number", description: "Half-window in ms (default 500)." },
-        source: { type: "string", enum: ["server", "browser"], description: "Optional: limit to one side." },
+        source: { type: "string", enum: ["server", "browser", "native"], description: "Optional: limit to one side." },
         app: { type: "string", description: "Optional: scope to one app/project (pane label or id; see pane_list)." },
       },
       required: ["ts"],
@@ -675,6 +675,7 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
         (e) =>
           ERROR_STREAMS.has(e.stream) ||
           (e.stream === "console" && /\[error\]/.test(e.line)) ||
+          (e.source === "native" && (e.stream === "error" || e.stream === "fault")) ||
           (e.source === "server" && /error|exception|traceback|unhandled/i.test(e.line)),
       );
       const byStream: Record<string, number> = {};

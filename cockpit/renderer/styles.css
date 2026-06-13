@@ -474,6 +474,9 @@
   .logrow.browser .tag {
     color: var(--color-accent);
   }
+  .logrow.native .tag {
+    color: var(--color-ok);
+  }
   .logrow.repro {
     color: #7ee787;
     border-left-color: #2ea043;

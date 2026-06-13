@@ -8,14 +8,13 @@
  *
  * Named ✓/✗ checks with a real exit code, same style as test-smoke.ts.
  */
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { LogBuffer } from "../src/logBuffer.ts";
 import { ReactNativeController } from "../src/reactNativeController.ts";
+import { NativeLogStream, captureSimctlScreenshot } from "../src/iosSimulator.ts";
 
 const metroBase = process.argv[2] ?? "http://localhost:8082";
+const appMatch = process.argv[3] ?? "Caliburr"; // native log scoping (process name)
+const device = "booted";
 const fails: string[] = [];
 const check = (name: string, cond: boolean) => {
   console.log(`${cond ? "  ✓" : "  ✗"} ${name}`);
@@ -23,16 +22,14 @@ const check = (name: string, cond: boolean) => {
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const captureScreenshot = async () => {
-  const p = join(tmpdir(), `devloop-rn-shot-${process.pid}.png`);
-  execFileSync("xcrun", ["simctl", "io", "booted", "screenshot", p]);
-  return { base64: readFileSync(p).toString("base64"), mimeType: "image/png" };
-};
-
 const buffer = new LogBuffer(5000);
-const rn = new ReactNativeController(buffer, { metroBase, captureScreenshot });
+const rn = new ReactNativeController(buffer, { metroBase, captureScreenshot: () => captureSimctlScreenshot(device) });
 
-console.log(`# attaching to ${metroBase}`);
+// Native device logs (simctl), scoped to the app — runs alongside the JS console.
+const nativeLogs = new NativeLogStream(buffer, { device, match: appMatch });
+nativeLogs.start();
+
+console.log(`# attaching to ${metroBase} (native logs scoped to "${appMatch}")`);
 await rn.start();
 await sleep(500);
 check("attached to Hermes over CDP", buffer.query({}).some((e) => e.line.includes("attached to React Native")));
@@ -67,6 +64,13 @@ if (resolved?.length) console.log(`    resolved top frame → ${resolved[0]?.sou
 // screenshot via simctl
 const shot = await rn.screenshot();
 check("screenshot captured (PNG base64)", shot.base64.length > 1000 && shot.mimeType === "image/png");
+
+// native device logs (simctl) on the same timeline
+await sleep(2500);
+const nativeCount = buffer.query({ source: "native" }).length;
+check("native device logs captured (simctl)", nativeCount > 0);
+console.log(`    native entries: ${nativeCount}`);
+nativeLogs.stop();
 
 // Clean up: our bundle-error trigger raises an on-device LogBox overlay. Dismiss
 // it so the harness doesn't leave a red screen on the app.

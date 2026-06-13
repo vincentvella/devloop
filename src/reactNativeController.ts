@@ -48,7 +48,10 @@ export class ReactNativeController implements IBrowserController {
   private readonly pending = new Map<number, (result: unknown) => void>();
   private url = "";
   private closed = false;
+  private connecting = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
+  /** ws URLs that accepted a socket but never answered — stale targets to skip. */
+  private readonly deadTargets = new Set<string>();
 
   constructor(
     private readonly buffer: LogBuffer,
@@ -71,23 +74,41 @@ export class ReactNativeController implements IBrowserController {
     try {
       const res = await this.fetch(inspectorListUrl(this.opts.metroBase));
       const list = (await res.json()) as InspectorTarget[];
-      return selectHermesTarget(list);
+      // Skip targets we've already found unresponsive (stale leftovers from a reload).
+      return selectHermesTarget(list.filter((t) => !t.webSocketDebuggerUrl || !this.deadTargets.has(t.webSocketDebuggerUrl)));
     } catch {
       return null;
     }
   }
 
-  /** Find the Hermes target (polling, since the app may still be loading) and attach. */
+  /**
+   * Find a LIVE Hermes target and attach. Polls (the app may still be loading)
+   * and verifies liveness with a ping — Metro can list a stale target left over
+   * from before a reload that accepts the socket but never answers; we mark those
+   * dead and move on rather than attaching to a zombie.
+   */
   private async connect(): Promise<void> {
-    for (let i = 0; i < 30 && !this.closed; i++) {
-      const target = await this.discover();
-      if (target?.webSocketDebuggerUrl) {
-        await this.attach(target.webSocketDebuggerUrl);
-        return;
+    if (this.connecting) return;
+    this.connecting = true;
+    try {
+      for (let i = 0; i < 30 && !this.closed; i++) {
+        const target = await this.discover();
+        const wsUrl = target?.webSocketDebuggerUrl;
+        if (wsUrl) {
+          await this.attach(wsUrl);
+          if (await this.ping()) {
+            this.buffer.push("browser", "console", "[devloop] attached to React Native (Hermes) over CDP");
+            return;
+          }
+          this.deadTargets.add(wsUrl); // zombie — skip it next time
+          this.closeWs();
+        }
+        await new Promise((r) => setTimeout(r, 1000));
       }
-      await new Promise((r) => setTimeout(r, 1000));
+      if (!this.closed) this.buffer.push("browser", "console", "[devloop] no live React Native (Hermes) target found via Metro");
+    } finally {
+      this.connecting = false;
     }
-    if (!this.closed) this.buffer.push("browser", "console", "[devloop] no React Native (Hermes) target found via Metro");
   }
 
   private attach(wsUrl: string): Promise<void> {
@@ -97,7 +118,6 @@ export class ReactNativeController implements IBrowserController {
       ws.addEventListener("open", () => {
         this.send("Runtime.enable");
         this.send("Log.enable").catch(() => {});
-        this.buffer.push("browser", "console", "[devloop] attached to React Native (Hermes) over CDP");
         resolve();
       });
       ws.addEventListener("message", (ev) => this.onMessage(typeof ev.data === "string" ? ev.data : ""));
@@ -105,7 +125,29 @@ export class ReactNativeController implements IBrowserController {
       ws.addEventListener("error", () => {
         /* close fires next; reconnect there */
       });
+      // Resolve even if it never opens, so connect()'s ping can judge it.
+      setTimeout(resolve, 3000);
     });
+  }
+
+  /** A quick round-trip to confirm the attached target's JS context is alive. */
+  private async ping(): Promise<boolean> {
+    const r = (await this.send("Runtime.evaluate", { expression: "true", returnByValue: true }, 2500)) as
+      | { result?: { value?: unknown } }
+      | undefined;
+    return r?.result?.value === true;
+  }
+
+  private closeWs(): void {
+    const ws = this.ws;
+    this.ws = undefined;
+    for (const resolve of this.pending.values()) resolve(undefined);
+    this.pending.clear();
+    try {
+      ws?.close();
+    } catch {
+      /* ignore */
+    }
   }
 
   /** On reload/disconnect the target id changes — re-discover and re-attach. */
@@ -113,7 +155,7 @@ export class ReactNativeController implements IBrowserController {
     this.ws = undefined;
     for (const resolve of this.pending.values()) resolve(undefined);
     this.pending.clear();
-    if (this.closed) return;
+    if (this.closed || this.connecting) return; // the connect() loop owns reconnection
     this.reconnectTimer = setTimeout(() => void this.connect(), 1000);
   }
 
@@ -155,7 +197,7 @@ export class ReactNativeController implements IBrowserController {
     if (stack) void attachResolvedStack(entry, stack);
   }
 
-  private send(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  private send(method: string, params: Record<string, unknown> = {}, timeoutMs?: number): Promise<unknown> {
     return new Promise((resolve) => {
       const ws = this.ws;
       if (!ws || ws.readyState !== WebSocket.OPEN) return resolve(undefined);
@@ -165,7 +207,7 @@ export class ReactNativeController implements IBrowserController {
       // never answers). Resolves undefined so callers degrade instead of wedging.
       const timer = setTimeout(() => {
         if (this.pending.delete(id)) resolve(undefined);
-      }, this.opts.sendTimeoutMs ?? 8000);
+      }, timeoutMs ?? this.opts.sendTimeoutMs ?? 8000);
       this.pending.set(id, (result) => {
         clearTimeout(timer);
         resolve(result);

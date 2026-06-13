@@ -60,6 +60,7 @@ function isErr(e: Entry): boolean {
     e.stream === "pageerror" ||
     (e.stream === "network" && (!!e.detail?.failure || e.detail?.status === undefined || (e.detail?.status ?? 0) >= 400)) ||
     (e.stream === "console" && /\[error\]/.test(e.line)) ||
+    (e.source === "native" && (e.stream === "error" || e.stream === "fault")) ||
     (e.source === "server" && /error|exception|traceback|unhandled/i.test(e.line)) ||
     (e.source === "repro" && e.line.includes("✗"))
   );
@@ -81,6 +82,7 @@ const fmtTime = (ts: number) => {
 
 const CHIPS: { key: string; label: string; test: (e: Entry) => boolean }[] = [
   { key: "server", label: "server", test: (e) => e.source === "server" },
+  { key: "native", label: "native", test: (e) => e.source === "native" },
   { key: "console", label: "console", test: (e) => e.stream === "console" },
   { key: "network", label: "network", test: (e) => e.stream === "network" },
   { key: "errors", label: "errors", test: isErr },

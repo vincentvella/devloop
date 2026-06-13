@@ -17,7 +17,7 @@ export interface NetDetail {
 export interface Entry {
   seq: number;
   ts: number;
-  source: "server" | "browser" | "repro";
+  source: "server" | "browser" | "native" | "repro";
   stream: string;
   line: string;
   target?: string;
