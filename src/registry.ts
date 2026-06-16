@@ -110,6 +110,31 @@ export function setPanes(state: PanesState): void {
   writeFileSync(PANES_FILE, JSON.stringify(state, null, 2));
 }
 
+const FINGERPRINT_FILE = join(DIR, "fingerprints.json");
+
+/** Native build fingerprint (from @expo/fingerprint) recorded per project dir at
+ * last Devloop build, so we can detect when the installed binary is stale. */
+export function getProjectFingerprint(cwd: string): string | undefined {
+  try {
+    const map = JSON.parse(readFileSync(FINGERPRINT_FILE, "utf8")) as Record<string, string>;
+    return map[cwd];
+  } catch {
+    return undefined;
+  }
+}
+
+export function setProjectFingerprint(cwd: string, hash: string): void {
+  mkdirSync(DIR, { recursive: true });
+  let map: Record<string, string> = {};
+  try {
+    map = JSON.parse(readFileSync(FINGERPRINT_FILE, "utf8")) as Record<string, string>;
+  } catch {
+    /* first write */
+  }
+  map[cwd] = hash;
+  writeFileSync(FINGERPRINT_FILE, JSON.stringify(map, null, 2));
+}
+
 const EXT_FILE = join(DIR, "unpacked-extensions.json");
 
 /** Paths of unpacked extensions to reload on launch (store extensions persist themselves). */
