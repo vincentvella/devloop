@@ -12,6 +12,7 @@ import {
   Settings,
   Wrench,
   Puzzle,
+  Hammer,
   ExternalLink,
   PanelRightClose,
   PanelRightOpen,
@@ -175,6 +176,9 @@ function App() {
   const [chips, setChips] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
+  const [nativeInfo, setNativeInfo] = useState<{ isNative: boolean; platforms: string[]; badge: string | null } | null>(null);
+  const [buildPlatform, setBuildPlatform] = useState("ios");
+  const [building, setBuilding] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(460);
   const [dragging, setDragging] = useState(false);
@@ -275,6 +279,23 @@ function App() {
   useEffect(() => {
     void dl().overlay(lightbox !== null || wrenchOpen || settingsOpen);
   }, [lightbox, wrenchOpen, settingsOpen]);
+
+  // Probe whether the active pane's project is a native (Expo/RN) build target
+  // when the wrench opens — drives the build control + staleness badge.
+  useEffect(() => {
+    if (!wrenchOpen || !devCwd) return setNativeInfo(null);
+    let live = true;
+    void dl()
+      .nativeInfo(devCwd)
+      .then((info) => {
+        if (!live) return;
+        setNativeInfo(info);
+        if (info.platforms?.length && !info.platforms.includes(buildPlatform)) setBuildPlatform(info.platforms[0]!);
+      });
+    return () => {
+      live = false;
+    };
+  }, [wrenchOpen, devCwd]);
 
   const saveSession = useCallback(() => {
     void dl().sessionSave({ cmd: devCmd.trim(), cwd: devCwd.trim(), steps, project: selProject });
@@ -759,6 +780,32 @@ function App() {
                   onBlur={() => void applyDevConfig(devCmd, devCwd)}
                 />
               </div>
+              {nativeInfo?.isNative && (
+                <div className="row">
+                  <span className="field-label">build</span>
+                  <select value={buildPlatform} onChange={(e) => setBuildPlatform(e.target.value)} style={{ flex: "none", minWidth: 90 }}>
+                    {nativeInfo.platforms.map((p) => (
+                      <option key={p} value={p}>
+                        {p === "ios" ? "iOS" : p === "android" ? "Android" : p}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="labeled btn-primary"
+                    disabled={building}
+                    title={`build + launch a ${buildPlatform} dev build (output streams to the timeline)`}
+                    onClick={() => {
+                      setBuilding(true);
+                      void dl()
+                        .nativeBuild(devCwd, buildPlatform)
+                        .finally(() => setBuilding(false));
+                    }}
+                  >
+                    <Hammer size={13} /> {building ? "building…" : "Build"}
+                  </button>
+                  {nativeInfo.badge && <span className="build-badge">⚠ {nativeInfo.badge}</span>}
+                </div>
+              )}
             </div>
           </Dialog.Content>
         </Dialog.Portal>

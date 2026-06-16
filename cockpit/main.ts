@@ -20,7 +20,7 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, session } from "electron";
 import { createServer, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { installExtension, uninstallExtension, loadAllExtensions, installChromeWebStore } from "electron-chrome-web-store";
@@ -44,8 +44,11 @@ import {
 import { LogBuffer } from "../src/logBuffer.ts";
 import { projectName, type DevServerLike } from "../src/devServer.ts";
 import { TOOLS, handleTool, configureTools } from "../src/toolLayer.ts";
-import { listProjects, addProject, getProject, getSession, setSession, getPanes } from "../src/registry.ts";
+import { listProjects, addProject, getProject, getSession, setSession, getPanes, getProjectFingerprint } from "../src/registry.ts";
 import { bundleToHtml } from "../src/bundle.ts";
+import { detectTargetKind } from "../src/target.ts";
+import { resolveNativeInfo, type Platform } from "../src/nativeBuild.ts";
+import { runNativeBuild, computeFingerprint } from "../src/nativeBuildRunner.ts";
 import { BrowserManager } from "./browserManager.ts";
 import { initAutoUpdate, type Updater } from "./updater.ts";
 
@@ -194,6 +197,12 @@ function wireIpc(): void {
   ipcMain.handle("devloop:navigate", (_e, url: string) => manager.navigate(url));
   ipcMain.handle("devloop:checkForUpdates", () => updater?.check(true));
   ipcMain.handle("devloop:openExtensions", () => openExtensionsWindow());
+  ipcMain.handle("devloop:nativeInfo", (_e, cwd: string) => nativeInfo(cwd));
+  ipcMain.handle("devloop:nativeBuild", (_e, cwd: string, platform: Platform) => {
+    if (!cwd || !platform) return { started: false };
+    runNativeBuild({ buffer, projectRoot: cwd, platform }); // streams to the timeline; fingerprint recorded on success
+    return { started: true };
+  });
 
   // Per-pane dev lifecycle (top-bar controls act on the active pane).
   ipcMain.handle("devloop:devStatus", () => manager.devStatus());
@@ -403,6 +412,27 @@ async function initExtensions(): Promise<void> {
       log(`extensions: unpacked reload failed (${dir}): ${e}`);
     }
   }
+}
+
+/**
+ * Probe a project dir for native-build info (is it Expo/RN, which platforms,
+ * is the installed binary stale). Composes the pure resolveNativeInfo with fs +
+ * fingerprint reads. Fingerprint compute is ~1s; called when the wrench opens.
+ */
+async function nativeInfo(cwd: string) {
+  if (!cwd || !existsSync(cwd)) return { isNative: false, platforms: [], buildStatus: "unknown", badge: null };
+  let deps: Record<string, string> = {};
+  try {
+    const pkg = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"));
+    deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  } catch {
+    /* no package.json → web */
+  }
+  const probe = { hasIosDir: existsSync(join(cwd, "ios")), hasAndroidDir: existsSync(join(cwd, "android")) };
+  const kind = detectTargetKind({ dependencies: deps, ...probe });
+  if (kind !== "react-native") return { isNative: false, platforms: [], buildStatus: "unknown", badge: null };
+  const current = await computeFingerprint(cwd);
+  return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd));
 }
 
 // --- boot ------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { availablePlatforms, buildCommand, fingerprintStatus, buildStatusLabel } from "../src/nativeBuild.ts";
+import { availablePlatforms, buildCommand, fingerprintStatus, buildStatusLabel, resolveNativeInfo } from "../src/nativeBuild.ts";
 
 test("availablePlatforms reflects prebuilt native dirs, iOS first", () => {
   expect(availablePlatforms({ hasIosDir: true, hasAndroidDir: true })).toEqual(["ios", "android"]);
@@ -29,4 +29,21 @@ test("buildStatusLabel: badge text only when actionable", () => {
   expect(buildStatusLabel("stale")).toBe("rebuild recommended");
   expect(buildStatusLabel("unknown")).toBe("build status unknown");
   expect(buildStatusLabel("fresh")).toBeNull();
+});
+
+test("resolveNativeInfo: web projects are not native", () => {
+  expect(resolveNativeInfo("web", { hasIosDir: false })).toEqual({ isNative: false, platforms: [], buildStatus: "unknown", badge: null });
+});
+
+test("resolveNativeInfo: RN project offers platforms + staleness badge", () => {
+  const stale = resolveNativeInfo("react-native", { hasIosDir: true }, "now", "old");
+  expect(stale).toEqual({ isNative: true, platforms: ["ios"], buildStatus: "stale", badge: "rebuild recommended" });
+
+  const fresh = resolveNativeInfo("react-native", { hasIosDir: true, hasAndroidDir: true }, "h", "h");
+  expect(fresh.platforms).toEqual(["ios", "android"]);
+  expect(fresh.badge).toBeNull();
+});
+
+test("resolveNativeInfo: managed RN project (no native dirs) still offers iOS", () => {
+  expect(resolveNativeInfo("react-native", {}).platforms).toEqual(["ios"]);
 });

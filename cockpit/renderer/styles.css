@@ -620,6 +620,11 @@
     font-size: 12px;
     font-style: italic;
   }
+  .build-badge {
+    color: var(--color-warn);
+    font-size: 11px;
+    white-space: nowrap;
+  }
   .modal-title {
     display: flex;
     align-items: center;
