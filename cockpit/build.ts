@@ -13,6 +13,7 @@ const node = { target: "node", format: "cjs", external: ["electron"] } as const;
 const results = await Promise.all([
   Bun.build({ entrypoints: ["cockpit/main.ts"], outdir: "out", naming: "[name].cjs", ...node }),
   Bun.build({ entrypoints: ["cockpit/preload.ts"], outdir: "out", naming: "[name].cjs", ...node }),
+  Bun.build({ entrypoints: ["cockpit/simPreload.ts"], outdir: "out", naming: "[name].cjs", ...node }),
   Bun.build({ entrypoints: ["cockpit/renderer/main.tsx"], outdir: "out/renderer", target: "browser" }),
 ]);
 

@@ -178,7 +178,7 @@ function createWindows(): void {
   // One shell window: the renderer (toolbar + timeline) plus embedded pane views.
   shellWin = new BrowserWindow({
     width: 1280,
-    height: 820,
+    height: 940, // taller default so the tall simulator (phone aspect) has room in the pane
     show: !SELFTEST,
     title: "Devloop",
     icon: [join(BASE, "../assets/icon.png"), join(BASE, "assets/icon.png")].find(existsSync),
@@ -221,14 +221,14 @@ function wireIpc(): void {
   });
   // Simulator: a serve-sim child window overlaying the pane area (see simulatorWindow.ts).
   ipcMain.handle("devloop:openSimulator", async () => {
-    // serve-sim captures the booted sim → MJPEG stream; we show that stream as an
-    // <img> in a pane view (composites cleanly; no overlay window).
-    const streamUrl = await serveSim.ensure();
-    if (!streamUrl) {
-      log("simulator: serve-sim has no booted device stream (boot a simulator first)");
+    // serve-sim captures the booted sim; we load its interactive preview mode in a
+    // pane view (MJPEG <img> + input layer → composites + interactive; no overlay window).
+    const info = await serveSim.ensure();
+    if (!info) {
+      log("simulator: serve-sim has no booted device (boot a simulator first)");
       return { ok: false };
     }
-    await manager.setSimulatorActive(true, streamUrl);
+    await manager.setSimulatorActive(true, info);
     // Stream the native app's JS + native logs onto the timeline (scoped to its pane).
     const active = manager.listPanes().find((p) => p.active);
     const metroBase = metroBaseFromUrl(active?.url);
@@ -580,7 +580,7 @@ async function main() {
       actionTimeoutMs: Number(process.env.DEVLOOP_ACTION_TIMEOUT ?? 10_000),
     },
     SELFTEST,
-    { indexPath: join(BASE, "renderer/index.html"), preloadPath: join(BASE, "preload.cjs") },
+    { indexPath: join(BASE, "renderer/index.html"), preloadPath: join(BASE, "preload.cjs"), simPreloadPath: join(BASE, "simPreload.cjs") },
   );
   manager.attachTo(shellWin!);
   manager.onChange = () => {

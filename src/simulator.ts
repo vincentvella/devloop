@@ -73,6 +73,18 @@ export function streamUrlFromApi(api: { streamUrl?: string } | null | undefined)
   return api?.streamUrl && /^https?:\/\//.test(api.streamUrl) ? api.streamUrl : null;
 }
 
+export interface SimInfo {
+  /** Booted device UDID. */
+  device: string;
+  /** Device backend base URL (e.g. http://127.0.0.1:3100). */
+  url: string;
+}
+
+/** Device id + backend URL from serve-sim's /api — enough to trigger preview mode. */
+export function simInfoFromApi(api: { device?: string; url?: string } | null | undefined): SimInfo | null {
+  return api?.device && api?.url && /^https?:\/\//.test(api.url) ? { device: api.device, url: api.url } : null;
+}
+
 /** How to launch serve-sim (bun-first, per project convention). */
 export function serveSimSpawn(): { cmd: string; args: string[] } {
   return { cmd: "bunx", args: ["serve-sim", "--port", String(SERVE_SIM_PORT)] };

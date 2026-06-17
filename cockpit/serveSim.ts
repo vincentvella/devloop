@@ -4,15 +4,15 @@
  * /api) in an <img> inside a pane view, rather than loading serve-sim's full UI.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { serveSimSpawn, SERVE_SIM_URL, SERVE_SIM_API, streamUrlFromApi } from "../src/simulator.ts";
+import { serveSimSpawn, SERVE_SIM_URL, SERVE_SIM_API, simInfoFromApi, type SimInfo } from "../src/simulator.ts";
 
 export class ServeSim {
   private proc?: ChildProcess;
 
   constructor(private readonly log: (m: string) => void) {}
 
-  /** Ensure serve-sim is up, then return the booted device's MJPEG stream URL (or null). */
-  async ensure(): Promise<string | null> {
+  /** Ensure serve-sim is up, then return the booted device's {device, url} (or null). */
+  async ensure(): Promise<SimInfo | null> {
     if (!(await this.up())) {
       if (!this.proc || this.proc.killed) {
         const { cmd, args } = serveSimSpawn();
@@ -22,7 +22,7 @@ export class ServeSim {
       }
       for (let i = 0; i < 40 && !(await this.up()); i++) await new Promise((r) => setTimeout(r, 500));
     }
-    return this.streamUrl();
+    return this.info();
   }
 
   private async up(): Promise<boolean> {
@@ -33,10 +33,10 @@ export class ServeSim {
     }
   }
 
-  private async streamUrl(): Promise<string | null> {
+  private async info(): Promise<SimInfo | null> {
     try {
-      const api = (await (await fetch(SERVE_SIM_API, { signal: AbortSignal.timeout(3000) })).json()) as { streamUrl?: string };
-      return streamUrlFromApi(api);
+      const api = (await (await fetch(SERVE_SIM_API, { signal: AbortSignal.timeout(3000) })).json()) as { device?: string; url?: string };
+      return simInfoFromApi(api);
     } catch {
       return null;
     }

@@ -13,7 +13,7 @@ import { BrowserWindow, WebContentsView } from "electron";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import type { IBrowserManager, PaneInfo } from "../src/browserController.ts";
 import type { TargetKind } from "../src/target.ts";
-import { simulatorViewerHtml } from "../src/simulator.ts";
+import { SERVE_SIM_URL, type SimInfo } from "../src/simulator.ts";
 import { getPanes, setPanes } from "../src/registry.ts";
 import { DevServer, detectDevCommand, type DevStatus } from "../src/devServer.ts";
 
@@ -63,14 +63,22 @@ export class BrowserManager implements IBrowserManager {
    * in a WebContentsView; serve-sim's GPU canvas does not). It rides the same
    * bounds/overlay logic as the panes.
    */
-  async setSimulatorActive(on: boolean, streamUrl?: string): Promise<void> {
+  async setSimulatorActive(on: boolean, info?: SimInfo): Promise<void> {
     this.simulatorActive = on;
-    if (on) {
-      if (!this.simView) {
-        // Dedicated session — no extensions / web-store interception on the stream viewer.
-        this.simView = new WebContentsView({ webPreferences: { partition: "persist:devloop-sim", offscreen: this.offscreen } });
-      }
-      if (streamUrl) await this.simView.webContents.loadURL(simulatorViewerHtml(streamUrl));
+    if (on && info && !this.simView) {
+      // Dedicated session (no extensions/web-store). The preload nulls VideoDecoder
+      // (→ serve-sim's MJPEG <img>, which composites; avcc <canvas> does not) and
+      // sets __SIM_PREVIEW__ from these args (→ interactive preview, no chrome).
+      this.simView = new WebContentsView({
+        webPreferences: {
+          partition: "persist:devloop-sim",
+          offscreen: this.offscreen,
+          contextIsolation: false, // preload shares the page world to set serve-sim's globals
+          preload: this.popChrome.simPreloadPath,
+          additionalArguments: [`--sim-device=${info.device}`, `--sim-url=${info.url}`],
+        },
+      });
+      await this.simView.webContents.loadURL(SERVE_SIM_URL);
     }
     this.applyActive();
   }
@@ -92,8 +100,9 @@ export class BrowserManager implements IBrowserManager {
     private readonly buffer: LogBuffer,
     private readonly opts: ElectronBrowserOptions,
     private readonly offscreen: boolean,
-    /** Paths so a popped-out pane can load the same renderer (in `?pop=<id>` mode) as its chrome. */
-    private readonly popChrome: { indexPath: string; preloadPath: string },
+    /** Paths so a popped-out pane can load the same renderer (in `?pop=<id>` mode) as its chrome,
+     * plus the simulator-view preload (serve-sim preview/mjpeg shim). */
+    private readonly popChrome: { indexPath: string; preloadPath: string; simPreloadPath: string },
   ) {
     // Per-pane auto-navigate: when a pane's dev server logs a localhost URL, open it there.
     buffer.onPush((e) => {
