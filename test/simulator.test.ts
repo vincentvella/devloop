@@ -21,8 +21,9 @@ test("simulatorBounds clamps a zero/negative rect to a sane minimum", () => {
   expect(b.height).toBe(1);
 });
 
-test("serveSimSpawn launches bunx serve-sim on the expected port", () => {
+test("serveSimSpawn: bunx by default, npx fallback", () => {
   expect(serveSimSpawn()).toEqual({ cmd: "bunx", args: ["serve-sim", "--port", "3200"] });
+  expect(serveSimSpawn("npx")).toEqual({ cmd: "npx", args: ["-y", "serve-sim", "--port", "3200"] });
   expect(SERVE_SIM_URL).toBe("http://localhost:3200/");
 });
 

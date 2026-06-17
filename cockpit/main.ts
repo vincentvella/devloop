@@ -19,7 +19,9 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, session } from "electron";
 import { createServer, type IncomingMessage } from "node:http";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mergePath, parseShellPath } from "../src/shellPath.ts";
 import { existsSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -66,6 +68,28 @@ let manager: BrowserManager;
 let updater: Updater | undefined;
 const serveSim = new ServeSim(log);
 const observability = new NativeObservability(buffer, log);
+
+/**
+ * Import the login-shell PATH into a packaged GUI app. Launched from Finder/Dock,
+ * a macOS app gets a minimal PATH without bun/node/expo/Homebrew — so spawned dev
+ * tooling (serve-sim, expo, dev servers) wouldn't be found. Skipped in dev (run
+ * from a terminal, PATH already correct) and on Windows.
+ */
+function importShellPath(): void {
+  if (process.platform === "win32" || !app.isPackaged) return;
+  try {
+    const shell = process.env.SHELL || "/bin/zsh";
+    const marker = "__DEVLOOP_PATH__";
+    const out = execFileSync(shell, ["-lic", `printf '%s' '${marker}'; printf '%s' "$PATH"`], { encoding: "utf8", timeout: 4000 });
+    const got = parseShellPath(out, marker);
+    if (got) {
+      process.env.PATH = mergePath(process.env.PATH, got);
+      log(`imported login-shell PATH (${got.split(":").length} entries)`);
+    }
+  } catch (e) {
+    log(`shell PATH import failed: ${(e as Error).message}`);
+  }
+}
 
 /** Best-effort native-log process match from a project's Expo config. */
 function appMatchFor(cwd: string): string {
@@ -558,6 +582,7 @@ async function main() {
     }, 30_000);
   }
   app.setName("Devloop");
+  importShellPath(); // before any spawn (dev servers, serve-sim) so bun/node/expo are found
   log("waiting for app ready…");
   await app.whenReady();
   // Dock/taskbar icon in dev (packaged builds get it from electron-builder).

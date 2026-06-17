@@ -85,7 +85,9 @@ export function simInfoFromApi(api: { device?: string; url?: string } | null | u
   return api?.device && api?.url && /^https?:\/\//.test(api.url) ? { device: api.device, url: api.url } : null;
 }
 
-/** How to launch serve-sim (bun-first, per project convention). */
-export function serveSimSpawn(): { cmd: string; args: string[] } {
-  return { cmd: "bunx", args: ["serve-sim", "--port", String(SERVE_SIM_PORT)] };
+/** How to launch serve-sim. Prefers bun (`bunx`), falls back to `npx` for node-only setups. */
+export function serveSimSpawn(runner: "bunx" | "npx" = "bunx"): { cmd: string; args: string[] } {
+  return runner === "npx"
+    ? { cmd: "npx", args: ["-y", "serve-sim", "--port", String(SERVE_SIM_PORT)] }
+    : { cmd: "bunx", args: ["serve-sim", "--port", String(SERVE_SIM_PORT)] };
 }

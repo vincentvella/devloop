@@ -3,7 +3,7 @@
  * Simulator and serves its MJPEG stream. We consume its raw stream URL (from
  * /api) in an <img> inside a pane view, rather than loading serve-sim's full UI.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { serveSimSpawn, SERVE_SIM_URL, SERVE_SIM_API, simInfoFromApi, type SimInfo } from "../src/simulator.ts";
 
 export class ServeSim {
@@ -15,14 +15,35 @@ export class ServeSim {
   async ensure(): Promise<SimInfo | null> {
     if (!(await this.up())) {
       if (!this.proc || this.proc.killed) {
-        const { cmd, args } = serveSimSpawn();
+        const runner = this.pickRunner();
+        if (!runner) {
+          this.log("serve-sim: no bun or node found on PATH — can't start the simulator (install bun or node)");
+          return null;
+        }
+        const { cmd, args } = serveSimSpawn(runner);
         this.log(`serve-sim: starting (${cmd} ${args.join(" ")})`);
         this.proc = spawn(cmd, args, { stdio: "ignore" });
+        this.proc.on("error", (e) => this.log(`serve-sim: spawn failed (${e.message})`));
         this.proc.on("exit", (code) => this.log(`serve-sim: exited (${code})`));
       }
       for (let i = 0; i < 40 && !(await this.up()); i++) await new Promise((r) => setTimeout(r, 500));
     }
     return this.info();
+  }
+
+  /** Prefer bun (bunx); fall back to npx for node-only machines. null if neither. */
+  private pickRunner(): "bunx" | "npx" | null {
+    if (this.has("bunx") || this.has("bun")) return "bunx";
+    if (this.has("npx")) return "npx";
+    return null;
+  }
+  private has(cmd: string): boolean {
+    try {
+      execFileSync("/usr/bin/which", [cmd], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async up(): Promise<boolean> {
