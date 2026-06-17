@@ -88,6 +88,8 @@ export interface DevloopApi {
   openExtensions: () => Promise<void>;
   nativeInfo: (cwd: string) => Promise<{ isNative: boolean; platforms: string[]; buildStatus: string; badge: string | null }>;
   nativeBuild: (cwd: string, platform: string) => Promise<{ started: boolean }>;
+  openSimulator: () => Promise<{ ok: boolean }>;
+  closeSimulator: () => Promise<{ ok: boolean }>;
   reload: (hard: boolean) => Promise<void>;
   back: () => Promise<void>;
   forward: () => Promise<void>;

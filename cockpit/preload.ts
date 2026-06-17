@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld("devloop", {
   openExtensions: () => ipcRenderer.invoke("devloop:openExtensions"),
   nativeInfo: (cwd: string) => ipcRenderer.invoke("devloop:nativeInfo", cwd),
   nativeBuild: (cwd: string, platform: string) => ipcRenderer.invoke("devloop:nativeBuild", cwd, platform),
+  openSimulator: () => ipcRenderer.invoke("devloop:openSimulator"),
+  closeSimulator: () => ipcRenderer.invoke("devloop:closeSimulator"),
   devStart: (opts: { cmd?: string; cwd?: string }) => ipcRenderer.invoke("devloop:devStart", opts),
   devStop: () => ipcRenderer.invoke("devloop:devStop"),
   devRestart: () => ipcRenderer.invoke("devloop:devRestart"),

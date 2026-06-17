@@ -1,0 +1,27 @@
+import { expect, test } from "bun:test";
+import { shouldShowSimulator, simulatorBounds, serveSimSpawn, SERVE_SIM_URL } from "../src/simulator.ts";
+
+test("shouldShowSimulator: visible only when active + no overlay + window shown", () => {
+  expect(shouldShowSimulator({ isActiveView: true, overlayOpen: false, windowVisible: true })).toBe(true);
+  // any one falsy → hidden
+  expect(shouldShowSimulator({ isActiveView: false, overlayOpen: false, windowVisible: true })).toBe(false);
+  expect(shouldShowSimulator({ isActiveView: true, overlayOpen: true, windowVisible: true })).toBe(false); // modal up
+  expect(shouldShowSimulator({ isActiveView: true, overlayOpen: false, windowVisible: false })).toBe(false); // minimized
+});
+
+test("simulatorBounds offsets the pane rect by the content origin + rounds", () => {
+  const content = { x: 100, y: 50, width: 1280, height: 820 };
+  const pane = { x: 40.4, y: 90.6, width: 300.2, height: 650.8 };
+  expect(simulatorBounds(content, pane)).toEqual({ x: 140, y: 141, width: 300, height: 651 });
+});
+
+test("simulatorBounds clamps a zero/negative rect to a sane minimum", () => {
+  const b = simulatorBounds({ x: 0, y: 0, width: 0, height: 0 }, { x: 0, y: 0, width: 0, height: 0 });
+  expect(b.width).toBe(1);
+  expect(b.height).toBe(1);
+});
+
+test("serveSimSpawn launches bunx serve-sim on the expected port", () => {
+  expect(serveSimSpawn()).toEqual({ cmd: "bunx", args: ["serve-sim", "--port", "3200"] });
+  expect(SERVE_SIM_URL).toBe("http://localhost:3200/");
+});

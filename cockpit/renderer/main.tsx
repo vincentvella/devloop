@@ -13,6 +13,7 @@ import {
   Wrench,
   Puzzle,
   Hammer,
+  Smartphone,
   ExternalLink,
   PanelRightClose,
   PanelRightOpen,
@@ -179,6 +180,7 @@ function App() {
   const [nativeInfo, setNativeInfo] = useState<{ isNative: boolean; platforms: string[]; badge: string | null } | null>(null);
   const [buildPlatform, setBuildPlatform] = useState("ios");
   const [building, setBuilding] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(460);
   const [dragging, setDragging] = useState(false);
@@ -524,6 +526,16 @@ function App() {
 
           <div className="spacer" />
 
+          <IconBtn
+            tip={simOpen ? "close the simulator" : "open the iOS simulator (serve-sim)"}
+            onClick={() => {
+              const next = !simOpen;
+              setSimOpen(next);
+              void (next ? dl().openSimulator() : dl().closeSimulator());
+            }}
+          >
+            <Smartphone size={15} color={simOpen ? "var(--color-accent)" : undefined} />
+          </IconBtn>
           <IconBtn tip="extensions — browse the Chrome Web Store" onClick={() => void dl().openExtensions()}>
             <Puzzle size={15} />
           </IconBtn>

@@ -51,7 +51,14 @@ export class BrowserManager implements IBrowserManager {
   private bounds: Rect = { x: 0, y: 0, width: 800, height: 600 };
   private restoring = false;
   private overlay = false; // when true, the active view is detached so a DOM overlay can show on top
+  private simulatorActive = false; // when true, the simulator overlay window owns the pane area
   onChange?: () => void;
+
+  /** Detach the WebContentsView pane while the serve-sim overlay window owns the area. */
+  setSimulatorActive(on: boolean): void {
+    this.simulatorActive = on;
+    this.applyActive();
+  }
 
   /** Target kind of the active pane (drives tool-layer capability gating). All
    * panes are web today; becomes meaningful once RN panes land (Phase 1 item 11). */
@@ -194,7 +201,7 @@ export class BrowserManager implements IBrowserManager {
         /* not attached */
       }
     }
-    if (this.overlay) return; // keep the area clear for a DOM overlay
+    if (this.overlay || this.simulatorActive) return; // keep the area clear for a DOM overlay / simulator window
     const a = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (a && !a.popped) {
       this.shell.contentView.addChildView(a.view);
