@@ -1,0 +1,53 @@
+/**
+ * Domain/IPC state extracted from the App component into a zustand store: the
+ * log stream + project list + extension list, plus the IPC subscriptions that
+ * keep them live. App reads these via selectors instead of holding them (and the
+ * onPush/onExtChanged wiring) inline.
+ *
+ * `panes` stays in the component for now — it's coupled to local form state
+ * (devCmd/devCwd) and is a separate follow-up slice.
+ */
+import { create } from "zustand";
+import type { Entry, Project, Ext } from "./global";
+
+const dl = () => window.devloop;
+const MAX_ENTRIES = 2000;
+
+interface DevloopState {
+  entries: Entry[];
+  projects: Project[];
+  exts: Ext[];
+
+  setEntries: (entries: Entry[]) => void;
+  appendEntry: (e: Entry) => void;
+  appendEntries: (rows: Entry[]) => void;
+  clearEntries: () => void;
+
+  setExts: (exts: Ext[]) => void;
+  refreshProjects: () => Promise<void>;
+
+  /** Initial load of entries/projects/exts + wire the IPC subscriptions. Called once. */
+  init: () => Promise<void>;
+}
+
+export const useDevloopStore = create<DevloopState>((set, get) => ({
+  entries: [],
+  projects: [],
+  exts: [],
+
+  setEntries: (entries) => set({ entries }),
+  appendEntry: (e) => set((s) => ({ entries: [...s.entries.slice(-(MAX_ENTRIES - 1)), e] })),
+  appendEntries: (rows) => set((s) => ({ entries: [...s.entries, ...rows].slice(-MAX_ENTRIES) })),
+  clearEntries: () => set({ entries: [] }),
+
+  setExts: (exts) => set({ exts }),
+  refreshProjects: async () => set({ projects: await dl().projects() }),
+
+  init: async () => {
+    set({ entries: (await dl().getLogs({ limit: 1000 })).map((e) => ({ ...e })) });
+    await get().refreshProjects();
+    set({ exts: await dl().extList() });
+    dl().onPush((e) => get().appendEntry(e));
+    dl().onExtChanged(() => void dl().extList().then((exts) => set({ exts })));
+  },
+}));

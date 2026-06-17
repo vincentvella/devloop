@@ -27,6 +27,7 @@ import {
   Eraser,
 } from "lucide-react";
 import type { Entry, Pane, Project, Step } from "./global";
+import { useDevloopStore } from "./store";
 
 const dl = () => window.devloop;
 
@@ -171,7 +172,14 @@ function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
 // --- app -------------------------------------------------------------------
 function App() {
   const [panes, setPanes] = useState<Pane[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
+  // Domain/IPC state lives in the zustand store (store.ts).
+  const entries = useDevloopStore((s) => s.entries);
+  const projects = useDevloopStore((s) => s.projects);
+  const exts = useDevloopStore((s) => s.exts);
+  const setExts = useDevloopStore((s) => s.setExts);
+  const refreshProjects = useDevloopStore((s) => s.refreshProjects);
+  const appendEntries = useDevloopStore((s) => s.appendEntries);
+  const clearEntries = useDevloopStore((s) => s.clearEntries);
   const [filter, setFilter] = useState("");
   const [chips, setChips] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
@@ -182,7 +190,6 @@ function App() {
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(460);
   const [dragging, setDragging] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [selProject, setSelProject] = useState("");
   const [devCmd, setDevCmd] = useState("");
   const [devCwd, setDevCwd] = useState("");
@@ -196,7 +203,6 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [panelTab, setPanelTab] = useState<"logs" | "repro">("logs");
   const [picking, setPicking] = useState(false);
-  const [exts, setExts] = useState<import("./global").Ext[]>([]);
   const [extInput, setExtInput] = useState("");
 
   const paneAreaRef = useRef<HTMLDivElement>(null);
@@ -218,8 +224,6 @@ function App() {
     setDevCmd(a?.dev?.cmd ?? "");
     setDevCwd(a?.dev?.cwd ?? "");
   }, []);
-  const refreshProjects = useCallback(async () => setProjects(await dl().projects()), []);
-
   // Save the active pane's dev cmd/cwd (auto-applied on blur / folder pick).
   const applyDevConfig = useCallback(
     async (cmd: string, cwd: string) => {
@@ -230,25 +234,17 @@ function App() {
   );
 
   useEffect(() => {
+    void useDevloopStore.getState().init(); // entries/projects/exts + onPush/onExtChanged
     void (async () => {
-      setEntries((await dl().getLogs({ limit: 1000 })).map((e) => ({ ...e })));
       const s = await dl().session();
       if (s.steps?.length) setSteps(s.steps);
       if (s.project) setSelProject(s.project);
       await refreshPanes();
-      await refreshProjects();
-      setExts(await dl().extList());
       setLoaded(true);
     })();
-    const offPush = dl().onPush((e) => setEntries((cur) => [...cur.slice(-1999), e]));
     const offPanes = dl().onPanesChanged(() => void refreshPanes());
-    const offExt = dl().onExtChanged(() => void dl().extList().then(setExts));
-    return () => {
-      offPush();
-      offPanes();
-      offExt();
-    };
-  }, [refreshPanes, refreshProjects]);
+    return () => offPanes();
+  }, [refreshPanes]);
 
   // keep the embedded view aligned with the pane area on layout changes.
   useEffect(() => {
@@ -366,7 +362,7 @@ function App() {
       const rows: Entry[] = [{ seq: reproUid--, ts: now, source: "repro", stream: "summary", line: `▶ repro · ${r.stepCount} steps · ${r.errorCount} errors${stopped}` }];
       for (const s of r.steps) rows.push({ seq: reproUid--, ts: now, source: "repro", stream: "step", line: `   ${s.index}. ${s.action.kind} ${s.error ? "✗ " + s.error : "✓"}` });
       for (const e of r.errors) rows.push({ seq: reproUid--, ts: now, source: "repro", stream: "error", line: `   ✗ [${e.source}:${e.stream}] ${e.line}` });
-      setEntries((cur) => [...cur, ...rows]);
+      appendEntries(rows);
       setPanelTab("logs"); // surface the run's output in the timeline
       saveSession();
     },
@@ -391,7 +387,7 @@ function App() {
       } else if (k === "k") {
         ev.preventDefault();
         void dl().clear();
-        setEntries([]);
+        clearEntries();
       } else if (k === "b") {
         ev.preventDefault();
         setSidebarHidden((v) => !v);
@@ -709,7 +705,7 @@ function App() {
                 <button
                   onClick={async () => {
                     await dl().clear();
-                    setEntries([]);
+                    clearEntries();
                   }}
                 >
                   clear
