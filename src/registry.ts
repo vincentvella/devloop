@@ -151,3 +151,20 @@ export function setUnpackedExtensions(paths: string[]): void {
   mkdirSync(DIR, { recursive: true });
   writeFileSync(EXT_FILE, JSON.stringify([...new Set(paths)], null, 2));
 }
+
+const DISABLED_EXT_FILE = join(DIR, "disabled-extensions.json");
+
+/** Extension ids the user toggled off — kept installed but not loaded. */
+export function getDisabledExtensions(): string[] {
+  try {
+    const parsed = JSON.parse(readFileSync(DISABLED_EXT_FILE, "utf8"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setDisabledExtensions(ids: string[]): void {
+  mkdirSync(DIR, { recursive: true });
+  writeFileSync(DISABLED_EXT_FILE, JSON.stringify([...new Set(ids)], null, 2));
+}

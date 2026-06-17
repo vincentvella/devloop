@@ -609,6 +609,17 @@
     color: var(--color-fg);
     font-size: 12px;
   }
+  .ext-chip .ext-name {
+    cursor: pointer;
+  }
+  .ext-chip.off {
+    opacity: 0.5;
+    border-style: dashed;
+  }
+  .ext-chip.off .ext-name::after {
+    content: " · off";
+    color: var(--color-dim);
+  }
   .ext-chip .x {
     display: inline-flex;
     align-items: center;

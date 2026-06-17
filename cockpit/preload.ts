@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("devloop", {
   extInstall: (input: string) => ipcRenderer.invoke("devloop:extInstall", input),
   extLoadUnpacked: () => ipcRenderer.invoke("devloop:extLoadUnpacked"),
   extRemove: (id: string) => ipcRenderer.invoke("devloop:extRemove", id),
+  extSetEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke("devloop:extSetEnabled", id, enabled),
   exportHar: () => ipcRenderer.invoke("devloop:exportHar"),
   // pane-targeted variants (used by a popped-out pane's own browser bar)
   navigateFor: (id: string, url: string) => ipcRenderer.invoke("devloop:navigateFor", id, url),

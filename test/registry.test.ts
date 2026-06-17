@@ -51,6 +51,12 @@ test("unpacked extensions round-trip + dedupe", () => {
   expect(reg.getUnpackedExtensions()).toEqual(["/a", "/b"]);
 });
 
+test("disabled extensions round-trip + dedupe", () => {
+  expect(reg.getDisabledExtensions()).toEqual([]);
+  reg.setDisabledExtensions(["a", "b", "a"]);
+  expect(reg.getDisabledExtensions()).toEqual(["a", "b"]);
+});
+
 test("project fingerprints round-trip per cwd", () => {
   expect(reg.getProjectFingerprint("/proj/a")).toBeUndefined();
   reg.setProjectFingerprint("/proj/a", "hash-a");

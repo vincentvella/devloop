@@ -20,12 +20,12 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, session } from "electron";
 import { createServer, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
-import { existsSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { installExtension, uninstallExtension, loadAllExtensions, installChromeWebStore } from "electron-chrome-web-store";
-import { extensionIdFromInput } from "../src/extensions.ts";
-import { getUnpackedExtensions, setUnpackedExtensions } from "../src/registry.ts";
+import { extensionIdFromInput, unifyExtensions, type ExtMeta } from "../src/extensions.ts";
+import { getUnpackedExtensions, setUnpackedExtensions, getDisabledExtensions, setDisabledExtensions } from "../src/registry.ts";
 import { PANE_PARTITION } from "./browserManager.ts";
 
 // Where main.cjs/preload.cjs/renderer live. Bun inlines __dirname to the SOURCE dir,
@@ -310,7 +310,33 @@ function wireIpc(): void {
     setUnpackedExtensions([...getUnpackedExtensions(), dir]);
     return extList();
   });
+  // Toggle an extension on/off without uninstalling — disable unloads it from the
+  // session (files stay); enable reloads it from disk. Persisted across launches.
+  ipcMain.handle("devloop:extSetEnabled", async (_e, id: string, enabled: boolean) => {
+    const disabled = new Set(getDisabledExtensions());
+    if (enabled) {
+      const dir = extDir(id);
+      if (dir) {
+        try {
+          await extSession().extensions.loadExtension(dir, { allowFileAccess: true });
+        } catch (e) {
+          log(`extensions: enable failed (${id}): ${e}`);
+        }
+      }
+      disabled.delete(id);
+    } else {
+      try {
+        extSession().extensions.removeExtension(id);
+      } catch {
+        /* already unloaded */
+      }
+      disabled.add(id);
+    }
+    setDisabledExtensions([...disabled]);
+    return extList();
+  });
   ipcMain.handle("devloop:extRemove", async (_e, id: string) => {
+    setDisabledExtensions(getDisabledExtensions().filter((x) => x !== id)); // forget any disabled flag
     try {
       extSession().extensions.removeExtension(id);
     } catch {
@@ -429,7 +455,41 @@ function openExtensionsWindow(): void {
   extWin.on("closed", () => (extWin = undefined));
   void extWin.loadURL(WEB_STORE_URL);
 }
-const extList = () => extSession().extensions.getAllExtensions().map((e) => ({ id: e.id, name: e.name, version: e.version }));
+/** Directory to (re)load an extension from: a tracked unpacked path, else the
+ * web-store version dir under EXT_DIR/<id>/<version>. undefined if not found. */
+function extDir(id: string): string | undefined {
+  const up = unpackedById.get(id);
+  if (up && existsSync(join(up, "manifest.json"))) return up;
+  const base = join(EXT_DIR, id);
+  try {
+    for (const v of readdirSync(base)) {
+      const d = join(base, v);
+      if (existsSync(join(d, "manifest.json"))) return d;
+    }
+  } catch {
+    /* not installed */
+  }
+  return undefined;
+}
+
+/** Read a disabled extension's name/version from disk (it isn't loaded). */
+function extMeta(id: string): ExtMeta | null {
+  const dir = extDir(id);
+  if (!dir) return null;
+  try {
+    const m = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+    return { id, name: m.name ?? id, version: m.version ?? "?" };
+  } catch {
+    return null;
+  }
+}
+
+/** Loaded extensions (enabled) + known-disabled ones, for the UI's toggle list. */
+const extList = () => {
+  const loaded = extSession().extensions.getAllExtensions().map((e) => ({ id: e.id, name: e.name, version: e.version }));
+  const disabled = getDisabledExtensions().map(extMeta).filter((m): m is ExtMeta => !!m);
+  return unifyExtensions(loaded, disabled);
+};
 
 async function initExtensions(): Promise<void> {
   const ses = extSession();
@@ -456,6 +516,14 @@ async function initExtensions(): Promise<void> {
       unpackedById.set(ext.id, dir);
     } catch (e) {
       log(`extensions: unpacked reload failed (${dir}): ${e}`);
+    }
+  }
+  // Unload extensions the user toggled off (loadAllExtensions loaded everything).
+  for (const id of getDisabledExtensions()) {
+    try {
+      ses.extensions.removeExtension(id);
+    } catch {
+      /* not loaded */
     }
   }
 }

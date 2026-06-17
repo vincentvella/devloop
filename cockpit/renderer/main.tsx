@@ -196,7 +196,7 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [panelTab, setPanelTab] = useState<"logs" | "repro">("logs");
   const [picking, setPicking] = useState(false);
-  const [exts, setExts] = useState<{ id: string; name: string; version: string }[]>([]);
+  const [exts, setExts] = useState<import("./global").Ext[]>([]);
   const [extInput, setExtInput] = useState("");
 
   const paneAreaRef = useRef<HTMLDivElement>(null);
@@ -885,9 +885,11 @@ function App() {
               {exts.length > 0 ? (
                 <div className="ext-list">
                   {exts.map((x) => (
-                    <span key={x.id} className="ext-chip" title={`${x.id} · v${x.version}`}>
-                      {x.name}
-                      <span className="x" title="remove" onClick={() => void dl().extRemove(x.id).then(setExts)}>
+                    <span key={x.id} className={`ext-chip${x.enabled ? "" : " off"}`} title={`${x.id} · v${x.version} — click to ${x.enabled ? "disable" : "enable"}`}>
+                      <span className="ext-name" onClick={() => void dl().extSetEnabled(x.id, !x.enabled).then(setExts)}>
+                        {x.name}
+                      </span>
+                      <span className="x" title="remove (uninstall)" onClick={() => void dl().extRemove(x.id).then(setExts)}>
                         <X size={13} />
                       </span>
                     </span>
