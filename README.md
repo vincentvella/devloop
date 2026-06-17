@@ -15,6 +15,16 @@ A unified dev-loop tool: it drives a **browser** and your **dev server**, pushin
 
 Because every event (browser console/network/page-errors **and** server stdout/stderr) shares one monotonic clock, `get_logs_around` / `repro` return a correlated, cross-source slice of the timeline.
 
+### Native targets — Expo / React Native (iOS)
+
+The cockpit also drives **Expo/React Native** projects, not just web. Open a native project and you get one pane with a **Web · iOS** target switcher, a **bundler** toggle (Metro) separate from a **Build** button (`expo run:ios`, with `@expo/fingerprint` staleness detection), and:
+
+- **JS console + errors over CDP** via Metro's Hermes inspector — with **source-mapped** stacks (your bundled `index.bundle:1:…` resolves to original `.tsx`).
+- **Native device logs** (`simctl log stream`) merged onto the same timeline as a `native` source.
+- A **live, interactive iOS simulator embedded in the pane** (via [serve-sim](https://github.com/EvanBacon/serve-sim) — tap/scroll/type), with screenshots.
+
+All of it lands on the same correlated timeline, app-scoped — the web dev-loop experience, for a native app. (macOS + Apple Silicon for the embedded simulator.)
+
 ## Architecture
 
 ```
