@@ -34,6 +34,8 @@ export interface ReactNativeOptions {
   fetchImpl?: typeof fetch;
   /** Per-CDP-command timeout — guards against a stale/dead target wedging a call. Default 8s. */
   sendTimeoutMs?: number;
+  /** Pane/app id to tag log entries with, so get_logs can scope by app. */
+  target?: string;
 }
 
 const unsupported = (op: string): never => {
@@ -97,7 +99,7 @@ export class ReactNativeController implements IBrowserController {
         if (wsUrl) {
           await this.attach(wsUrl);
           if (await this.ping()) {
-            this.buffer.push("browser", "console", "[devloop] attached to React Native (Hermes) over CDP");
+            this.buffer.push("browser", "console", "[devloop] attached to React Native (Hermes) over CDP", undefined, this.opts.target);
             return;
           }
           this.deadTargets.add(wsUrl); // zombie — skip it next time
@@ -105,7 +107,7 @@ export class ReactNativeController implements IBrowserController {
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
-      if (!this.closed) this.buffer.push("browser", "console", "[devloop] no live React Native (Hermes) target found via Metro");
+      if (!this.closed) this.buffer.push("browser", "console", "[devloop] no live React Native (Hermes) target found via Metro", undefined, this.opts.target);
     } finally {
       this.connecting = false;
     }
@@ -183,17 +185,17 @@ export class ReactNativeController implements IBrowserController {
     if (isErrorConsoleType(type)) {
       // RN routes uncaught errors + LogBox through console.error — treat as a page error.
       const stack = errorStackFromArgs(args) ?? text;
-      const entry = this.buffer.push("browser", "pageerror", `[${type}] ${text}`, { stack });
+      const entry = this.buffer.push("browser", "pageerror", `[${type}] ${text}`, { stack }, this.opts.target);
       if (stack) void attachResolvedStack(entry, stack); // de-minify RN bundle → original .tsx
     } else {
-      this.buffer.push("browser", "console", `[${type}] ${text}`);
+      this.buffer.push("browser", "console", `[${type}] ${text}`, undefined, this.opts.target);
     }
   }
 
   private onException(params: { exceptionDetails?: { text?: string; exception?: { description?: string } } }): void {
     const d = params.exceptionDetails;
     const stack = d?.exception?.description ?? d?.text ?? "uncaught exception";
-    const entry = this.buffer.push("browser", "pageerror", stack.split("\n")[0] ?? "uncaught exception", { stack });
+    const entry = this.buffer.push("browser", "pageerror", stack.split("\n")[0] ?? "uncaught exception", { stack }, this.opts.target);
     if (stack) void attachResolvedStack(entry, stack);
   }
 

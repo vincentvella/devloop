@@ -53,6 +53,8 @@ import { BrowserManager } from "./browserManager.ts";
 import { initAutoUpdate, type Updater } from "./updater.ts";
 import { SimulatorWindow } from "./simulatorWindow.ts";
 import type { Rect } from "../src/simulator.ts";
+import { NativeObservability } from "./nativeObservability.ts";
+import { metroBaseFromUrl, deriveAppMatch } from "../src/nativeObservability.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
 const SELFTEST = process.env.DEVLOOP_SELFTEST === "1";
@@ -64,7 +66,19 @@ let shellWin: BrowserWindow | undefined;
 let manager: BrowserManager;
 let updater: Updater | undefined;
 let simulator: SimulatorWindow | undefined;
+const observability = new NativeObservability(buffer, log);
 let lastPaneRect: Rect = { x: 0, y: 0, width: 0, height: 0 };
+
+/** Best-effort native-log process match from a project's Expo config. */
+function appMatchFor(cwd: string): string {
+  let cfg: { name?: string; expo?: { name?: string } } | null = null;
+  try {
+    cfg = JSON.parse(readFileSync(join(cwd, "app.json"), "utf8"));
+  } catch {
+    /* app.config.ts or none → fall back to dir name */
+  }
+  return deriveAppMatch(cfg, cwd);
+}
 let httpServer: ReturnType<typeof createServer> | undefined;
 let cleanedUp = false;
 
@@ -212,11 +226,20 @@ function wireIpc(): void {
     if (!simulator || !shellWin) return { ok: false };
     manager.setSimulatorActive(true); // detach the WebContentsView pane so the overlay owns the area
     await simulator.open(lastPaneRect);
+    // Stream the native app's JS + native logs onto the timeline (scoped to its pane).
+    const active = manager.listPanes().find((p) => p.active);
+    const metroBase = metroBaseFromUrl(active?.url);
+    if (active && metroBase) {
+      observability.attach({ paneId: active.id, metroBase, device: "booted", appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined });
+    } else {
+      log("simulator: no Metro URL on the active pane — start its dev server to stream JS logs");
+    }
     return { ok: true };
   });
   ipcMain.handle("devloop:closeSimulator", () => {
     simulator?.setActiveView(false);
     manager.setSimulatorActive(false);
+    observability.detachAll();
     return { ok: true };
   });
 
@@ -883,6 +906,12 @@ function cleanup(): void {
   if (cleanedUp) return;
   cleanedUp = true;
   if (manager) manager.onChange = undefined; // stop notifying a window that's tearing down
+  try {
+    observability.detachAll(); // stop RN controllers + native log streams
+    simulator?.close(); // close the serve-sim overlay + its child process
+  } catch (e) {
+    log(`cleanup observability: ${e}`);
+  }
   try {
     void manager?.close(); // stops every pane's dev server + closes panes/popped windows
   } catch (e) {

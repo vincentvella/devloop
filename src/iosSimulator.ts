@@ -86,7 +86,7 @@ export class NativeLogStream {
 
   constructor(
     private readonly buffer: LogBuffer,
-    private readonly opts: { device: string; match?: string; spawn?: SpawnLike },
+    private readonly opts: { device: string; match?: string; spawn?: SpawnLike; target?: string },
   ) {}
 
   start(): void {
@@ -102,7 +102,7 @@ export class NativeLogStream {
     this.partial = lines.pop() ?? "";
     for (const line of lines) {
       const parsed = parseLogLine(line);
-      if (parsed) this.buffer.push("native", parsed.level, parsed.message, parsed.process ? { process: parsed.process } : undefined);
+      if (parsed) this.buffer.push("native", parsed.level, parsed.message, parsed.process ? { process: parsed.process } : undefined, this.opts.target);
     }
   }
 
