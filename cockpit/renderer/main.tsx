@@ -171,8 +171,9 @@ function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
 
 // --- app -------------------------------------------------------------------
 function App() {
-  const [panes, setPanes] = useState<Pane[]>([]);
   // Domain/IPC state lives in the zustand store (store.ts).
+  const panes = useDevloopStore((s) => s.panes);
+  const storeRefreshPanes = useDevloopStore((s) => s.refreshPanes);
   const entries = useDevloopStore((s) => s.entries);
   const projects = useDevloopStore((s) => s.projects);
   const exts = useDevloopStore((s) => s.exts);
@@ -217,13 +218,13 @@ function App() {
   // let the timeline fill the freed space.
   const fillTimeline = !!active?.popped && !sidebarHidden;
 
+  // Wrap the store's pane refresh to also seed the editable dev cmd/cwd fields.
   const refreshPanes = useCallback(async () => {
-    const ps = await dl().panes();
-    setPanes(ps);
+    const ps = await storeRefreshPanes();
     const a = ps.find((p) => p.active);
     setDevCmd(a?.dev?.cmd ?? "");
     setDevCwd(a?.dev?.cwd ?? "");
-  }, []);
+  }, [storeRefreshPanes]);
   // Save the active pane's dev cmd/cwd (auto-applied on blur / folder pick).
   const applyDevConfig = useCallback(
     async (cmd: string, cwd: string) => {

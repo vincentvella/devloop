@@ -8,15 +8,19 @@
  * (devCmd/devCwd) and is a separate follow-up slice.
  */
 import { create } from "zustand";
-import type { Entry, Project, Ext } from "./global";
+import type { Entry, Pane, Project, Ext } from "./global";
 
 const dl = () => window.devloop;
 const MAX_ENTRIES = 2000;
 
 interface DevloopState {
+  panes: Pane[];
   entries: Entry[];
   projects: Project[];
   exts: Ext[];
+
+  /** Refresh the pane list. Returns it so the caller can sync derived UI (dev cmd/cwd). */
+  refreshPanes: () => Promise<Pane[]>;
 
   setEntries: (entries: Entry[]) => void;
   appendEntry: (e: Entry) => void;
@@ -31,9 +35,16 @@ interface DevloopState {
 }
 
 export const useDevloopStore = create<DevloopState>((set, get) => ({
+  panes: [],
   entries: [],
   projects: [],
   exts: [],
+
+  refreshPanes: async () => {
+    const panes = await dl().panes();
+    set({ panes });
+    return panes;
+  },
 
   setEntries: (entries) => set({ entries }),
   appendEntry: (e) => set((s) => ({ entries: [...s.entries.slice(-(MAX_ENTRIES - 1)), e] })),
