@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { shouldShowSimulator, simulatorBounds, serveSimSpawn, SERVE_SIM_URL, simulatorViewerHtml, streamUrlFromApi, simInfoFromApi } from "../src/simulator.ts";
+import { shouldShowSimulator, simulatorBounds, serveSimSpawn, serveSimVendoredSpawn, SERVE_SIM_URL, simulatorViewerHtml, streamUrlFromApi, simInfoFromApi } from "../src/simulator.ts";
 
 test("shouldShowSimulator: visible only when active + no overlay + window shown", () => {
   expect(shouldShowSimulator({ isActiveView: true, overlayOpen: false, windowVisible: true })).toBe(true);
@@ -25,6 +25,15 @@ test("serveSimSpawn: bunx by default, npx fallback", () => {
   expect(serveSimSpawn()).toEqual({ cmd: "bunx", args: ["serve-sim", "--port", "3200"] });
   expect(serveSimSpawn("npx")).toEqual({ cmd: "npx", args: ["-y", "serve-sim", "--port", "3200"] });
   expect(SERVE_SIM_URL).toBe("http://localhost:3200/");
+});
+
+test("serveSimVendoredSpawn runs the vendored entry via Electron's Node", () => {
+  const s = serveSimVendoredSpawn("/Apps/Devloop.app/Contents/MacOS/Devloop", "/res/serve-sim/dist/serve-sim.js");
+  expect(s).toEqual({
+    cmd: "/Apps/Devloop.app/Contents/MacOS/Devloop",
+    args: ["/res/serve-sim/dist/serve-sim.js", "--port", "3200"],
+    env: { ELECTRON_RUN_AS_NODE: "1" },
+  });
 });
 
 test("simulatorViewerHtml embeds the stream URL as an <img> data: page", () => {

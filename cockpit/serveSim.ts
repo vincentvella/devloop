@@ -4,7 +4,9 @@
  * /api) in an <img> inside a pane view, rather than loading serve-sim's full UI.
  */
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { serveSimSpawn, SERVE_SIM_URL, SERVE_SIM_API, simInfoFromApi, type SimInfo } from "../src/simulator.ts";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { serveSimSpawn, serveSimVendoredSpawn, SERVE_SIM_URL, SERVE_SIM_API, simInfoFromApi, type SimInfo } from "../src/simulator.ts";
 
 export class ServeSim {
   private proc?: ChildProcess;
@@ -15,20 +17,46 @@ export class ServeSim {
   async ensure(): Promise<SimInfo | null> {
     if (!(await this.up())) {
       if (!this.proc || this.proc.killed) {
-        const runner = this.pickRunner();
-        if (!runner) {
-          this.log("serve-sim: no bun or node found on PATH — can't start the simulator (install bun or node)");
-          return null;
-        }
-        const { cmd, args } = serveSimSpawn(runner);
-        this.log(`serve-sim: starting (${cmd} ${args.join(" ")})`);
-        this.proc = spawn(cmd, args, { stdio: "ignore" });
+        const launch = this.buildLaunch();
+        if (!launch) return null;
+        this.proc = spawn(launch.cmd, launch.args, { stdio: "ignore", env: launch.env });
         this.proc.on("error", (e) => this.log(`serve-sim: spawn failed (${e.message})`));
         this.proc.on("exit", (code) => this.log(`serve-sim: exited (${code})`));
       }
       for (let i = 0; i < 40 && !(await this.up()); i++) await new Promise((r) => setTimeout(r, 500));
     }
     return this.info();
+  }
+
+  /**
+   * Decide how to start serve-sim. Prefer the vendored copy (shipped in the app,
+   * run via Electron's own Node — offline, no external runtime). Otherwise fall
+   * back to bunx/npx from the user's PATH. null + logs if nothing is available.
+   */
+  private buildLaunch(): { cmd: string; args: string[]; env: NodeJS.ProcessEnv } | null {
+    const entry = this.vendoredEntry();
+    if (entry) {
+      const s = serveSimVendoredSpawn(process.execPath, entry);
+      this.log(`serve-sim: starting vendored copy via Electron Node (${entry})`);
+      return { cmd: s.cmd, args: s.args, env: { ...process.env, ...s.env } };
+    }
+    const runner = this.pickRunner();
+    if (!runner) {
+      this.log("serve-sim: no vendored copy and no bun/node on PATH — can't start the simulator (reinstall, or install bun/node)");
+      return null;
+    }
+    const { cmd, args } = serveSimSpawn(runner);
+    this.log(`serve-sim: no vendored copy; starting via ${cmd} (${cmd} ${args.join(" ")})`);
+    return { cmd, args, env: process.env };
+  }
+
+  /** Path to the vendored serve-sim entry (packaged Resources, then dev node_modules), or null. */
+  private vendoredEntry(): string | null {
+    const candidates = [
+      process.resourcesPath ? join(process.resourcesPath, "serve-sim", "dist", "serve-sim.js") : "",
+      join(process.cwd(), "node_modules", "serve-sim", "dist", "serve-sim.js"),
+    ];
+    return candidates.find((p) => p && existsSync(p)) ?? null;
   }
 
   /** Prefer bun (bunx); fall back to npx for node-only machines. null if neither. */

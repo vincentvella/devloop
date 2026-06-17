@@ -19,6 +19,19 @@ files:
   - out/**/*
   - package.json
 
+# Vendor serve-sim (the iOS-simulator capture engine) so the embedded simulator
+# works offline with no bunx/npx/network. It's a self-contained JS entry + an
+# arm64 Swift helper binary; we run it via Electron's own Node (ELECTRON_RUN_AS_NODE),
+# so no external runtime is needed. extraResources lands it unpacked (binaries can't
+# execute from inside asar) at Contents/Resources/serve-sim. Swift sources/README dropped.
+extraResources:
+  - from: node_modules/serve-sim
+    to: serve-sim
+    filter:
+      - "**/*"
+      - "!Sources/**"
+      - "!README.md"
+
 asar: true
 
 mac:

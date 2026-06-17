@@ -91,3 +91,13 @@ export function serveSimSpawn(runner: "bunx" | "npx" = "bunx"): { cmd: string; a
     ? { cmd: "npx", args: ["-y", "serve-sim", "--port", String(SERVE_SIM_PORT)] }
     : { cmd: "bunx", args: ["serve-sim", "--port", String(SERVE_SIM_PORT)] };
 }
+
+/**
+ * How to launch the *vendored* serve-sim (shipped in the app) using Electron's
+ * own bundled Node — no external bun/node/network. `execPath` is process.execPath
+ * (the Electron binary); ELECTRON_RUN_AS_NODE makes it run `entryJs` as a plain
+ * Node script. This is the preferred path when the vendored copy is present.
+ */
+export function serveSimVendoredSpawn(execPath: string, entryJs: string): { cmd: string; args: string[]; env: Record<string, string> } {
+  return { cmd: execPath, args: [entryJs, "--port", String(SERVE_SIM_PORT)], env: { ELECTRON_RUN_AS_NODE: "1" } };
+}
