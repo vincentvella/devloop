@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { shouldShowSimulator, simulatorBounds, serveSimSpawn, SERVE_SIM_URL } from "../src/simulator.ts";
+import { shouldShowSimulator, simulatorBounds, serveSimSpawn, SERVE_SIM_URL, simulatorViewerHtml, streamUrlFromApi } from "../src/simulator.ts";
 
 test("shouldShowSimulator: visible only when active + no overlay + window shown", () => {
   expect(shouldShowSimulator({ isActiveView: true, overlayOpen: false, windowVisible: true })).toBe(true);
@@ -24,4 +24,19 @@ test("simulatorBounds clamps a zero/negative rect to a sane minimum", () => {
 test("serveSimSpawn launches bunx serve-sim on the expected port", () => {
   expect(serveSimSpawn()).toEqual({ cmd: "bunx", args: ["serve-sim", "--port", "3200"] });
   expect(SERVE_SIM_URL).toBe("http://localhost:3200/");
+});
+
+test("simulatorViewerHtml embeds the stream URL as an <img> data: page", () => {
+  const url = simulatorViewerHtml("http://127.0.0.1:3100/stream.mjpeg");
+  expect(url.startsWith("data:text/html")).toBe(true);
+  const html = decodeURIComponent(url.slice(url.indexOf(",") + 1));
+  expect(html).toContain('<img src="http://127.0.0.1:3100/stream.mjpeg"');
+  expect(html).toContain("object-fit:contain");
+});
+
+test("streamUrlFromApi extracts a valid stream URL, else null", () => {
+  expect(streamUrlFromApi({ streamUrl: "http://127.0.0.1:3100/stream.mjpeg" })).toBe("http://127.0.0.1:3100/stream.mjpeg");
+  expect(streamUrlFromApi({})).toBeNull();
+  expect(streamUrlFromApi(null)).toBeNull();
+  expect(streamUrlFromApi({ streamUrl: "garbage" })).toBeNull();
 });

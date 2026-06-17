@@ -13,6 +13,7 @@ import { BrowserWindow, WebContentsView } from "electron";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import type { IBrowserManager, PaneInfo } from "../src/browserController.ts";
 import type { TargetKind } from "../src/target.ts";
+import { simulatorViewerHtml } from "../src/simulator.ts";
 import { getPanes, setPanes } from "../src/registry.ts";
 import { DevServer, detectDevCommand, type DevStatus } from "../src/devServer.ts";
 
@@ -51,12 +52,26 @@ export class BrowserManager implements IBrowserManager {
   private bounds: Rect = { x: 0, y: 0, width: 800, height: 600 };
   private restoring = false;
   private overlay = false; // when true, the active view is detached so a DOM overlay can show on top
-  private simulatorActive = false; // when true, the simulator overlay window owns the pane area
+  private simulatorActive = false; // when true, the simulator view owns the pane area
+  private simView?: WebContentsView; // serve-sim MJPEG stream viewer (created on first use)
   onChange?: () => void;
 
-  /** Detach the WebContentsView pane while the serve-sim overlay window owns the area. */
-  setSimulatorActive(on: boolean): void {
+  /**
+   * Show/hide the simulator over the pane area. The simulator is a SECOND
+   * WebContentsView (not a child OS window — so no Launchpad/Mission Control
+   * artifacts) showing serve-sim's raw MJPEG stream as an <img> (which composites
+   * in a WebContentsView; serve-sim's GPU canvas does not). It rides the same
+   * bounds/overlay logic as the panes.
+   */
+  async setSimulatorActive(on: boolean, streamUrl?: string): Promise<void> {
     this.simulatorActive = on;
+    if (on) {
+      if (!this.simView) {
+        // Dedicated session — no extensions / web-store interception on the stream viewer.
+        this.simView = new WebContentsView({ webPreferences: { partition: "persist:devloop-sim", offscreen: this.offscreen } });
+      }
+      if (streamUrl) await this.simView.webContents.loadURL(simulatorViewerHtml(streamUrl));
+    }
     this.applyActive();
   }
 
@@ -132,9 +147,13 @@ export class BrowserManager implements IBrowserManager {
     return (
       "data:text/html;charset=utf-8," +
       encodeURIComponent(
-        `<html><body style="margin:0;font:14px ui-monospace,monospace;background:#0d1117;color:#8b949e;display:grid;place-items:center;height:100vh">` +
-          `<div style="text-align:center"><div style="font-size:16px;color:#c9d1d9">${label ?? "dev server"}</div>` +
-          `<div style="margin-top:8px">press ▶ to start — was ${url}</div></div></body></html>`,
+        `<html><body style="margin:0;font-family:ui-sans-serif,system-ui,sans-serif;background:#0d1117;color:#8b949e;display:grid;place-items:center;height:100vh">` +
+          `<div style="text-align:center;max-width:420px;padding:24px">` +
+          `<div style="font-size:40px;line-height:1">▶</div>` +
+          `<div style="font-size:20px;color:#c9d1d9;margin-top:14px;font-weight:600">${label ?? "dev server"} isn't running</div>` +
+          `<div style="margin-top:10px;font-size:14px">Press <b style="color:#c9d1d9">▶</b> in the timeline header to start the dev server / bundler.</div>` +
+          `<div style="margin-top:8px;font-size:12px;opacity:0.6">${url}</div>` +
+          `</div></body></html>`,
       )
     );
   }
@@ -201,7 +220,19 @@ export class BrowserManager implements IBrowserManager {
         /* not attached */
       }
     }
-    if (this.overlay || this.simulatorActive) return; // keep the area clear for a DOM overlay / simulator window
+    if (this.simView) {
+      try {
+        this.shell.contentView.removeChildView(this.simView);
+      } catch {
+        /* not attached */
+      }
+    }
+    if (this.overlay) return; // keep the area clear for a DOM overlay (modal/lightbox)
+    if (this.simulatorActive && this.simView) {
+      this.shell.contentView.addChildView(this.simView);
+      this.simView.setBounds(this.bounds);
+      return;
+    }
     const a = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (a && !a.popped) {
       this.shell.contentView.addChildView(a.view);
@@ -217,6 +248,10 @@ export class BrowserManager implements IBrowserManager {
       height: Math.round(rect.height),
     };
     if (this.overlay) return;
+    if (this.simulatorActive && this.simView && this.shell && !this.shell.isDestroyed()) {
+      this.simView.setBounds(this.bounds);
+      return;
+    }
     const a = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (a && !a.popped && this.shell && !this.shell.isDestroyed()) a.view.setBounds(this.bounds);
   }

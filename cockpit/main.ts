@@ -51,8 +51,7 @@ import { resolveNativeInfo, type Platform } from "../src/nativeBuild.ts";
 import { runNativeBuild, computeFingerprint } from "../src/nativeBuildRunner.ts";
 import { BrowserManager } from "./browserManager.ts";
 import { initAutoUpdate, type Updater } from "./updater.ts";
-import { SimulatorWindow } from "./simulatorWindow.ts";
-import type { Rect } from "../src/simulator.ts";
+import { ServeSim } from "./serveSim.ts";
 import { NativeObservability } from "./nativeObservability.ts";
 import { metroBaseFromUrl, deriveAppMatch } from "../src/nativeObservability.ts";
 
@@ -65,9 +64,8 @@ const buffer = new LogBuffer(Number(process.env.DEVLOOP_LOG_CAPACITY ?? 5000));
 let shellWin: BrowserWindow | undefined;
 let manager: BrowserManager;
 let updater: Updater | undefined;
-let simulator: SimulatorWindow | undefined;
+const serveSim = new ServeSim(log);
 const observability = new NativeObservability(buffer, log);
-let lastPaneRect: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
 /** Best-effort native-log process match from a project's Expo config. */
 function appMatchFor(cwd: string): string {
@@ -223,22 +221,26 @@ function wireIpc(): void {
   });
   // Simulator: a serve-sim child window overlaying the pane area (see simulatorWindow.ts).
   ipcMain.handle("devloop:openSimulator", async () => {
-    if (!simulator || !shellWin) return { ok: false };
-    manager.setSimulatorActive(true); // detach the WebContentsView pane so the overlay owns the area
-    await simulator.open(lastPaneRect);
+    // serve-sim captures the booted sim → MJPEG stream; we show that stream as an
+    // <img> in a pane view (composites cleanly; no overlay window).
+    const streamUrl = await serveSim.ensure();
+    if (!streamUrl) {
+      log("simulator: serve-sim has no booted device stream (boot a simulator first)");
+      return { ok: false };
+    }
+    await manager.setSimulatorActive(true, streamUrl);
     // Stream the native app's JS + native logs onto the timeline (scoped to its pane).
     const active = manager.listPanes().find((p) => p.active);
     const metroBase = metroBaseFromUrl(active?.url);
     if (active && metroBase) {
       observability.attach({ paneId: active.id, metroBase, device: "booted", appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined });
     } else {
-      log("simulator: no Metro URL on the active pane — start its dev server to stream JS logs");
+      log("simulator: no Metro URL on the active pane — start its bundler to stream JS logs");
     }
     return { ok: true };
   });
-  ipcMain.handle("devloop:closeSimulator", () => {
-    simulator?.setActiveView(false);
-    manager.setSimulatorActive(false);
+  ipcMain.handle("devloop:closeSimulator", async () => {
+    await manager.setSimulatorActive(false);
     observability.detachAll();
     return { ok: true };
   });
@@ -377,13 +379,8 @@ function wireIpc(): void {
   ipcMain.handle("devloop:panePop", (_e, id: string) => manager.popPane(id));
   ipcMain.handle("devloop:paneSetLabel", (_e, id: string, label: string) => manager.setLabel(id, label));
   // Renderer reports the #browserarea rect; reposition the embedded active pane.
-  ipcMain.handle("devloop:setBounds", (_e, rect) => {
-    lastPaneRect = rect;
-    simulator?.setPaneRect(rect); // keep the overlay glued to the pane area
-    return manager.setBounds(rect);
-  });
+  ipcMain.handle("devloop:setBounds", (_e, rect) => manager.setBounds(rect));
   ipcMain.handle("devloop:overlay", (_e, on: boolean) => {
-    simulator?.setOverlay(!!on); // hide the overlay window while a DOM modal/lightbox is up
     return manager.setOverlay(!!on);
   });
 
@@ -569,13 +566,6 @@ async function main() {
   if (iconPng && process.platform === "darwin" && app.dock) app.dock.setIcon(nativeImage.createFromPath(iconPng));
   log("app ready; creating windows");
   createWindows();
-  // Simulator overlay window (serve-sim), parented to the shell + tracking its visibility.
-  simulator = new SimulatorWindow(shellWin!, () => shellWin!.getContentBounds(), log);
-  for (const ev of ["hide", "minimize"] as const) shellWin!.on(ev, () => simulator?.setWindowVisible(false));
-  for (const ev of ["show", "restore", "focus"] as const) shellWin!.on(ev, () => simulator?.setWindowVisible(true));
-  // Window move/resize changes the pane's SCREEN position (the renderer only
-  // reports content-relative bounds on resize) — re-pin the overlay either way.
-  for (const ev of ["move", "resize"] as const) shellWin!.on(ev, () => simulator?.setPaneRect(lastPaneRect));
   wireIpc();
   // Auto-update: check GitHub on launch (packaged + signed builds only) and prompt.
   updater = initAutoUpdate({ win: shellWin, log, enabled: app.isPackaged && !SELFTEST });
@@ -977,7 +967,7 @@ function cleanup(): void {
   if (manager) manager.onChange = undefined; // stop notifying a window that's tearing down
   try {
     observability.detachAll(); // stop RN controllers + native log streams
-    simulator?.close(); // close the serve-sim overlay + its child process
+    serveSim.stop(); // stop the serve-sim process
   } catch (e) {
     log(`cleanup observability: ${e}`);
   }

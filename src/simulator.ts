@@ -51,6 +51,27 @@ export function simulatorBounds(contentBounds: Rect, paneRect: Rect): Rect {
 
 export const SERVE_SIM_PORT = 3200;
 export const SERVE_SIM_URL = `http://localhost:${SERVE_SIM_PORT}/`;
+/** serve-sim exposes the booted device's MJPEG stream URL here. */
+export const SERVE_SIM_API = `http://localhost:${SERVE_SIM_PORT}/api`;
+
+/**
+ * A minimal viewer page: just the device's MJPEG stream as an <img>, fit to the
+ * pane. An <img> composites in a WebContentsView (serve-sim's GPU canvas does
+ * not), so this renders cleanly embedded in the pane — no separate window.
+ * Returns a data: URL.
+ */
+export function simulatorViewerHtml(streamUrl: string): string {
+  const html =
+    `<!doctype html><html><body style="margin:0;background:#000;display:grid;place-items:center;height:100vh;overflow:hidden">` +
+    `<img src="${streamUrl}" style="max-width:100%;max-height:100vh;object-fit:contain" alt="iOS simulator">` +
+    `</body></html>`;
+  return "data:text/html;charset=utf-8," + encodeURIComponent(html);
+}
+
+/** Pull the booted device's MJPEG stream URL out of serve-sim's /api payload. */
+export function streamUrlFromApi(api: { streamUrl?: string } | null | undefined): string | null {
+  return api?.streamUrl && /^https?:\/\//.test(api.streamUrl) ? api.streamUrl : null;
+}
 
 /** How to launch serve-sim (bun-first, per project convention). */
 export function serveSimSpawn(): { cmd: string; args: string[] } {
