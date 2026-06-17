@@ -1,6 +1,6 @@
 {
   "name": "devloop-mcp",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Unified dev-loop: one MCP server exposing browser control + dev-server logs on a correlated timeline. Headless (stdio) or Electron cockpit (HTTP).",
   "type": "module",
   "main": "out/main.cjs",

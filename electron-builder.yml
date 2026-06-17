@@ -20,16 +20,27 @@ files:
   - package.json
 
 # Vendor serve-sim (the iOS-simulator capture engine) so the embedded simulator
-# works offline with no bunx/npx/network. It's a self-contained JS entry + an
-# arm64 Swift helper binary; we run it via Electron's own Node (ELECTRON_RUN_AS_NODE),
-# so no external runtime is needed. extraResources lands it unpacked (binaries can't
-# execute from inside asar) at Contents/Resources/serve-sim. Swift sources/README dropped.
+# works offline with no bunx/npx/network. We run its ESM entry via Electron's own
+# Node (ELECTRON_RUN_AS_NODE) — no external runtime. The entry imports `ws` (and
+# `inspect-webkit`), so all three must ship in a real node_modules/ layout for ESM
+# resolution to find them. Lands unpacked (the arm64 Swift helper binary can't run
+# from inside asar) at Contents/Resources/node_modules/. Swift sources/READMEs dropped.
 extraResources:
   - from: node_modules/serve-sim
-    to: serve-sim
+    to: node_modules/serve-sim
     filter:
       - "**/*"
       - "!Sources/**"
+      - "!README.md"
+  - from: node_modules/ws
+    to: node_modules/ws
+    filter:
+      - "**/*"
+      - "!README.md"
+  - from: node_modules/inspect-webkit
+    to: node_modules/inspect-webkit
+    filter:
+      - "**/*"
       - "!README.md"
 
 asar: true

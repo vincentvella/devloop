@@ -50,10 +50,14 @@ export class ServeSim {
     return { cmd, args, env: process.env };
   }
 
-  /** Path to the vendored serve-sim entry (packaged Resources, then dev node_modules), or null. */
+  /**
+   * Path to the vendored serve-sim entry, or null. Packaged: under Resources/
+   * node_modules (its `ws`/`inspect-webkit` deps sit alongside so ESM resolution
+   * finds them). Dev: the repo's node_modules (deps hoisted to the root).
+   */
   private vendoredEntry(): string | null {
     const candidates = [
-      process.resourcesPath ? join(process.resourcesPath, "serve-sim", "dist", "serve-sim.js") : "",
+      process.resourcesPath ? join(process.resourcesPath, "node_modules", "serve-sim", "dist", "serve-sim.js") : "",
       join(process.cwd(), "node_modules", "serve-sim", "dist", "serve-sim.js"),
     ];
     return candidates.find((p) => p && existsSync(p)) ?? null;
