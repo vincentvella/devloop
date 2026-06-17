@@ -32,12 +32,12 @@ test("buildStatusLabel: badge text only when actionable", () => {
 });
 
 test("resolveNativeInfo: web projects are not native", () => {
-  expect(resolveNativeInfo("web", { hasIosDir: false })).toEqual({ isNative: false, platforms: [], buildStatus: "unknown", badge: null });
+  expect(resolveNativeInfo("web", { hasIosDir: false })).toEqual({ isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null });
 });
 
 test("resolveNativeInfo: RN project offers platforms + staleness badge", () => {
   const stale = resolveNativeInfo("react-native", { hasIosDir: true }, "now", "old");
-  expect(stale).toEqual({ isNative: true, platforms: ["ios"], buildStatus: "stale", badge: "rebuild recommended" });
+  expect(stale).toMatchObject({ isNative: true, platforms: ["ios"], buildStatus: "stale", badge: "rebuild recommended" });
 
   const fresh = resolveNativeInfo("react-native", { hasIosDir: true, hasAndroidDir: true }, "h", "h");
   expect(fresh.platforms).toEqual(["ios", "android"]);
@@ -46,4 +46,10 @@ test("resolveNativeInfo: RN project offers platforms + staleness badge", () => {
 
 test("resolveNativeInfo: managed RN project (no native dirs) still offers iOS", () => {
   expect(resolveNativeInfo("react-native", {}).platforms).toEqual(["ios"]);
+});
+
+test("resolveNativeInfo: view targets — web added only when webCapable, iOS always", () => {
+  expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, true).targets).toEqual(["web", "ios"]);
+  expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, false).targets).toEqual(["ios"]);
+  expect(resolveNativeInfo("web", {}, null, null, true).targets).toEqual([]); // not native → no targets
 });

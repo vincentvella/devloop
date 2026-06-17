@@ -389,16 +389,19 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-wrap: wrap; /* chips drop to a second line instead of clipping when the sidebar is narrow */
     padding: 6px 10px;
     background: var(--color-bg2);
     border-top: 1px solid var(--color-edge);
     border-bottom: 1px solid var(--color-edge);
   }
   .filterbar input {
-    flex: 1;
+    flex: 1 1 130px; /* shrinkable so the chips can wrap below rather than overflow */
+    min-width: 110px;
   }
   .chips {
     display: flex;
+    flex-wrap: wrap;
     gap: 5px;
   }
   .fchip {
@@ -624,6 +627,10 @@
     color: var(--color-warn);
     font-size: 11px;
     white-space: nowrap;
+  }
+  .target-switch {
+    flex: none;
+    margin: 0 2px;
   }
   .modal-title {
     display: flex;

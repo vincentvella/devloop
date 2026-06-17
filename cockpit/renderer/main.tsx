@@ -13,7 +13,6 @@ import {
   Wrench,
   Puzzle,
   Hammer,
-  Smartphone,
   ExternalLink,
   PanelRightClose,
   PanelRightOpen,
@@ -177,10 +176,9 @@ function App() {
   const [chips, setChips] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
-  const [nativeInfo, setNativeInfo] = useState<{ isNative: boolean; platforms: string[]; badge: string | null } | null>(null);
-  const [buildPlatform, setBuildPlatform] = useState("ios");
+  const [nativeInfo, setNativeInfo] = useState<{ isNative: boolean; platforms: string[]; targets: string[]; badge: string | null } | null>(null);
   const [building, setBuilding] = useState(false);
-  const [simOpen, setSimOpen] = useState(false);
+  const [viewTarget, setViewTarget] = useState("web"); // Expo: which target the pane shows (web | ios)
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(460);
   const [dragging, setDragging] = useState(false);
@@ -282,22 +280,30 @@ function App() {
     void dl().overlay(lightbox !== null || wrenchOpen || settingsOpen);
   }, [lightbox, wrenchOpen, settingsOpen]);
 
-  // Probe whether the active pane's project is a native (Expo/RN) build target
-  // when the wrench opens — drives the build control + staleness badge.
+  // Probe whether the active pane's project is a native (Expo/RN) target — drives
+  // the target switcher + build control. Runs on cwd change (not just wrench-open)
+  // so the browser bar can show the Web/iOS switcher for Expo projects.
   useEffect(() => {
-    if (!wrenchOpen || !devCwd) return setNativeInfo(null);
+    if (!devCwd) return setNativeInfo(null);
     let live = true;
     void dl()
       .nativeInfo(devCwd)
       .then((info) => {
         if (!live) return;
         setNativeInfo(info);
-        if (info.platforms?.length && !info.platforms.includes(buildPlatform)) setBuildPlatform(info.platforms[0]!);
+        if (info.targets?.length && !info.targets.includes(viewTarget)) setViewTarget(info.targets[0]!);
       });
     return () => {
       live = false;
     };
-  }, [wrenchOpen, devCwd]);
+  }, [devCwd]);
+
+  // Switch an Expo project's view target: Web (browser pane) ↔ iOS (simulator overlay).
+  const switchTarget = useCallback(async (t: string) => {
+    setViewTarget(t);
+    if (t === "ios") await dl().openSimulator();
+    else await dl().closeSimulator();
+  }, []);
 
   const saveSession = useCallback(() => {
     void dl().sessionSave({ cmd: devCmd.trim(), cwd: devCwd.trim(), steps, project: selProject });
@@ -526,16 +532,6 @@ function App() {
 
           <div className="spacer" />
 
-          <IconBtn
-            tip={simOpen ? "close the simulator" : "open the iOS simulator (serve-sim)"}
-            onClick={() => {
-              const next = !simOpen;
-              setSimOpen(next);
-              void (next ? dl().openSimulator() : dl().closeSimulator());
-            }}
-          >
-            <Smartphone size={15} color={simOpen ? "var(--color-accent)" : undefined} />
-          </IconBtn>
           <IconBtn tip="extensions — browse the Chrome Web Store" onClick={() => void dl().openExtensions()}>
             <Puzzle size={15} />
           </IconBtn>
@@ -566,6 +562,33 @@ function App() {
         <IconBtn tip="clear site data (cookies/localStorage) + reload" onClick={() => void dl().clearStorage().then(() => dl().reload(false))}>
           <Eraser size={15} />
         </IconBtn>
+        {nativeInfo?.isNative && nativeInfo.targets.length > 0 && (
+          <div className="segmented target-switch" title="view target — Web (browser) or iOS (simulator)">
+            {nativeInfo.targets.map((t) => (
+              <button key={t} className={`seg${viewTarget === t ? " on" : ""}`} onClick={() => void switchTarget(t)}>
+                {t === "web" ? "Web" : t === "ios" ? "iOS" : t}
+              </button>
+            ))}
+          </div>
+        )}
+        {nativeInfo?.isNative && viewTarget === "ios" && (
+          <>
+            <button
+              className="labeled btn-primary"
+              disabled={building}
+              title={`build + launch the iOS dev build (output → timeline)${nativeInfo.badge ? " · " + nativeInfo.badge : ""}`}
+              onClick={() => {
+                setBuilding(true);
+                void dl()
+                  .nativeBuild(devCwd, "ios")
+                  .finally(() => setBuilding(false));
+              }}
+            >
+              <Hammer size={13} /> {building ? "building…" : "Build"}
+            </button>
+            {nativeInfo.badge && <span className="build-badge" title="run a build to refresh">⚠</span>}
+          </>
+        )}
         <input
           ref={urlRef}
           className="address"
@@ -611,7 +634,7 @@ function App() {
             </div>
             <span className="spacer" />
             {devFailed && <span className="dev-status fail">✗ exited {dev?.exitCode}</span>}
-            <IconBtn tip="start / stop dev server" onClick={() => void onPlay()}>
+            <IconBtn tip={nativeInfo?.isNative ? "start / stop the bundler (Metro)" : "start / stop dev server"} onClick={() => void onPlay()}>
               {devRunning ? <Square size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
             </IconBtn>
             <IconBtn tip="restart dev server" onClick={() => void dl().devRestart().then(refreshPanes)}>
@@ -794,28 +817,8 @@ function App() {
               </div>
               {nativeInfo?.isNative && (
                 <div className="row">
-                  <span className="field-label">build</span>
-                  <select value={buildPlatform} onChange={(e) => setBuildPlatform(e.target.value)} style={{ flex: "none", minWidth: 90 }}>
-                    {nativeInfo.platforms.map((p) => (
-                      <option key={p} value={p}>
-                        {p === "ios" ? "iOS" : p === "android" ? "Android" : p}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="labeled btn-primary"
-                    disabled={building}
-                    title={`build + launch a ${buildPlatform} dev build (output streams to the timeline)`}
-                    onClick={() => {
-                      setBuilding(true);
-                      void dl()
-                        .nativeBuild(devCwd, buildPlatform)
-                        .finally(() => setBuilding(false));
-                    }}
-                  >
-                    <Hammer size={13} /> {building ? "building…" : "Build"}
-                  </button>
-                  {nativeInfo.badge && <span className="build-badge">⚠ {nativeInfo.badge}</span>}
+                  <span className="field-label">native</span>
+                  <span className="ext-empty">Use the Web/iOS switcher in the browser bar to run + build this target.</span>
                 </div>
               )}
             </div>

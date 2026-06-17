@@ -476,9 +476,10 @@ async function nativeInfo(cwd: string) {
   }
   const probe = { hasIosDir: existsSync(join(cwd, "ios")), hasAndroidDir: existsSync(join(cwd, "android")) };
   const kind = detectTargetKind({ dependencies: deps, ...probe });
-  if (kind !== "react-native") return { isNative: false, platforms: [], buildStatus: "unknown", badge: null };
+  if (kind !== "react-native") return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
+  const webCapable = !!(deps["expo"] || deps["react-native-web"]); // Expo / RNW → has a Web target
   const current = await computeFingerprint(cwd);
-  return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd));
+  return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd), webCapable);
 }
 
 // --- boot ------------------------------------------------------------------

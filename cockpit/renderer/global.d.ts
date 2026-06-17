@@ -86,7 +86,7 @@ export interface DevloopApi {
   setDevConfig: (opts: { cmd?: string; cwd?: string }) => Promise<void>;
   checkForUpdates: () => Promise<void>;
   openExtensions: () => Promise<void>;
-  nativeInfo: (cwd: string) => Promise<{ isNative: boolean; platforms: string[]; buildStatus: string; badge: string | null }>;
+  nativeInfo: (cwd: string) => Promise<{ isNative: boolean; platforms: string[]; targets: string[]; buildStatus: string; badge: string | null }>;
   nativeBuild: (cwd: string, platform: string) => Promise<{ started: boolean }>;
   openSimulator: () => Promise<{ ok: boolean }>;
   closeSimulator: () => Promise<{ ok: boolean }>;
