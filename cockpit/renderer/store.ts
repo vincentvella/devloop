@@ -8,7 +8,7 @@
  * (devCmd/devCwd) and is a separate follow-up slice.
  */
 import { create } from "zustand";
-import type { Entry, Pane, Project, Ext } from "./global";
+import type { Entry, Pane, Project, Ext, NativeInfo } from "./global";
 
 const dl = () => window.devloop;
 const MAX_ENTRIES = 2000;
@@ -18,9 +18,14 @@ interface DevloopState {
   entries: Entry[];
   projects: Project[];
   exts: Ext[];
+  nativeInfo: NativeInfo | null;
 
   /** Refresh the pane list. Returns it so the caller can sync derived UI (dev cmd/cwd). */
   refreshPanes: () => Promise<Pane[]>;
+
+  setNativeInfo: (info: NativeInfo | null) => void;
+  /** Probe a project dir's native-build info (or clear when no cwd). Returns it for target sync. */
+  refreshNativeInfo: (cwd: string) => Promise<NativeInfo | null>;
 
   setEntries: (entries: Entry[]) => void;
   appendEntry: (e: Entry) => void;
@@ -39,11 +44,19 @@ export const useDevloopStore = create<DevloopState>((set, get) => ({
   entries: [],
   projects: [],
   exts: [],
+  nativeInfo: null,
 
   refreshPanes: async () => {
     const panes = await dl().panes();
     set({ panes });
     return panes;
+  },
+
+  setNativeInfo: (nativeInfo) => set({ nativeInfo }),
+  refreshNativeInfo: async (cwd) => {
+    const info = await dl().nativeInfo(cwd);
+    set({ nativeInfo: info });
+    return info;
   },
 
   setEntries: (entries) => set({ entries }),

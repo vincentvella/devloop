@@ -185,7 +185,8 @@ function App() {
   const [chips, setChips] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
-  const [nativeInfo, setNativeInfo] = useState<{ isNative: boolean; platforms: string[]; targets: string[]; badge: string | null } | null>(null);
+  const nativeInfo = useDevloopStore((s) => s.nativeInfo);
+  const refreshNativeInfo = useDevloopStore((s) => s.refreshNativeInfo);
   const [building, setBuilding] = useState(false);
   const [viewTarget, setViewTarget] = useState("web"); // Expo: which target the pane shows (web | ios)
   const [sidebarHidden, setSidebarHidden] = useState(false);
@@ -281,19 +282,18 @@ function App() {
   // the target switcher + build control. Runs on cwd change (not just wrench-open)
   // so the browser bar can show the Web/iOS switcher for Expo projects.
   useEffect(() => {
-    if (!devCwd) return setNativeInfo(null);
+    if (!devCwd) {
+      useDevloopStore.getState().setNativeInfo(null);
+      return;
+    }
     let live = true;
-    void dl()
-      .nativeInfo(devCwd)
-      .then((info) => {
-        if (!live) return;
-        setNativeInfo(info);
-        if (info.targets?.length && !info.targets.includes(viewTarget)) setViewTarget(info.targets[0]!);
-      });
+    void refreshNativeInfo(devCwd).then((info) => {
+      if (live && info?.targets?.length && !info.targets.includes(viewTarget)) setViewTarget(info.targets[0]!);
+    });
     return () => {
       live = false;
     };
-  }, [devCwd]);
+  }, [devCwd, refreshNativeInfo]);
 
   // Switch an Expo project's view target: Web (browser pane) ↔ iOS (simulator overlay).
   const switchTarget = useCallback(async (t: string) => {
@@ -691,7 +691,7 @@ function App() {
               <div className="filterbar">
                 <input placeholder="filter (substring)…" value={filter} onChange={(e) => setFilter(e.target.value)} />
                 <div className="chips">
-                  {CHIPS.map((c) => (
+                  {CHIPS.filter((c) => c.key !== "native" || nativeInfo?.isNative).map((c) => (
                     <span key={c.key} className={`fchip${chips.has(c.key) ? " on" : ""}`} onClick={() => toggleChip(c.key)}>
                       {c.label}
                     </span>
