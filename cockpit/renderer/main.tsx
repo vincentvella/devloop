@@ -869,7 +869,7 @@ function App() {
               </button>
               <div className="row">
                 <input
-                  placeholder="…or paste a Web Store id / URL"
+                  placeholder="Web Store link or extension id"
                   value={extInput}
                   onChange={(e) => setExtInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -902,6 +902,9 @@ function App() {
                 <IconBtn tip="Load an unpacked extension — pick its folder" onClick={() => void dl().extLoadUnpacked().then((l) => l && setExts(l))}>
                   <FolderOpen size={14} />
                 </IconBtn>
+              </div>
+              <div className="ext-hint">
+                The store's “Add to Chrome” stays greyed out — Google only enables it in Chrome itself. To install here, paste the extension's Web Store link (or id) above; the browse button is just for finding one.
               </div>
               {exts.length > 0 ? (
                 <div className="ext-list" data-testid="ext-list">

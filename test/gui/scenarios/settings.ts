@@ -16,7 +16,7 @@ export async function settingsAndExtensions(app: ElectronApplication, win: Page)
   await win.waitForSelector('[data-testid="settings-panel"]', { timeout: 10_000 });
   check("settings opens with the extensions list", (await win.locator('[data-testid="ext-list"], [data-testid="ext-empty"]').count()) > 0);
 
-  const extInput = win.getByPlaceholder("…or paste a Web Store id / URL");
+  const extInput = win.getByPlaceholder("Web Store link or extension id");
   await extInput.fill("test-id");
   check("ext install field is editable", (await extInput.inputValue()) === "test-id");
   await extInput.fill("");

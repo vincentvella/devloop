@@ -696,3 +696,12 @@
   background: var(--color-info);
   transition: width 0.2s ease;
 }
+
+/* Hint under the extensions install field — the store's "Add to Chrome" is gated
+   to real Chrome, so pasting a link is the working install path. */
+.ext-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-dim);
+  margin-top: 6px;
+}
