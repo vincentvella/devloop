@@ -362,23 +362,45 @@ function wireIpc(): void {
     return extList();
   });
   ipcMain.handle("devloop:extRemove", async (_e, id: string) => {
+    const ses = extSession();
     setDisabledExtensions(getDisabledExtensions().filter((x) => x !== id)); // forget any disabled flag
-    try {
-      extSession().extensions.removeExtension(id);
-    } catch {
-      /* not loaded */
-    }
     if (unpackedById.has(id)) {
+      try {
+        ses.extensions.removeExtension(id);
+      } catch {
+        /* not loaded */
+      }
       const dir = unpackedById.get(id)!;
       unpackedById.delete(id);
       setUnpackedExtensions(getUnpackedExtensions().filter((p) => p !== dir));
     } else {
+      // A *disabled* store extension isn't loaded, so removeExtension would no-op
+      // and orphan its persisted `extensions.settings` entry in the session Prefs.
+      // Load it first so removeExtension actually purges that entry, then delete files.
+      if (!ses.extensions.getExtension(id)) {
+        const dir = extDir(id);
+        if (dir) {
+          try {
+            await ses.extensions.loadExtension(dir, { allowFileAccess: true });
+          } catch {
+            /* can't load — fall through to file removal */
+          }
+        }
+      }
       try {
-        await uninstallExtension(id, { session: extSession(), extensionsPath: EXT_DIR });
+        ses.extensions.removeExtension(id);
+      } catch {
+        /* not loaded */
+      }
+      try {
+        await uninstallExtension(id, { session: ses, extensionsPath: EXT_DIR });
       } catch {
         /* store uninstall best-effort */
       }
     }
+    // Refresh an open Web Store window so its "Add to Chrome / Remove" button
+    // reflects the removal (mirrors electron-chrome-web-store's own uninstall path).
+    if (extWin && !extWin.isDestroyed()) extWin.webContents.send("chrome.management.onUninstalled", id);
     return extList();
   });
   ipcMain.handle("devloop:screenshot", async () => {

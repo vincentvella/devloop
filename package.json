@@ -53,7 +53,8 @@
     "dist:mac": "bun run app:build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
     "dist:win": "bun run app:build && electron-builder --win",
     "dist:linux": "bun run app:build && electron-builder --linux",
-    "prepublishOnly": "bun run mcp:build"
+    "prepublishOnly": "bun run mcp:build",
+    "app:gui": "bun run app:build && node cockpit/gui-drive.ts"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
@@ -74,6 +75,7 @@
     "electron-chrome-web-store": "^0.13.0",
     "electron-updater": "^6.8.9",
     "lucide-react": "^1.17.0",
+    "playwright-core": "^1.61.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "serve-sim": "^0.1.41",

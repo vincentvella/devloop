@@ -522,7 +522,7 @@ function App() {
                 </span>
               </span>
             ))}
-            <span className="tab add" onClick={() => void dl().paneNew().then(refreshPanes)}>
+            <span className="tab add" data-testid="pane-add" onClick={() => void dl().paneNew().then(refreshPanes)}>
               <Plus size={13} /> pane
             </span>
           </div>
@@ -831,7 +831,7 @@ function App() {
             <Dialog.Title className="modal-title">
               <Settings size={14} /> Settings
             </Dialog.Title>
-            <div className="settings">
+            <div className="settings" data-testid="settings-panel">
               <div className="modal-section">extensions</div>
               <button
                 className="labeled btn-block btn-primary"
@@ -880,20 +880,20 @@ function App() {
                 </IconBtn>
               </div>
               {exts.length > 0 ? (
-                <div className="ext-list">
+                <div className="ext-list" data-testid="ext-list">
                   {exts.map((x) => (
-                    <span key={x.id} className={`ext-chip${x.enabled ? "" : " off"}`} title={`${x.id} · v${x.version} — click to ${x.enabled ? "disable" : "enable"}`}>
+                    <span key={x.id} data-testid={`ext-chip-${x.id}`} className={`ext-chip${x.enabled ? "" : " off"}`} title={`${x.id} · v${x.version} — click to ${x.enabled ? "disable" : "enable"}`}>
                       <span className="ext-name" onClick={() => void dl().extSetEnabled(x.id, !x.enabled).then(setExts)}>
                         {x.name}
                       </span>
-                      <span className="x" title="remove (uninstall)" onClick={() => void dl().extRemove(x.id).then(setExts)}>
+                      <span className="x" data-testid={`ext-remove-${x.id}`} title="remove (uninstall)" onClick={() => void dl().extRemove(x.id).then(setExts)}>
                         <X size={13} />
                       </span>
                     </span>
                   ))}
                 </div>
               ) : (
-                <div className="ext-empty">No extensions installed yet.</div>
+                <div className="ext-empty" data-testid="ext-empty">No extensions installed yet.</div>
               )}
               <div className="modal-section">updates</div>
               <button className="labeled" title="check GitHub for a newer Devloop release" onClick={() => void dl().checkForUpdates()}>
