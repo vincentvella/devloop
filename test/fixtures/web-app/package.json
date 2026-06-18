@@ -1,0 +1,9 @@
+{
+  "name": "devloop-web-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Minimal dev server used by the cockpit GUI tests — emits console logs, a 200 and a 500 network call, and a clickable element.",
+  "scripts": {
+    "dev": "node server.mjs"
+  }
+}
