@@ -63,11 +63,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      # Install with bun FIRST, in a clean env — setup-node before this skips electron's
+      # binary postinstall (path.txt never gets written → electron.launch ENOENT).
+      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
+      - name: Ensure the Electron binary is present
+        run: test -f node_modules/electron/path.txt || node node_modules/electron/install.js
       - uses: actions/setup-node@v4
         with:
           node-version: 24 # the driver runs under node (TS type-stripping needs >= 22.18)
-      - run: bun install --frozen-lockfile
-      - name: Ensure the Electron binary is downloaded
-        run: node node_modules/electron/install.js # deterministic — don't rely on postinstall timing
       - name: GUI end-to-end (Playwright + Electron)
         run: bun run app:gui
