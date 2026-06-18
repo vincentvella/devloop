@@ -664,3 +664,35 @@
     border-top: 1px solid var(--color-edge);
   }
 }
+
+/* Software-update indicator in the top bar (download progress + lifecycle). */
+.update-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--color-dim);
+  background: var(--color-bg2);
+  border: 1px solid var(--color-edge);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.update-pill.update-downloaded { color: var(--color-ok); border-color: var(--color-ok); }
+.update-pill.update-error { color: var(--color-bad); border-color: var(--color-bad); }
+.update-pill.update-available,
+.update-pill.update-downloading { color: var(--color-info); border-color: var(--color-info); }
+.update-track {
+  width: 56px;
+  height: 4px;
+  background: var(--color-raise);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.update-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-info);
+  transition: width 0.2s ease;
+}

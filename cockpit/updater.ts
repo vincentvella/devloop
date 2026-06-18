@@ -10,7 +10,7 @@
  * app-update.yml and macOS auto-update requires code signing, so we no-op.
  */
 import { dialog, type BrowserWindow } from "electron";
-import { isNewerVersion, updateAvailableMessage, updateReadyMessage, upToDateMessage } from "../src/update.ts";
+import { isNewerVersion, updateAvailableMessage, updateReadyMessage, upToDateMessage, type UpdateStatus } from "../src/update.ts";
 
 export interface Updater {
   /** Check GitHub for a newer release. `manual` shows an "up to date" dialog when there isn't one. */
@@ -38,13 +38,28 @@ export function initAutoUpdate(opts: {
   autoUpdater.logger = { info: log, warn: log, error: (m: unknown) => log(`error ${m}`), debug: () => {} } as never;
 
   let busy = false; // guards against overlapping prompts/downloads
+  let downloadingVersion = "";
 
-  autoUpdater.on("error", (err: Error) => log(`auto-update error: ${err?.message ?? err}`));
+  // Push lifecycle to the renderer for an in-app indicator, and mirror download
+  // progress onto the dock/taskbar progress bar. (-1 clears it.)
+  const emit = (status: UpdateStatus): void => {
+    win?.webContents.send("devloop:update", status);
+    if (win && !win.isDestroyed()) {
+      if (status.state === "downloading") win.setProgressBar(Math.max(0, Math.min(1, status.percent / 100)));
+      else win.setProgressBar(-1);
+    }
+  };
+
+  autoUpdater.on("error", (err: Error) => {
+    log(`auto-update error: ${err?.message ?? err}`);
+    emit({ state: "error", message: err?.message ?? String(err) });
+  });
 
   autoUpdater.on("update-available", async (info: { version: string }) => {
     if (busy || !win) return;
     busy = true;
     log(`auto-update: ${info.version} available (on ${current})`);
+    emit({ state: "available", version: info.version });
     const { response } = await dialog.showMessageBox(win, {
       type: "info",
       buttons: ["Download", "Later"],
@@ -57,11 +72,20 @@ export function initAutoUpdate(opts: {
     busy = false;
     if (response === 0) {
       log(`auto-update: downloading ${info.version}`);
+      downloadingVersion = info.version;
+      emit({ state: "downloading", version: info.version, percent: 0 });
       void autoUpdater.downloadUpdate();
+    } else {
+      emit({ state: "idle" });
     }
   });
 
+  autoUpdater.on("download-progress", (p: { percent: number; bytesPerSecond: number }) => {
+    emit({ state: "downloading", version: downloadingVersion, percent: p.percent, bytesPerSecond: p.bytesPerSecond });
+  });
+
   autoUpdater.on("update-downloaded", async (info: { version: string }) => {
+    emit({ state: "downloaded", version: info.version });
     if (!win) return;
     const { response } = await dialog.showMessageBox(win, {
       type: "info",
@@ -77,11 +101,13 @@ export function initAutoUpdate(opts: {
 
   const check = async (manual = false) => {
     try {
+      if (manual) emit({ state: "checking" });
       const result = await autoUpdater.checkForUpdates();
       const remote = result?.updateInfo?.version;
       // When nothing is newer, electron-updater won't emit update-available; for a
       // user-initiated check, close the loop with explicit feedback.
       if (manual && win && (!remote || !isNewerVersion(current, remote))) {
+        emit({ state: "uptodate", version: current });
         await dialog.showMessageBox(win, {
           type: "info",
           buttons: ["OK"],
@@ -92,6 +118,7 @@ export function initAutoUpdate(opts: {
       }
     } catch (err) {
       log(`auto-update: check failed: ${(err as Error)?.message ?? err}`);
+      if (manual) emit({ state: "error", message: (err as Error)?.message ?? String(err) });
       if (manual && win) {
         await dialog.showMessageBox(win, {
           type: "warning",

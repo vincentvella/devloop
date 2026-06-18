@@ -74,3 +74,43 @@ export function updateReadyMessage(version: string): string {
 export function upToDateMessage(current: string): string {
   return `You're up to date — Devloop ${current} is the latest version.`;
 }
+
+/** Update lifecycle, pushed from the main process to the renderer for an in-app indicator. */
+export type UpdateStatus =
+  | { state: "idle" }
+  | { state: "checking" }
+  | { state: "available"; version: string }
+  | { state: "downloading"; version: string; percent: number; bytesPerSecond?: number }
+  | { state: "downloaded"; version: string }
+  | { state: "uptodate"; version: string }
+  | { state: "error"; message: string };
+
+/** Human-readable transfer rate, e.g. 1258291 → "1.2 MB/s". Empty for missing/zero. */
+export function formatBytesPerSec(bps?: number): string {
+  if (!bps || bps <= 0) return "";
+  if (bps < 1024) return `${Math.round(bps)} B/s`;
+  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`;
+  return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+/** One-line label for the in-app update indicator (empty string when there's nothing to show). */
+export function updateStatusLabel(s: UpdateStatus): string {
+  switch (s.state) {
+    case "checking":
+      return "Checking for updates…";
+    case "available":
+      return `Devloop ${s.version} available`;
+    case "downloading": {
+      const rate = formatBytesPerSec(s.bytesPerSecond);
+      return `Downloading ${s.version}… ${Math.round(s.percent)}%${rate ? ` · ${rate}` : ""}`;
+    }
+    case "downloaded":
+      return `Devloop ${s.version} ready — restart to install`;
+    case "uptodate":
+      return "You're up to date";
+    case "error":
+      return `Update failed: ${s.message}`;
+    default:
+      return "";
+  }
+}

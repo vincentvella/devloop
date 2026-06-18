@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { updateStatusLabel, type UpdateStatus } from "../../src/update.ts";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
@@ -198,6 +199,7 @@ function App() {
   const [url, setUrl] = useState("");
   const [steps, setSteps] = useState<Step[]>([{ kind: "navigate" }]);
   const [reproStatus, setReproStatus] = useState("");
+  const [update, setUpdate] = useState<UpdateStatus>({ state: "idle" });
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [editingPane, setEditingPane] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
@@ -245,8 +247,19 @@ function App() {
       setLoaded(true);
     })();
     const offPanes = dl().onPanesChanged(() => void refreshPanes());
-    return () => offPanes();
+    const offUpdate = dl().onUpdate((s) => setUpdate(s));
+    return () => {
+      offPanes();
+      offUpdate();
+    };
   }, [refreshPanes]);
+
+  // Transient update states clear themselves; downloading/downloaded persist until acted on.
+  useEffect(() => {
+    if (update.state !== "uptodate" && update.state !== "error") return;
+    const t = setTimeout(() => setUpdate({ state: "idle" }), 6000);
+    return () => clearTimeout(t);
+  }, [update]);
 
   // keep the embedded view aligned with the pane area on layout changes.
   useEffect(() => {
@@ -528,6 +541,17 @@ function App() {
           </div>
 
           <div className="spacer" />
+
+          {update.state !== "idle" && (
+            <div className={`update-pill update-${update.state}`} title="software update">
+              <span className="update-label">{updateStatusLabel(update)}</span>
+              {update.state === "downloading" && (
+                <span className="update-track">
+                  <span className="update-fill" style={{ width: `${Math.round(update.percent)}%` }} />
+                </span>
+              )}
+            </div>
+          )}
 
           <IconBtn tip="extensions — browse the Chrome Web Store" onClick={() => void dl().openExtensions()}>
             <Puzzle size={15} />

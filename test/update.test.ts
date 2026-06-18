@@ -5,7 +5,28 @@ import {
   isNewerVersion,
   updateAvailableMessage,
   upToDateMessage,
+  formatBytesPerSec,
+  updateStatusLabel,
 } from "../src/update.ts";
+
+test("formatBytesPerSec scales B/KB/MB and drops missing/zero", () => {
+  expect(formatBytesPerSec(undefined)).toBe("");
+  expect(formatBytesPerSec(0)).toBe("");
+  expect(formatBytesPerSec(500)).toBe("500 B/s");
+  expect(formatBytesPerSec(2048)).toBe("2.0 KB/s");
+  expect(formatBytesPerSec(1258291)).toBe("1.2 MB/s");
+});
+
+test("updateStatusLabel renders each state (empty when idle)", () => {
+  expect(updateStatusLabel({ state: "idle" })).toBe("");
+  expect(updateStatusLabel({ state: "checking" })).toBe("Checking for updates…");
+  expect(updateStatusLabel({ state: "available", version: "0.3.5" })).toBe("Devloop 0.3.5 available");
+  expect(updateStatusLabel({ state: "downloading", version: "0.3.5", percent: 42.4, bytesPerSecond: 1258291 })).toBe("Downloading 0.3.5… 42% · 1.2 MB/s");
+  expect(updateStatusLabel({ state: "downloading", version: "0.3.5", percent: 7 })).toBe("Downloading 0.3.5… 7%");
+  expect(updateStatusLabel({ state: "downloaded", version: "0.3.5" })).toBe("Devloop 0.3.5 ready — restart to install");
+  expect(updateStatusLabel({ state: "uptodate", version: "0.3.4" })).toBe("You're up to date");
+  expect(updateStatusLabel({ state: "error", message: "network down" })).toBe("Update failed: network down");
+});
 
 test("parseSemver handles plain, v-prefixed, prerelease, and build metadata", () => {
   expect(parseSemver("1.2.3")).toEqual({ major: 1, minor: 2, patch: 3, pre: [] });

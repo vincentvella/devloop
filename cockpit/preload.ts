@@ -72,4 +72,9 @@ contextBridge.exposeInMainWorld("devloop", {
     ipcRenderer.on("devloop:push", handler);
     return () => ipcRenderer.removeListener("devloop:push", handler);
   },
+  onUpdate: (cb: (status: unknown) => void) => {
+    const handler = (_e: unknown, status: unknown) => cb(status);
+    ipcRenderer.on("devloop:update", handler);
+    return () => ipcRenderer.removeListener("devloop:update", handler);
+  },
 });

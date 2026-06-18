@@ -142,6 +142,7 @@ export interface DevloopApi {
   onPanesChanged: (cb: () => void) => () => void;
   onExtChanged: (cb: () => void) => () => void;
   onPush: (cb: (e: Entry) => void) => () => void;
+  onUpdate: (cb: (status: import("../../src/update.ts").UpdateStatus) => void) => () => void;
 }
 
 declare global {
