@@ -51,3 +51,21 @@ jobs:
       - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
       - name: Cockpit selftest (offscreen Electron)
         run: bun run app:selftest
+
+  # End-to-end: drive the real renderer DOM via Playwright (macOS provides a window
+  # server; the suite re-execs under node since Playwright's Electron handshake hangs
+  # under bun). Runs the default scenarios only — the GUI_EXT_E2E flow hits the live
+  # Chrome Web Store and is left for manual runs.
+  gui:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # the driver runs under node (TS type-stripping needs >= 22.18)
+      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
+      - name: GUI end-to-end (Playwright + Electron)
+        run: bun run app:gui

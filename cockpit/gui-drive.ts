@@ -8,14 +8,14 @@
  * into the main process to assert side effects. Run after a build.
  *
  *   bun run app:gui                 # build + drive
- *   GUI_EXT_E2E=1 bun run app:gui   # also run the (networked) Web Store install/remove flow
+ *   GUI_EXT_E2E=1 bun run app:gui   # also run the (networked) Web Store install/toggle/remove flow
  *
  * macOS/Windows: launches a real window. Linux/CI: wrap in xvfb-run.
  * Exits non-zero if any check fails.
  */
 import { _electron as electron, type ElectronApplication, type Page } from "playwright-core";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,9 +49,12 @@ interface Pane {
   id: string;
   url: string;
   active: boolean;
+  popped?: boolean;
+  label?: string;
   dev?: { running?: boolean };
 }
-const panes = (win: Page): Promise<Pane[]> => win.evaluate(() => (window as unknown as { devloop: { panes(): Promise<Pane[]> } }).devloop.panes());
+type Bridge = { devloop: { panes(): Promise<Pane[]> } };
+const panes = (win: Page): Promise<Pane[]> => win.evaluate(() => (window as unknown as Bridge).devloop.panes());
 const activePane = async (win: Page): Promise<Pane | undefined> => (await panes(win)).find((p) => p.active);
 const tabCount = (win: Page) => win.locator(".tab:not(.add)").count();
 
@@ -80,6 +83,38 @@ async function run(name: string, fn: () => Promise<void>): Promise<void> {
   }
 }
 
+/** Set the active pane's dev cmd + cwd via the wrench. Each field auto-saves on
+ *  blur, then refreshPanes re-syncs both inputs from the pane — so committing one
+ *  resets the other's input. Commit cwd first (own blur), then cmd; waits let React
+ *  re-render so each blur handler closes over the value just typed. */
+async function setDevConfig(win: Page, cmd: string, cwd: string): Promise<void> {
+  await win.getByLabel("pane settings — project & dev server").click();
+  const cmdI = win.locator('input[placeholder="cmd (blank = auto-detect)"]');
+  const cwdI = win.locator('input[placeholder="project folder (cwd)"]');
+  await cmdI.waitFor({ timeout: 10_000 });
+  await cmdI.fill(cmd);
+  await win.waitForTimeout(250);
+  await cmdI.blur();
+  await win.waitForTimeout(250);
+  await cwdI.fill(cwd);
+  await win.waitForTimeout(250);
+  await cwdI.blur();
+  await win.waitForTimeout(400);
+  // The controlled inputs save on blur, but refreshPanes re-syncs both from the
+  // pane — under fast automation (multiple panes → many async refreshes) the second
+  // blur can clobber the first. Verify it stuck; if not, commit via the same IPC the
+  // inputs drive. (A human typing + tabbing doesn't hit this; it's an automation race.)
+  if ((await activePane(win))?.dev?.cwd !== cwd) {
+    await win.evaluate((c) => (window as unknown as { devloop: { setDevConfig(x: { cmd: string; cwd: string }): Promise<unknown> } }).devloop.setDevConfig(c), { cmd, cwd });
+    await win.waitForTimeout(300);
+  }
+}
+
+async function closeWrench(win: Page): Promise<void> {
+  await win.keyboard.press("Escape");
+  await win.locator('input[placeholder="cmd (blank = auto-detect)"]').waitFor({ state: "hidden" }).catch(() => {});
+}
+
 async function scenarioShellAndPanes(_app: ElectronApplication, win: Page): Promise<void> {
   await win.waitForSelector('[data-testid="pane-add"]', { timeout: 20_000 });
   check("shell renderer mounts", true);
@@ -89,7 +124,6 @@ async function scenarioShellAndPanes(_app: ElectronApplication, win: Page): Prom
   await win.waitForFunction((n) => document.querySelectorAll(".tab:not(.add)").length === n + 1, before, { timeout: 10_000 });
   check("add pane adds a tab", (await tabCount(win)) === before + 1, `${before}→${before + 1}`);
 
-  // Rename the active tab: double-click → inline input → Enter.
   await win.locator(".tab.active").dblclick();
   const edit = win.locator(".tab.active input.edit");
   await edit.fill("renamed-pane");
@@ -99,7 +133,6 @@ async function scenarioShellAndPanes(_app: ElectronApplication, win: Page): Prom
     .catch(() => {});
   check("rename pane updates the tab label", ((await win.locator(".tab.active .name").first().textContent()) ?? "").includes("renamed-pane"));
 
-  // Close the active pane back toward baseline.
   const n = await tabCount(win);
   await win.locator(".tab.active .x").click();
   await win.waitForFunction((c) => document.querySelectorAll(".tab:not(.add)").length === c - 1, n, { timeout: 10_000 });
@@ -107,37 +140,15 @@ async function scenarioShellAndPanes(_app: ElectronApplication, win: Page): Prom
 }
 
 async function scenarioDevServerAndLogs(_app: ElectronApplication, win: Page): Promise<void> {
-  // Configure the active pane's dev server via the wrench (cmd + cwd, auto-saved on blur).
-  await win.getByLabel("pane settings — project & dev server").click();
-  const cmd = win.locator('input[placeholder="cmd (blank = auto-detect)"]');
-  const cwd = win.locator('input[placeholder="project folder (cwd)"]');
-  await cmd.waitFor({ timeout: 10_000 });
-  // Each field auto-saves to the pane on *blur*, then refreshPanes re-syncs BOTH
-  // inputs from the pane — so committing one field resets the other's input to the
-  // pane value. Commit cwd first (its own blur), then cmd; the waits let React
-  // re-render so each blur handler closes over the value just typed.
-  await cwd.fill(FIXTURE);
-  await win.waitForTimeout(250);
-  await cwd.blur();
-  await win.waitForTimeout(250);
-  await cmd.fill("node server.mjs");
-  await win.waitForTimeout(250);
-  await cmd.blur();
-  await win.waitForTimeout(250);
-  await win.keyboard.press("Escape"); // close wrench
-  await cmd.waitFor({ state: "hidden" }).catch(() => {});
-
-  // Start it; the cockpit should auto-navigate the pane to the URL the server prints.
+  await setDevConfig(win, "node server.mjs", FIXTURE);
+  await closeWrench(win);
   await win.getByLabel("start / stop dev server").click();
   const ap = await waitForActive(win, (p) => /^https?:\/\/(localhost|127\.0\.0\.1):\d+/.test(p.url || ""), 30_000);
   ctx.fixtureOrigin = ap?.url ? new URL(ap.url).origin : "";
   check("dev server auto-navigates the pane to its URL", !!ap, ap?.url ?? "(no localhost url)");
 
-  // Page console output flows into the unified timeline (rendered in #list).
   await win.locator("#list .logrow", { hasText: "fixture: page loaded" }).first().waitFor({ timeout: 15_000 });
   check("page console logs land in the timeline", true);
-
-  // Network is captured too — the 500 from /api/fail is always logged.
   await win.locator("#list .logrow", { hasText: "/api/fail" }).first().waitFor({ timeout: 15_000 });
   check("failed network request is captured on the timeline", true);
 }
@@ -147,19 +158,37 @@ async function scenarioLogsFilter(_app: ElectronApplication, win: Page): Promise
   await filter.fill("fixture: page loaded");
   await win.waitForTimeout(250);
   check("substring filter keeps matching rows", (await win.locator("#list .logrow").count()) >= 1);
-
   await filter.fill("zzz-definitely-not-present-xyz");
   await win.waitForTimeout(250);
   check("substring filter hides non-matching rows", (await win.locator("#list .logrow").count()) === 0);
   await filter.fill("");
 
-  // The "network" chip restricts to network rows (tag is `source:stream`).
   await win.locator(".chips .fchip", { hasText: "network" }).click();
   await win.waitForTimeout(250);
   const rows = await win.locator("#list .logrow").count();
   const allNetwork = await win.locator("#list .logrow .tag").evaluateAll((els) => els.length > 0 && els.every((e) => (e.textContent || "").includes("network")));
   check("network chip shows only network rows", rows >= 1 && allNetwork, `rows=${rows}`);
-  await win.locator(".chips .fchip", { hasText: "network" }).click(); // toggle off
+  await win.locator(".chips .fchip", { hasText: "network" }).click();
+}
+
+async function scenarioScreenshot(_app: ElectronApplication, win: Page): Promise<void> {
+  // Re-navigate to the fixture page (manual-nav may have left a JSON page) so the shot has content.
+  const before = await win.locator("#list .logrow .shot").count();
+  await win.getByLabel("screenshot → timeline").click();
+  await win.waitForFunction((n) => document.querySelectorAll("#list .logrow .shot").length > n, before, { timeout: 15_000 });
+  check("screenshot lands as a thumbnail on the timeline", (await win.locator("#list .logrow .shot").count()) > before);
+}
+
+async function scenarioRepro(_app: ElectronApplication, win: Page): Promise<void> {
+  await win.locator(".chips, .filterbar").first().waitFor().catch(() => {});
+  await win.locator("button.seg", { hasText: "repro" }).click(); // switch to the repro builder
+  await win.locator("button.labeled", { hasText: "step" }).click(); // add a (navigate) step
+  await win.locator(".steps input").first().fill(ctx.fixtureOrigin); // navigate target
+  await win.waitForTimeout(150);
+  await win.locator("button.labeled", { hasText: "run" }).click();
+  // Results render inline in the timeline (the panel auto-switches to logs).
+  await win.locator("#list .logrow", { hasText: "repro ·" }).first().waitFor({ timeout: 20_000 });
+  check("repro builder runs and renders results inline", true);
 }
 
 async function scenarioManualNavigation(_app: ElectronApplication, win: Page): Promise<void> {
@@ -171,8 +200,73 @@ async function scenarioManualNavigation(_app: ElectronApplication, win: Page): P
   check("address bar navigates the active pane", !!ap, ap?.url ?? target);
 }
 
+async function scenarioExports(app: ElectronApplication, win: Page): Promise<void> {
+  const harPath = join(tmpdir(), "devloop-gui-export.har");
+  const htmlPath = join(tmpdir(), "devloop-gui-export.html");
+  rmSync(harPath, { force: true });
+  rmSync(htmlPath, { force: true });
+  // Stub the native save dialog (Playwright can't drive native dialogs) to return a known path.
+  await app.evaluate(({ dialog }, paths) => {
+    let i = 0;
+    (dialog as unknown as { showSaveDialog: unknown }).showSaveDialog = async () => ({ canceled: false, filePath: paths[i++] });
+  }, [harPath, htmlPath]);
+  await win.getByTitle("export captured network as a HAR file").click();
+  await win.waitForTimeout(800);
+  check("HAR export writes a file", existsSync(harPath));
+  await win.getByTitle("export a shareable bug report (HTML)").click();
+  await win.waitForTimeout(800);
+  check("report export writes an HTML file", existsSync(htmlPath));
+  rmSync(harPath, { force: true });
+  rmSync(htmlPath, { force: true });
+}
+
+async function scenarioProjectRegistry(_app: ElectronApplication, win: Page): Promise<void> {
+  await win.getByLabel("pane settings — project & dev server").click();
+  await win.getByTitle("save the active pane as a project (rename on its tab)").click();
+  await win.waitForTimeout(400);
+  // The saved project (named from the pane label) appears in the project picker.
+  const opts = await win.locator(".settings select option").allTextContents();
+  check("saving a project adds it to the picker", opts.some((o) => o.includes("renamed-pane") || o.includes("devloop")), opts.filter(Boolean).join(","));
+  await closeWrench(win);
+}
+
+async function scenarioMultiPane(_app: ElectronApplication, win: Page): Promise<void> {
+  const firstUrl = (await activePane(win))?.url || "";
+  await win.click('[data-testid="pane-add"]'); // new pane becomes active
+  await setDevConfig(win, "node server.mjs", FIXTURE);
+  await closeWrench(win);
+  await win.getByLabel("start / stop dev server").click();
+  const ap = await waitForActive(win, (p) => /^https?:\/\/(localhost|127\.0\.0\.1):\d+/.test(p.url || "") && p.url !== firstUrl, 30_000);
+  const all = await panes(win);
+  if (process.env.GUI_DEBUG) console.log("[dbg] multipane firstUrl=", firstUrl, "panes=", JSON.stringify(all));
+  const running = all.filter((p) => p.dev?.running);
+  const distinct = new Set(running.map((p) => p.url)).size === running.length;
+  check("two panes run independent dev servers on distinct URLs", running.length >= 2 && distinct, `running=${running.length} thisUrl=${ap?.url}`);
+}
+
+async function scenarioPopOut(app: ElectronApplication, win: Page): Promise<void> {
+  const before = app.windows().length;
+  const popupP = app.waitForEvent("window", { timeout: 10_000 }).catch(() => null);
+  await win.getByLabel("pop active pane into its own window").click();
+  const popup = await popupP;
+  check("pop-out opens a separate window", !!popup && app.windows().length > before);
+  if (popup) {
+    await popup.locator(".address, input.address").first().waitFor({ timeout: 8_000 }).catch(() => {});
+    check("popped window has its own browser bar", (await popup.locator("input.address").count()) > 0);
+    // Close from the main process so the BrowserWindow 'close' event fires (→ dockPane).
+    // Playwright's page.close() can tear down the page without firing Electron's 'close'.
+    await app.evaluate(({ BrowserWindow }) => {
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (w.webContents.getURL().includes("pop=")) w.close();
+      }
+    });
+    const redocked = await waitForActive(win, (p) => !p.popped, 8_000);
+    check("closing the popped window re-docks the pane", !!redocked);
+  }
+}
+
 async function scenarioDevServerStop(_app: ElectronApplication, win: Page): Promise<void> {
-  await win.getByLabel("start / stop dev server").click(); // toggles to stop
+  await win.getByLabel("start / stop dev server").click(); // toggles the active pane's server off
   const ap = await waitForActive(win, (p) => !p.dev?.running, 15_000);
   check("stop dev server clears running state", !!ap);
 }
@@ -188,20 +282,59 @@ async function scenarioSettingsAndExtensions(app: ElectronApplication, win: Page
   await extInput.fill("");
 
   if (RUN_EXT_E2E) {
-    // The dependable re-download path: install by id → chip appears.
+    const loaded = (part: string) => app.evaluate(({ session }, p) => !!session.fromPartition(p).extensions.getExtension("eimadpbcbfnmbkopoojfekhnkhdbieeh"), part);
     await extInput.fill(DARK_READER);
     await win.getByTitle("install from the pasted id / URL").click();
     await win.waitForSelector(`[data-testid="ext-chip-${DARK_READER}"]`, { timeout: 60_000 });
-    check("ext install by id adds the chip", true);
+    check("ext install by id adds the chip", await loaded(PANE_PARTITION));
 
-    // Remove it → chip goes away AND it's unloaded from the panes session (regression
-    // guard for the remove-hygiene fix).
+    // Toggle off → chip gets the "off" class + unloaded from the session; toggle on → reloaded.
+    await win.locator(`[data-testid="ext-chip-${DARK_READER}"] .ext-name`).click();
+    await win.waitForTimeout(800);
+    check("ext disable unloads it (chip dims)", !(await loaded(PANE_PARTITION)) && (await win.locator(`[data-testid="ext-chip-${DARK_READER}"].off`).count()) > 0);
+    await win.locator(`[data-testid="ext-chip-${DARK_READER}"] .ext-name`).click();
+    await win.waitForTimeout(800);
+    check("ext enable reloads it", await loaded(PANE_PARTITION));
+
+    // Remove → chip goes away AND it's unloaded (regression guard for the remove-hygiene fix).
     await win.locator(`[data-testid="ext-remove-${DARK_READER}"]`).click();
     await win.waitForSelector(`[data-testid="ext-chip-${DARK_READER}"]`, { state: "detached", timeout: 20_000 });
-    const unloaded = await app.evaluate(({ session }, part) => !session.fromPartition(part).extensions.getExtension("eimadpbcbfnmbkopoojfekhnkhdbieeh"), PANE_PARTITION);
-    check("ext remove unloads it from the session", unloaded);
+    check("ext remove unloads it from the session", !(await loaded(PANE_PARTITION)));
   }
   await win.keyboard.press("Escape");
+}
+
+/** Persistence/restore needs an app restart, so it runs its own launch cycle with a
+ *  shared DEVLOOP_HOME (panes.json lives there) but a fresh Chromium profile. */
+async function testPersistence(): Promise<void> {
+  const home = mkdtempSync(join(tmpdir(), "devloop-gui-persist-"));
+  const launch = (ud: string) =>
+    electron.launch({ args: ["out/main.cjs", `--user-data-dir=${ud}`], cwd: ROOT, env: { ...process.env, DEVLOOP_HOME: home, DEVLOOP_HTTP_PORT: "0" }, timeout: 60_000 });
+  const ud1 = mkdtempSync(join(tmpdir(), "devloop-gui-ud-"));
+  const ud2 = mkdtempSync(join(tmpdir(), "devloop-gui-ud-"));
+  try {
+    let app = await launch(ud1);
+    let win = await app.firstWindow();
+    await win.waitForSelector('[data-testid="pane-add"]', { timeout: 20_000 });
+    await win.click('[data-testid="pane-add"]');
+    await win.locator(".tab.active").dblclick();
+    await win.locator(".tab.active input.edit").fill("persist-marker");
+    await win.locator(".tab.active input.edit").press("Enter");
+    await win.waitForTimeout(800); // let panes.json persist
+    await app.close();
+
+    app = await launch(ud2);
+    win = await app.firstWindow();
+    await win.waitForSelector('[data-testid="pane-add"]', { timeout: 20_000 });
+    await win.waitForTimeout(800);
+    const labels = await win.locator(".tab .name").allTextContents();
+    check("panes restore across relaunch", labels.some((l) => l.includes("persist-marker")), labels.join(","));
+    await app.close();
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(ud1, { recursive: true, force: true });
+    rmSync(ud2, { recursive: true, force: true });
+  }
 }
 
 async function main(): Promise<void> {
@@ -225,7 +358,13 @@ async function main(): Promise<void> {
     await run("shell & panes", () => scenarioShellAndPanes(app!, win));
     await run("dev server & logs", () => scenarioDevServerAndLogs(app!, win));
     await run("logs filter", () => scenarioLogsFilter(app!, win));
+    await run("screenshot", () => scenarioScreenshot(app!, win));
+    await run("repro builder", () => scenarioRepro(app!, win));
     await run("manual navigation", () => scenarioManualNavigation(app!, win));
+    await run("exports", () => scenarioExports(app!, win));
+    await run("project registry", () => scenarioProjectRegistry(app!, win));
+    await run("multi-pane", () => scenarioMultiPane(app!, win));
+    await run("pop-out", () => scenarioPopOut(app!, win));
     await run("dev server stop", () => scenarioDevServerStop(app!, win));
     await run("settings & extensions", () => scenarioSettingsAndExtensions(app!, win));
 
@@ -236,6 +375,8 @@ async function main(): Promise<void> {
     rmSync(home, { recursive: true, force: true });
     rmSync(userData, { recursive: true, force: true });
   }
+
+  await run("persistence/restore", () => testPersistence());
 }
 
 main()
