@@ -236,6 +236,8 @@ function wireIpc(): void {
   });
   ipcMain.handle("devloop:navigate", (_e, url: string) => manager.navigate(url));
   ipcMain.handle("devloop:checkForUpdates", () => updater?.check(true));
+  ipcMain.handle("devloop:updateDownload", () => updater?.download());
+  ipcMain.handle("devloop:updateInstall", () => updater?.install());
   ipcMain.handle("devloop:openExtensions", () => openExtensionsWindow());
   ipcMain.handle("devloop:nativeInfo", (_e, cwd: string) => nativeInfo(cwd));
   ipcMain.handle("devloop:nativeBuild", (_e, cwd: string, platform: Platform) => {

@@ -50,6 +50,43 @@ function IconBtn({ tip, onClick, children, disabled }: { tip: string; onClick: (
   );
 }
 
+/** Full-width software-update banner: a spinner while checking/downloading, a
+ *  progress bar with percent, and in-app Download / Restart actions (no native
+ *  dialogs). Renders nothing when idle. */
+function UpdateBanner({ status, onDownload, onInstall, onDismiss }: { status: UpdateStatus; onDownload: () => void; onInstall: () => void; onDismiss: () => void }): ReactNode {
+  if (status.state === "idle") return null;
+  const spinning = status.state === "checking" || status.state === "downloading";
+  const tone = status.state === "error" ? "bad" : status.state === "downloaded" ? "ok" : "info";
+  const dismissible = status.state === "available" || status.state === "downloaded" || status.state === "error" || status.state === "uptodate";
+  return (
+    <div className={`update-banner ${tone}`}>
+      {spinning ? <span className="update-spinner" /> : <span className="update-dot" />}
+      <span className="update-text">{updateStatusLabel(status)}</span>
+      {status.state === "downloading" && (
+        <span className="update-progress">
+          <span className="update-progress-fill" style={{ width: `${Math.round(status.percent)}%` }} />
+        </span>
+      )}
+      <span className="update-spacer" />
+      {status.state === "available" && (
+        <button className="update-btn primary" onClick={onDownload}>
+          Download
+        </button>
+      )}
+      {status.state === "downloaded" && (
+        <button className="update-btn primary" onClick={onInstall}>
+          Restart to install
+        </button>
+      )}
+      {dismissible && (
+        <button className="update-btn ghost" aria-label="dismiss update" onClick={onDismiss}>
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
+
 // --- helpers ---------------------------------------------------------------
 function normalizeUrl(input: string): string {
   const v = input.trim();
@@ -484,6 +521,12 @@ function App() {
 
   return (
     <Tooltip.Provider delayDuration={250}>
+      <UpdateBanner
+        status={update}
+        onDownload={() => void dl().updateDownload()}
+        onInstall={() => void dl().updateInstall()}
+        onDismiss={() => setUpdate({ state: "idle" })}
+      />
       <div className="toolbar">
         <div className="bar">
           <div className="tabs">
@@ -541,17 +584,6 @@ function App() {
           </div>
 
           <div className="spacer" />
-
-          {update.state !== "idle" && (
-            <div className={`update-pill update-${update.state}`} title="software update">
-              <span className="update-label">{updateStatusLabel(update)}</span>
-              {update.state === "downloading" && (
-                <span className="update-track">
-                  <span className="update-fill" style={{ width: `${Math.round(update.percent)}%` }} />
-                </span>
-              )}
-            </div>
-          )}
 
           <IconBtn tip="extensions — browse the Chrome Web Store" onClick={() => void dl().openExtensions()}>
             <Puzzle size={15} />

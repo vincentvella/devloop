@@ -2,46 +2,45 @@
  * Auto-update for the cockpit, backed by electron-updater reading the
  * `latest*.yml` + signed `.zip`/installer feed we publish to GitHub Releases.
  *
- * Flow: on launch (and on demand) check GitHub → if a newer version exists,
- * prompt to download → once downloaded, prompt to restart-and-install. Nothing
- * downloads or installs without the user saying yes.
+ * Flow: on launch (and on demand) check GitHub → push status to the renderer's
+ * in-app update banner. The banner drives the decisions: Download when one's
+ * available, Restart to install once downloaded. Nothing downloads or installs
+ * without the user acting — no native dialogs.
  *
  * Only meaningful in a packaged, signed build — in dev / selftest there's no
  * app-update.yml and macOS auto-update requires code signing, so we no-op.
  */
-import { dialog, type BrowserWindow } from "electron";
-import { isNewerVersion, updateAvailableMessage, updateReadyMessage, upToDateMessage, type UpdateStatus } from "../src/update.ts";
+import { type BrowserWindow } from "electron";
+import { isNewerVersion, type UpdateStatus } from "../src/update.ts";
 
 export interface Updater {
-  /** Check GitHub for a newer release. `manual` shows an "up to date" dialog when there isn't one. */
+  /** Check GitHub for a newer release. `manual` surfaces an "up to date" banner when there isn't one. */
   check: (manual?: boolean) => Promise<void>;
+  /** Start downloading the available update (driven by the banner's Download button). */
+  download: () => void;
+  /** Restart and install a downloaded update (the banner's Restart button). */
+  install: () => void;
 }
 
-export function initAutoUpdate(opts: {
-  win?: BrowserWindow;
-  log: (msg: string) => void;
-  enabled: boolean;
-}): Updater {
+export function initAutoUpdate(opts: { win?: BrowserWindow; log: (msg: string) => void; enabled: boolean }): Updater {
   const { win, log, enabled } = opts;
   if (!enabled) {
     log("auto-update: disabled (dev/unpackaged/selftest)");
-    return { check: async () => log("auto-update: check skipped (disabled)") };
+    return { check: async () => log("auto-update: check skipped (disabled)"), download: () => {}, install: () => {} };
   }
 
   // Lazy require so dev/test never loads electron-updater (it expects packaged metadata).
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { autoUpdater } = require("electron-updater") as typeof import("electron-updater");
   const current = autoUpdater.currentVersion.version;
 
-  autoUpdater.autoDownload = false; // we prompt before downloading
-  autoUpdater.autoInstallOnAppQuit = true; // if they pick "Later", install on next quit
+  autoUpdater.autoDownload = false; // the banner's Download button triggers it
+  autoUpdater.autoInstallOnAppQuit = true; // if they don't restart now, install on next quit
   autoUpdater.logger = { info: log, warn: log, error: (m: unknown) => log(`error ${m}`), debug: () => {} } as never;
 
-  let busy = false; // guards against overlapping prompts/downloads
-  let downloadingVersion = "";
+  let latestVersion = "";
 
-  // Push lifecycle to the renderer for an in-app indicator, and mirror download
-  // progress onto the dock/taskbar progress bar. (-1 clears it.)
+  // Push lifecycle to the renderer's update banner, and mirror download progress
+  // onto the dock/taskbar progress bar. (-1 clears it.)
   const emit = (status: UpdateStatus): void => {
     win?.webContents.send("devloop:update", status);
     if (win && !win.isDestroyed()) {
@@ -54,82 +53,39 @@ export function initAutoUpdate(opts: {
     log(`auto-update error: ${err?.message ?? err}`);
     emit({ state: "error", message: err?.message ?? String(err) });
   });
-
-  autoUpdater.on("update-available", async (info: { version: string }) => {
-    if (busy || !win) return;
-    busy = true;
+  autoUpdater.on("update-available", (info: { version: string }) => {
+    latestVersion = info.version;
     log(`auto-update: ${info.version} available (on ${current})`);
     emit({ state: "available", version: info.version });
-    const { response } = await dialog.showMessageBox(win, {
-      type: "info",
-      buttons: ["Download", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-      title: "Update available",
-      message: `Devloop ${info.version} is available`,
-      detail: updateAvailableMessage(current, info.version),
-    });
-    busy = false;
-    if (response === 0) {
-      log(`auto-update: downloading ${info.version}`);
-      downloadingVersion = info.version;
-      emit({ state: "downloading", version: info.version, percent: 0 });
-      void autoUpdater.downloadUpdate();
-    } else {
-      emit({ state: "idle" });
-    }
   });
-
   autoUpdater.on("download-progress", (p: { percent: number; bytesPerSecond: number }) => {
-    emit({ state: "downloading", version: downloadingVersion, percent: p.percent, bytesPerSecond: p.bytesPerSecond });
+    emit({ state: "downloading", version: latestVersion, percent: p.percent, bytesPerSecond: p.bytesPerSecond });
   });
-
-  autoUpdater.on("update-downloaded", async (info: { version: string }) => {
+  autoUpdater.on("update-downloaded", (info: { version: string }) => {
+    log(`auto-update: ${info.version} downloaded`);
     emit({ state: "downloaded", version: info.version });
-    if (!win) return;
-    const { response } = await dialog.showMessageBox(win, {
-      type: "info",
-      buttons: ["Restart now", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-      title: "Update ready",
-      message: `Devloop ${info.version} is ready`,
-      detail: updateReadyMessage(info.version),
-    });
-    if (response === 0) autoUpdater.quitAndInstall();
   });
 
-  const check = async (manual = false) => {
+  const check = async (manual = false): Promise<void> => {
     try {
       if (manual) emit({ state: "checking" });
       const result = await autoUpdater.checkForUpdates();
       const remote = result?.updateInfo?.version;
       // When nothing is newer, electron-updater won't emit update-available; for a
       // user-initiated check, close the loop with explicit feedback.
-      if (manual && win && (!remote || !isNewerVersion(current, remote))) {
-        emit({ state: "uptodate", version: current });
-        await dialog.showMessageBox(win, {
-          type: "info",
-          buttons: ["OK"],
-          title: "No updates",
-          message: "You're up to date",
-          detail: upToDateMessage(current),
-        });
-      }
+      if (manual && (!remote || !isNewerVersion(current, remote))) emit({ state: "uptodate", version: current });
     } catch (err) {
       log(`auto-update: check failed: ${(err as Error)?.message ?? err}`);
       if (manual) emit({ state: "error", message: (err as Error)?.message ?? String(err) });
-      if (manual && win) {
-        await dialog.showMessageBox(win, {
-          type: "warning",
-          buttons: ["OK"],
-          title: "Update check failed",
-          message: "Couldn't check for updates",
-          detail: String((err as Error)?.message ?? err),
-        });
-      }
     }
   };
 
-  return { check };
+  const download = (): void => {
+    log(`auto-update: downloading ${latestVersion}`);
+    emit({ state: "downloading", version: latestVersion, percent: 0 });
+    void autoUpdater.downloadUpdate();
+  };
+  const install = (): void => autoUpdater.quitAndInstall();
+
+  return { check, download, install };
 }

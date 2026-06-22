@@ -100,6 +100,8 @@ export interface DevloopApi {
   devRestart: () => Promise<DevStatus>;
   setDevConfig: (opts: { cmd?: string; cwd?: string }) => Promise<void>;
   checkForUpdates: () => Promise<void>;
+  updateDownload: () => Promise<void>;
+  updateInstall: () => Promise<void>;
   openExtensions: () => Promise<void>;
   nativeInfo: (cwd: string) => Promise<NativeInfo>;
   nativeBuild: (cwd: string, platform: string) => Promise<{ started: boolean }>;

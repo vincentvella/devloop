@@ -665,37 +665,57 @@
   }
 }
 
-/* Software-update indicator in the top bar (download progress + lifecycle). */
-.update-pill {
+/* Full-width software-update banner (lifecycle + download progress + actions). */
+.update-banner {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-right: 6px;
-  padding: 2px 8px;
-  font-size: 11px;
-  color: var(--color-dim);
+  gap: 10px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  color: var(--color-fg);
   background: var(--color-bg2);
-  border: 1px solid var(--color-edge);
-  border-radius: 999px;
-  white-space: nowrap;
+  border-bottom: 1px solid var(--color-edge);
 }
-.update-pill.update-downloaded { color: var(--color-ok); border-color: var(--color-ok); }
-.update-pill.update-error { color: var(--color-bad); border-color: var(--color-bad); }
-.update-pill.update-available,
-.update-pill.update-downloading { color: var(--color-info); border-color: var(--color-info); }
-.update-track {
-  width: 56px;
-  height: 4px;
+.update-banner.ok { border-bottom-color: var(--color-ok); }
+.update-banner.bad { border-bottom-color: var(--color-bad); }
+.update-banner.info { border-bottom-color: var(--color-info); }
+.update-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-edge);
+  border-top-color: var(--color-info);
+  animation: update-spin 0.7s linear infinite;
+}
+@keyframes update-spin {
+  to { transform: rotate(360deg); }
+}
+.update-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.update-banner.ok .update-dot { background: var(--color-ok); }
+.update-banner.bad .update-dot { background: var(--color-bad); }
+.update-text { white-space: nowrap; }
+.update-progress {
+  flex: 1;
+  max-width: 260px;
+  height: 5px;
   background: var(--color-raise);
   border-radius: 999px;
   overflow: hidden;
 }
-.update-fill {
-  display: block;
-  height: 100%;
-  background: var(--color-info);
-  transition: width 0.2s ease;
+.update-progress-fill { display: block; height: 100%; background: var(--color-info); transition: width 0.2s ease; }
+.update-spacer { flex: 1; }
+.update-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--color-edge);
+  background: var(--color-raise);
+  color: var(--color-fg);
 }
+.update-btn.primary { background: var(--color-accent); border-color: var(--color-accent); color: #1c1033; font-weight: 600; }
+.update-btn.ghost { border: none; background: transparent; color: var(--color-dim); }
 
 /* Hint under the extensions install field — the store's "Add to Chrome" is gated
    to real Chrome, so pasting a link is the working install path. */
