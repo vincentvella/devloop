@@ -32,7 +32,7 @@ if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
   process.exit(r.status ?? 1);
 }
 
-const { check, launchApp, results, run } = await import("./harness.ts");
+const { check, launchReady, results, run } = await import("./harness.ts");
 const { shellAndPanes, multiPane, popOut } = await import("./scenarios/panes.ts");
 const { devServerAndLogs, devServerStop } = await import("./scenarios/devServer.ts");
 const { logsFilter, screenshot, repro, manualNavigation, exports } = await import("./scenarios/timeline.ts");
@@ -44,18 +44,13 @@ async function main(): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "devloop-gui-"));
   const userData = mkdtempSync(join(tmpdir(), "devloop-gui-ud-"));
   // NET_THRESHOLD=0 captures all network events so the timeline assertions are deterministic.
-  let app: Awaited<ReturnType<typeof launchApp>> | undefined = await launchApp(home, userData, { DEVLOOP_NET_THRESHOLD: "0" });
+  // launchReady waits for the renderer to be interactive (and relaunches a stalled cold start).
+  const ready = await launchReady(home, userData, { DEVLOOP_NET_THRESHOLD: "0" });
+  let app: Awaited<ReturnType<typeof launchReady>>["app"] | undefined = ready.app;
+  const win = ready.win;
   try {
     if (process.env.GUI_DEBUG) app.process().stderr?.on("data", (d: Buffer) => process.stderr.write(`[elec] ${d}`));
-    const win = await app.firstWindow();
     check("main process is Devloop", (await app.evaluate(({ app }) => app.getName())) === "Devloop");
-
-    // Gate scenarios on the renderer being interactive: the IPC bridge exists and
-    // the shell has mounted. On a slow/cold CI runner the app can take a while, and
-    // starting before this cascades every scenario into timeouts. (Sync predicate —
-    // no async-IPC waitForFunction pitfall.)
-    await win.waitForFunction(() => !!(window as { devloop?: unknown }).devloop, undefined, { timeout: 45_000 });
-    await win.waitForSelector('[data-testid="pane-add"]', { timeout: 45_000 });
 
     const a = app;
     await run("shell & panes", () => shellAndPanes(a, win));

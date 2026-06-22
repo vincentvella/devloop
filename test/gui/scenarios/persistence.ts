@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { check, launchApp } from "../harness.ts";
+import { check, launchReady } from "../harness.ts";
 
 /** Persistence/restore needs an app restart, so it runs its own launch cycle with a
  *  shared DEVLOOP_HOME (panes.json lives there) but a fresh Chromium profile. */
@@ -10,9 +10,7 @@ export async function persistence(): Promise<void> {
   const ud1 = mkdtempSync(join(tmpdir(), "devloop-gui-ud-"));
   const ud2 = mkdtempSync(join(tmpdir(), "devloop-gui-ud-"));
   try {
-    let app = await launchApp(home, ud1);
-    let win = await app.firstWindow();
-    await win.waitForSelector('[data-testid="pane-add"]', { timeout: 20_000 });
+    let { app, win } = await launchReady(home, ud1);
     await win.click('[data-testid="pane-add"]');
     await win.waitForTimeout(300);
     // Double-click to open the inline rename editor; retry — on a slow runner the
@@ -29,9 +27,7 @@ export async function persistence(): Promise<void> {
     await win.waitForTimeout(800); // let panes.json persist
     await app.close();
 
-    app = await launchApp(home, ud2);
-    win = await app.firstWindow();
-    await win.waitForSelector('[data-testid="pane-add"]', { timeout: 20_000 });
+    ({ app, win } = await launchReady(home, ud2));
     await win.waitForTimeout(800);
     const labels = await win.locator(".tab .name").allTextContents();
     check("panes restore across relaunch", labels.some((l) => l.includes("persist-marker")), labels.join(","));

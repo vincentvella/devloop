@@ -64,14 +64,44 @@ export async function run(name: string, fn: () => Promise<void>): Promise<void> 
 
 /** Launch the built cockpit with an isolated registry + Chromium profile. */
 export function launchApp(home: string, userData: string, extraEnv: Record<string, string> = {}): Promise<ElectronApplication> {
-  // --user-data-dir isolates this run's Chromium profile (no LevelDB lock contention
-  // with a real Devloop instance; concurrent runs don't collide).
   return electron.launch({
-    args: ["out/main.cjs", `--user-data-dir=${userData}`],
+    args: [
+      "out/main.cjs",
+      // --user-data-dir isolates this run's Chromium profile (no LevelDB lock
+      // contention with a real Devloop instance; concurrent runs don't collide).
+      `--user-data-dir=${userData}`,
+      // On a headless CI runner the window is "occluded", so Chromium throttles the
+      // renderer — the bridge/mount can stall for tens of seconds. Disable that so
+      // the headed app comes up promptly (offscreen selftest isn't affected).
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-background-timer-throttling",
+    ],
     cwd: ROOT,
     env: { ...process.env, DEVLOOP_HOME: home, DEVLOOP_HTTP_PORT: "0", ...extraEnv },
     timeout: 60_000,
   });
+}
+
+/** Launch and wait until the renderer is interactive (IPC bridge + shell mounted),
+ *  relaunching if a cold start stalls — so a slow/occluded CI runner can't wedge the
+ *  whole suite. Returns the app + its shell window. */
+export async function launchReady(home: string, userData: string, extraEnv: Record<string, string> = {}, attempts = 3): Promise<{ app: ElectronApplication; win: Page }> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const app = await launchApp(home, userData, extraEnv);
+    try {
+      const win = await app.firstWindow({ timeout: 30_000 });
+      await win.waitForFunction(() => !!(window as { devloop?: unknown }).devloop, undefined, { timeout: 30_000 });
+      await win.waitForSelector('[data-testid="pane-add"]', { timeout: 30_000 });
+      return { app, win };
+    } catch (e) {
+      lastErr = e;
+      await app.close().catch(() => {});
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  throw lastErr;
 }
 
 /** Set the active pane's dev cmd + cwd via the wrench. Each field auto-saves on
