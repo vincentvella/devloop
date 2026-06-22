@@ -36,7 +36,7 @@ const { check, launchApp, results, run } = await import("./harness.ts");
 const { shellAndPanes, multiPane, popOut } = await import("./scenarios/panes.ts");
 const { devServerAndLogs, devServerStop } = await import("./scenarios/devServer.ts");
 const { logsFilter, screenshot, repro, manualNavigation, exports } = await import("./scenarios/timeline.ts");
-const { projectRegistry, settingsAndExtensions } = await import("./scenarios/settings.ts");
+const { projectRegistry, settingsAndExtensions, storeInjectedButton } = await import("./scenarios/settings.ts");
 const { updateFeedback } = await import("./scenarios/updates.ts");
 const { persistence } = await import("./scenarios/persistence.ts");
 
@@ -63,6 +63,7 @@ async function main(): Promise<void> {
     await run("pop-out", () => popOut(a, win));
     await run("dev server stop", () => devServerStop(a, win));
     await run("settings & extensions", () => settingsAndExtensions(a, win));
+    await run("store injected button", () => storeInjectedButton(a, win));
     await run("update feedback", () => updateFeedback(a, win));
 
     await app.close();

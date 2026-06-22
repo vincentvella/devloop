@@ -493,7 +493,9 @@ function openExtensionsWindow(): void {
     center: true,
     title: "Devloop — Extensions",
     icon: [join(BASE, "../assets/icon.png"), join(BASE, "assets/icon.png")].find(existsSync),
-    webPreferences: { partition: PANE_PARTITION, contextIsolation: true, sandbox: false },
+    // Inject our own "Add to Devloop" button — Google greys the native "Add to
+    // Chrome" for non-Chrome browsers, so we install via the direct-CRX path instead.
+    webPreferences: { partition: PANE_PARTITION, contextIsolation: true, sandbox: false, preload: join(BASE, "extStorePreload.cjs") },
   });
   extWin.on("closed", () => (extWin = undefined));
   void extWin.loadURL(WEB_STORE_URL);

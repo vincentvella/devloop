@@ -904,7 +904,7 @@ function App() {
                 </IconBtn>
               </div>
               <div className="ext-hint">
-                The store's “Add to Chrome” stays greyed out — Google only enables it in Chrome itself. To install here, paste the extension's Web Store link (or id) above; the browse button is just for finding one.
+                In the store window, use the “+ Add to Devloop” button (Google greys its own “Add to Chrome” outside Chrome). Or paste a Web Store link / id above.
               </div>
               {exts.length > 0 ? (
                 <div className="ext-list" data-testid="ext-list">

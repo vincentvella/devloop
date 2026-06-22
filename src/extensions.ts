@@ -21,6 +21,12 @@ export interface ExtListItem extends ExtMeta {
  * single list the UI can render with on/off toggles. Loaded → enabled; disabled
  * (not loaded, read from disk) → disabled. Sorted by name; loaded wins on dupes.
  */
+/** The extension id from a Chrome Web Store *detail* URL (…/detail/<slug>/<id>), else null. */
+export function webStoreDetailId(url: string): string | null {
+  const m = /\/detail\/[^/]+\/([a-p]{32})\b/.exec(url);
+  return m ? m[1]! : null;
+}
+
 export function unifyExtensions(loaded: ExtMeta[], disabled: ExtMeta[]): ExtListItem[] {
   const out: ExtListItem[] = loaded.map((e) => ({ ...e, enabled: true }));
   for (const d of disabled) if (!out.some((e) => e.id === d.id)) out.push({ ...d, enabled: false });

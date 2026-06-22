@@ -44,3 +44,16 @@ export async function settingsAndExtensions(app: ElectronApplication, win: Page)
   }
   await win.keyboard.press("Escape");
 }
+
+/** Gated (network): the embedded Web Store injects our own "Add to Devloop" button
+ *  on a detail page (Google greys its native "Add to Chrome"). */
+export async function storeInjectedButton(app: ElectronApplication, win: Page): Promise<void> {
+  if (!RUN_EXT_E2E) return;
+  const storeP = app.waitForEvent("window", { timeout: 15_000 });
+  await win.getByLabel("extensions — browse the Chrome Web Store").click();
+  const store = await storeP;
+  await store.goto(`https://chromewebstore.google.com/detail/dark-reader/${DARK_READER}`).catch(() => {});
+  await store.waitForSelector("#__devloop_install_btn", { timeout: 15_000 });
+  check("store window injects an Add-to-Devloop button", ((await store.locator("#__devloop_install_btn").textContent()) ?? "").includes("Add to Devloop"));
+  await store.close();
+}

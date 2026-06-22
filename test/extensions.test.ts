@@ -1,5 +1,12 @@
 import { test, expect } from "bun:test";
-import { extensionIdFromInput } from "../src/extensions.ts";
+import { extensionIdFromInput, webStoreDetailId } from "../src/extensions.ts";
+
+test("webStoreDetailId extracts the id only from a detail URL", () => {
+  expect(webStoreDetailId("https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh")).toBe("eimadpbcbfnmbkopoojfekhnkhdbieeh");
+  expect(webStoreDetailId("https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh?hl=en")).toBe("eimadpbcbfnmbkopoojfekhnkhdbieeh");
+  expect(webStoreDetailId("https://chromewebstore.google.com/category/extensions/productivity")).toBeNull();
+  expect(webStoreDetailId("https://chromewebstore.google.com/")).toBeNull();
+});
 
 test("extensionIdFromInput accepts a raw id", () => {
   expect(extensionIdFromInput("fmkadmapgofadopljbjfkapdkoienihi")).toBe("fmkadmapgofadopljbjfkapdkoienihi");
