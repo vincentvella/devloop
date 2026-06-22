@@ -706,8 +706,8 @@ function App() {
                 </button>
                 <button
                   className="labeled"
-                  title="pick an element in the page → adds a click step"
-                  disabled={picking}
+                  title={viewTarget === "ios" ? "pick is web-only — on iOS, browser_snapshot returns pt:x,y refs to use in a click step" : "pick an element in the page → adds a click step"}
+                  disabled={picking || viewTarget === "ios"}
                   onClick={async () => {
                     setPicking(true);
                     setReproStatus("pick an element… (Esc cancels)");

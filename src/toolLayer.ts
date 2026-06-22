@@ -12,7 +12,7 @@ import { type LogBuffer, type LogSource } from "./logBuffer.ts";
 import { detectDevCommand, type DevServerLike } from "./devServer.ts";
 import { listProjects, addProject, removeProject, getProject } from "./registry.ts";
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
-import { isToolSupported, unsupportedToolMessage } from "./target.ts";
+import { isToolSupported, unsupportedToolMessage, supports, type Capability } from "./target.ts";
 import { toHar } from "./har.ts";
 import { diagnose } from "./diagnose.ts";
 import { buildBundle } from "./bundle.ts";
@@ -377,8 +377,26 @@ interface ReproAction {
   y?: number;
 }
 
+/** Each repro step maps to the capability its browser_* primitive needs, so a step
+ *  unsupported on the active target (e.g. navigate/hover on a react-native iOS target)
+ *  fails with a clear message the repro loop records per-step — instead of a raw throw. */
+const ACTION_CAPABILITY: Record<ReproAction["kind"], Capability | null> = {
+  navigate: "navigate",
+  click: "click",
+  type: "type",
+  hover: "hover",
+  scroll: "scroll",
+  select: "select",
+  press: "press",
+  eval: "evaluate",
+  wait: "waitFor",
+  none: null,
+};
+
 async function performAction(a: ReproAction): Promise<unknown> {
   const { browser } = deps;
+  const cap = ACTION_CAPABILITY[a.kind];
+  if (cap && !supports(browser.kind, cap)) throw new Error(`repro step "${a.kind}" is not supported on ${browser.kind} targets`);
   switch (a.kind) {
     case "navigate":
       return browser.navigate(a.url!);
