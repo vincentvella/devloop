@@ -915,7 +915,13 @@ async function runSelfTest() {
   await handleTool("browser_emulate", { device: "iphone" });
   const ew = JSON.parse((await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string).value as string;
   await handleTool("browser_emulate", { reset: true });
-  const ew2 = JSON.parse((await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string).value as string;
+  // clearDeviceMetricsOverride is async — poll until the viewport actually resets
+  // (reading too soon returns the stale emulated 390; was a recurring CI flake).
+  let ew2 = "390";
+  for (let i = 0; i < 15 && Number(ew2) <= 390; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    ew2 = JSON.parse((await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string).value as string;
+  }
   const emuOk = ew === "390" && Number(ew2) > 390;
   await handleTool("browser_throttle", { profile: "offline" });
   const thOff = JSON.parse((await handleTool("browser_eval", { expression: `fetch('http://localhost:${chosenPort}/x').then(()=>'ok').catch(()=>'fail')` })).content[0]!.text as string).value as string;
