@@ -50,6 +50,13 @@ async function main(): Promise<void> {
     const win = await app.firstWindow();
     check("main process is Devloop", (await app.evaluate(({ app }) => app.getName())) === "Devloop");
 
+    // Gate scenarios on the renderer being interactive: the IPC bridge exists and
+    // the shell has mounted. On a slow/cold CI runner the app can take a while, and
+    // starting before this cascades every scenario into timeouts. (Sync predicate —
+    // no async-IPC waitForFunction pitfall.)
+    await win.waitForFunction(() => !!(window as { devloop?: unknown }).devloop, undefined, { timeout: 45_000 });
+    await win.waitForSelector('[data-testid="pane-add"]', { timeout: 45_000 });
+
     const a = app;
     await run("shell & panes", () => shellAndPanes(a, win));
     await run("dev server & logs", () => devServerAndLogs(a, win));
