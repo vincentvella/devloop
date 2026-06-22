@@ -27,12 +27,15 @@ for (const r of results) {
 
 cpSync("cockpit/renderer/index.html", "out/renderer/index.html");
 
-// electron-chrome-web-store registers its preload by resolving it next to the
-// running main file (__dirname). main.cjs lives in out/, so the preload must too
-// — otherwise the store's "Add to Chrome" button does nothing.
+// electron-chrome-web-store's webstorePrivate preload. The lib is bundled into
+// main.cjs, so its own `import.meta.dirname`-based resolution lands on a source path
+// that doesn't exist (logs "Unable to load preload script" in every pane). We pass
+// `modulePath: BASE` in main.ts, which makes it look at `<BASE>/dist/<file>` — so the
+// copy must live under out/dist/.
+mkdirSync("out/dist", { recursive: true });
 cpSync(
   "node_modules/electron-chrome-web-store/dist/chrome-web-store.preload.js",
-  "out/chrome-web-store.preload.js",
+  "out/dist/chrome-web-store.preload.js",
 );
 
 // Compile Tailwind → out/renderer/styles.css

@@ -580,7 +580,10 @@ async function initExtensions(): Promise<void> {
   // its own preload (chrome-web-store.preload.js, copied beside main.cjs by the
   // build) into this session. loadExtensions:false — we load persisted ones below.
   try {
-    await installChromeWebStore({ session: ses, extensionsPath: EXT_DIR, loadExtensions: false, allowUnpackedExtensions: true });
+    // modulePath → the lib loads its preload from `<BASE>/dist/chrome-web-store.preload.js`
+    // (build.ts copies it there). Without it, the bundled lib resolves a non-existent
+    // source path and every pane logs "Unable to load preload script".
+    await installChromeWebStore({ session: ses, extensionsPath: EXT_DIR, loadExtensions: false, allowUnpackedExtensions: true, modulePath: BASE });
   } catch (e) {
     log(`extensions: web store setup failed: ${e}`);
   }
