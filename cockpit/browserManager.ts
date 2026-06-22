@@ -11,7 +11,7 @@
  */
 import { BrowserWindow, WebContentsView } from "electron";
 import type { LogBuffer } from "../src/logBuffer.ts";
-import type { IBrowserManager, PaneInfo } from "../src/browserController.ts";
+import type { IBrowserController, IBrowserManager, PaneInfo } from "../src/browserController.ts";
 import type { TargetKind } from "../src/target.ts";
 import { SERVE_SIM_URL, type SimInfo } from "../src/simulator.ts";
 import { getPanes, setPanes } from "../src/registry.ts";
@@ -26,6 +26,9 @@ interface Pane {
   id: string;
   view: WebContentsView;
   ctl: ElectronBrowserController;
+  /** RN/idb controller for this pane's native (iOS) target; browser_* route here
+   *  while the simulator target is active. Set when native observability attaches. */
+  nativeCtl?: IBrowserController;
   dev: DevServer; // this pane's own dev server
   cmd?: string;
   cwd?: string;
@@ -83,11 +86,12 @@ export class BrowserManager implements IBrowserManager {
     this.applyActive();
   }
 
-  /** Target kind of the active pane (drives tool-layer capability gating). All
-   * panes are web today; becomes meaningful once RN panes land (Phase 1 item 11). */
+  /** Target kind of the active target (drives tool-layer capability gating) — the
+   * native (react-native) controller when the iOS simulator target is active, else web. */
   get kind(): TargetKind {
     const p = this.activeId ? this.panes.get(this.activeId) : undefined;
-    return p?.ctl.kind ?? "web";
+    if (!p) return "web";
+    return this.simulatorActive && p.nativeCtl ? p.nativeCtl.kind : p.ctl.kind;
   }
 
   /** Detach/re-attach the active pane view so renderer DOM (e.g. a lightbox) can cover the area. */
@@ -201,6 +205,20 @@ export class BrowserManager implements IBrowserManager {
     const p = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (!p) throw new Error("no active browser pane");
     return p.ctl;
+  }
+
+  /** The controller browser_* tools act on: the native (RN/idb) controller when the
+   *  iOS simulator target is active for this pane, else the pane's web controller. */
+  private routed(): IBrowserController {
+    const p = this.activeId ? this.panes.get(this.activeId) : undefined;
+    if (!p) throw new Error("no active browser pane");
+    return this.simulatorActive && p.nativeCtl ? p.nativeCtl : p.ctl;
+  }
+
+  /** Register (or clear) a pane's native controller — wired when observability attaches. */
+  setNativeController(paneId: string, ctl: IBrowserController | undefined): void {
+    const p = this.panes.get(paneId);
+    if (p) p.nativeCtl = ctl;
   }
 
   private paneOrActive(id?: string): Pane {
@@ -520,50 +538,53 @@ export class BrowserManager implements IBrowserManager {
     if (!p) return Promise.resolve({ base64: "", mimeType: "image/png" });
     return p.ctl.screenshot(false);
   }
+  // browser_* delegate to routed() — the native (idb) controller when the iOS target
+  // is active, else the web pane. (Tools unsupported on the active kind are blocked
+  // upstream by capability gating, so e.g. emulate never reaches a native target.)
   screenshot(fullPage?: boolean) {
-    return this.active().screenshot(fullPage);
+    return this.routed().screenshot(fullPage);
   }
   click(selector: string) {
-    return this.active().click(selector);
+    return this.routed().click(selector);
   }
   type(selector: string, text: string) {
-    return this.active().type(selector, text);
+    return this.routed().type(selector, text);
   }
   hover(selector: string) {
-    return this.active().hover(selector);
+    return this.routed().hover(selector);
   }
   scroll(opts: { selector?: string; x?: number; y?: number }) {
-    return this.active().scroll(opts);
+    return this.routed().scroll(opts);
   }
   select(selector: string, value: string) {
-    return this.active().select(selector, value);
+    return this.routed().select(selector, value);
   }
   press(key: string, selector?: string) {
-    return this.active().press(key, selector);
+    return this.routed().press(key, selector);
   }
   evaluate(expression: string) {
-    return this.active().evaluate(expression);
+    return this.routed().evaluate(expression);
   }
   snapshot() {
-    return this.active().snapshot();
+    return this.routed().snapshot();
   }
   pick() {
-    return this.active().pick();
+    return this.active().pick(); // web-only element picker (DOM overlay)
   }
   clearStorage(opts?: { allOrigins?: boolean }) {
-    return this.active().clearStorage(opts);
+    return this.routed().clearStorage(opts);
   }
   emulate(opts: { device?: string; width?: number; height?: number; deviceScaleFactor?: number; mobile?: boolean; userAgent?: string; reset?: boolean }) {
-    return this.active().emulate(opts);
+    return this.routed().emulate(opts);
   }
   throttle(profile: string) {
-    return this.active().throttle(profile);
+    return this.routed().throttle(profile);
   }
   waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }) {
-    return this.active().waitFor(opts);
+    return this.routed().waitFor(opts);
   }
   waitForNetworkIdle(idleMs?: number, timeoutMs?: number) {
-    return this.active().waitForNetworkIdle(idleMs, timeoutMs);
+    return this.routed().waitForNetworkIdle(idleMs, timeoutMs);
   }
   currentUrl(): string {
     return this.activeId ? this.panes.get(this.activeId)!.ctl.currentUrl() : "about:blank";

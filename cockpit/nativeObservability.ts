@@ -7,7 +7,7 @@
 import { execFile } from "node:child_process";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import { ReactNativeController } from "../src/reactNativeController.ts";
-import { NativeLogStream } from "../src/iosSimulator.ts";
+import { NativeLogStream, captureSimctlScreenshot } from "../src/iosSimulator.ts";
 
 /** Run `idb <args>` and resolve its stdout — the live interaction/snapshot path for
  *  react-native targets (idb taps/types/swipes + ui describe-all). idb must be on PATH. */
@@ -37,11 +37,20 @@ export class NativeObservability {
     return this.byPane.has(paneId);
   }
 
-  /** Start streaming JS + native logs for a pane. No-op if already attached. */
-  attach(opts: { paneId: string; metroBase: string; device: string; appMatch?: string }): void {
-    if (this.byPane.has(opts.paneId)) return;
+  /** Start streaming JS + native logs for a pane; returns the RN controller (so it can
+   *  be wired as the pane's native target for browser_*). Returns the existing one if
+   *  already attached. */
+  attach(opts: { paneId: string; metroBase: string; device: string; appMatch?: string }): ReactNativeController {
+    const existing = this.byPane.get(opts.paneId);
+    if (existing) return existing.rn;
     this.log(`native observability: pane ${opts.paneId} → JS=${opts.metroBase}${opts.appMatch ? ` native~"${opts.appMatch}"` : ""}`);
-    const rn = new ReactNativeController(this.buffer, { metroBase: opts.metroBase, target: opts.paneId, device: opts.device, idb: runIdb });
+    const rn = new ReactNativeController(this.buffer, {
+      metroBase: opts.metroBase,
+      target: opts.paneId,
+      device: opts.device,
+      idb: runIdb,
+      captureScreenshot: () => captureSimctlScreenshot(opts.device),
+    });
     void rn.start();
     let native: NativeLogStream | undefined;
     if (opts.appMatch) {
@@ -49,6 +58,7 @@ export class NativeObservability {
       native.start();
     }
     this.byPane.set(opts.paneId, { rn, native });
+    return rn;
   }
 
   detach(paneId: string): void {

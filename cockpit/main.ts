@@ -259,15 +259,19 @@ function wireIpc(): void {
     const active = manager.listPanes().find((p) => p.active);
     const metroBase = metroBaseFromUrl(active?.url);
     if (active && metroBase) {
-      observability.attach({ paneId: active.id, metroBase, device: "booted", appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined });
+      const rn = observability.attach({ paneId: active.id, metroBase, device: "booted", appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined });
+      // Route browser_* to the RN controller (idb taps/snapshot) while the iOS target is active.
+      manager.setNativeController(active.id, rn);
     } else {
       log("simulator: no Metro URL on the active pane — start its bundler to stream JS logs");
     }
     return { ok: true };
   });
   ipcMain.handle("devloop:closeSimulator", async () => {
-    await manager.setSimulatorActive(false);
+    await manager.setSimulatorActive(false); // browser_* route back to the web pane
     observability.detachAll();
+    const active = manager.listPanes().find((p) => p.active);
+    if (active) manager.setNativeController(active.id, undefined);
     return { ok: true };
   });
 
