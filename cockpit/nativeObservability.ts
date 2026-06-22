@@ -4,9 +4,21 @@
  * inspector) + a NativeLogStream (simctl native/os_log), both tagged with the
  * pane id so get_logs can scope by app. One attachment per pane.
  */
+import { execFile } from "node:child_process";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import { ReactNativeController } from "../src/reactNativeController.ts";
 import { NativeLogStream } from "../src/iosSimulator.ts";
+
+/** Run `idb <args>` and resolve its stdout — the live interaction/snapshot path for
+ *  react-native targets (idb taps/types/swipes + ui describe-all). idb must be on PATH. */
+function runIdb(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile("idb", args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) reject(new Error(`idb failed (is idb installed? \`brew install idb-companion\`): ${stderr || (err as Error).message}`.trim()));
+      else resolve(stdout);
+    });
+  });
+}
 
 interface Attached {
   rn: ReactNativeController;
@@ -29,7 +41,7 @@ export class NativeObservability {
   attach(opts: { paneId: string; metroBase: string; device: string; appMatch?: string }): void {
     if (this.byPane.has(opts.paneId)) return;
     this.log(`native observability: pane ${opts.paneId} → JS=${opts.metroBase}${opts.appMatch ? ` native~"${opts.appMatch}"` : ""}`);
-    const rn = new ReactNativeController(this.buffer, { metroBase: opts.metroBase, target: opts.paneId });
+    const rn = new ReactNativeController(this.buffer, { metroBase: opts.metroBase, target: opts.paneId, device: opts.device, idb: runIdb });
     void rn.start();
     let native: NativeLogStream | undefined;
     if (opts.appMatch) {

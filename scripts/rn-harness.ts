@@ -8,6 +8,7 @@
  *
  * Named ✓/✗ checks with a real exit code, same style as test-smoke.ts.
  */
+import { execFile } from "node:child_process";
 import { LogBuffer } from "../src/logBuffer.ts";
 import { ReactNativeController } from "../src/reactNativeController.ts";
 import { NativeLogStream, captureSimctlScreenshot } from "../src/iosSimulator.ts";
@@ -22,8 +23,12 @@ const check = (name: string, cond: boolean) => {
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// idb runner for the Phase 2 interaction/snapshot path (needs idb on PATH).
+const runIdb = (args: string[]): Promise<string> =>
+  new Promise((resolve, reject) => execFile("idb", args, { maxBuffer: 16 * 1024 * 1024 }, (e, out, errOut) => (e ? reject(new Error(errOut || (e as Error).message)) : resolve(out))));
+
 const buffer = new LogBuffer(5000);
-const rn = new ReactNativeController(buffer, { metroBase, captureScreenshot: () => captureSimctlScreenshot(device) });
+const rn = new ReactNativeController(buffer, { metroBase, device, idb: runIdb, captureScreenshot: () => captureSimctlScreenshot(device) });
 
 // Native device logs (simctl), scoped to the app — runs alongside the JS console.
 const nativeLogs = new NativeLogStream(buffer, { device, match: appMatch });
@@ -64,6 +69,16 @@ if (resolved?.length) console.log(`    resolved top frame → ${resolved[0]?.sou
 // screenshot via simctl
 const shot = await rn.screenshot();
 check("screenshot captured (PNG base64)", shot.base64.length > 1000 && shot.mimeType === "image/png");
+
+// Phase 2 (idb): a11y snapshot — read-only, so it's safe to run here. Skips cleanly
+// if idb isn't installed. Interactions (tap/type/scroll/press) use the same path.
+try {
+  const snap = await rn.snapshot();
+  check("idb snapshot returns a11y nodes", snap.nodes.length > 0);
+  console.log(`    snapshot nodes: ${snap.nodes.length}${snap.nodes[0] ? ` (e.g. ${snap.nodes[0].role} "${snap.nodes[0].name}" @ ${snap.nodes[0].ref})` : ""}`);
+} catch (e) {
+  console.log(`    (idb snapshot skipped: ${(e as Error).message.split(":").pop()?.trim()})`);
+}
 
 // native device logs (simctl) on the same timeline
 await sleep(2500);

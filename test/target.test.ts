@@ -23,17 +23,21 @@ test("detectTargetKind: react-native via expo or react-native dep, or native dir
   expect(detectTargetKind({ hasAndroidDir: true })).toBe("react-native");
 });
 
-test("web supports every capability; react-native is the observability subset", () => {
+test("web supports every capability; react-native is observability + idb interactions", () => {
   const web = capabilitiesFor("web");
   for (const cap of ["navigate", "click", "snapshot", "emulate", "throttle", "evaluate", "screenshot"] as const) {
     expect(web.has(cap)).toBe(true);
   }
   const rn = capabilitiesFor("react-native");
-  expect([...rn].sort()).toEqual(["evaluate", "screenshot"]);
-  expect(supports("react-native", "evaluate")).toBe(true);
-  expect(supports("react-native", "screenshot")).toBe(true);
-  expect(supports("react-native", "click")).toBe(false);
-  expect(supports("react-native", "snapshot")).toBe(false);
+  expect([...rn].sort()).toEqual(["click", "evaluate", "press", "screenshot", "scroll", "snapshot", "type"]);
+  // supported on native via idb: eval/screenshot + tap/type/scroll/press/snapshot
+  for (const cap of ["evaluate", "screenshot", "click", "type", "scroll", "press", "snapshot"] as const) {
+    expect(supports("react-native", cap)).toBe(true);
+  }
+  // still web-only / not applicable to native
+  for (const cap of ["navigate", "hover", "select", "emulate", "throttle", "clearStorage", "waitFor", "waitForNetworkIdle"] as const) {
+    expect(supports("react-native", cap)).toBe(false);
+  }
 });
 
 test("toolCapability maps gated tools and ignores agnostic ones", () => {
@@ -48,12 +52,17 @@ test("isToolSupported gates by the active target's capabilities", () => {
   // web: everything goes
   expect(isToolSupported("web", "browser_snapshot")).toBe(true);
   expect(isToolSupported("web", "browser_click")).toBe(true);
-  // react-native Phase 1: eval + screenshot only
+  // react-native: observability + idb interactions/snapshot
   expect(isToolSupported("react-native", "browser_eval")).toBe(true);
   expect(isToolSupported("react-native", "browser_screenshot")).toBe(true);
-  expect(isToolSupported("react-native", "browser_snapshot")).toBe(false);
-  expect(isToolSupported("react-native", "browser_click")).toBe(false);
+  expect(isToolSupported("react-native", "browser_snapshot")).toBe(true);
+  expect(isToolSupported("react-native", "browser_click")).toBe(true);
+  expect(isToolSupported("react-native", "browser_type")).toBe(true);
+  expect(isToolSupported("react-native", "browser_scroll")).toBe(true);
+  expect(isToolSupported("react-native", "browser_press")).toBe(true);
+  // still gated off on native
   expect(isToolSupported("react-native", "browser_navigate")).toBe(false);
+  expect(isToolSupported("react-native", "browser_hover")).toBe(false);
   // agnostic tools are always allowed, on any target
   expect(isToolSupported("react-native", "get_logs")).toBe(true);
   expect(isToolSupported("react-native", "diagnose")).toBe(true);

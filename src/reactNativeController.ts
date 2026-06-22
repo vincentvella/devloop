@@ -24,12 +24,17 @@ import {
   type InspectorTarget,
   type RemoteObject,
 } from "./reactNative.ts";
+import { idbDescribeAllArgs, idbKeyArgs, idbSwipeArgs, idbTapArgs, idbTextArgs, keycodeFor, parseDescribeAll, pointFromRef } from "./idb.ts";
 
 export interface ReactNativeOptions {
   /** Metro dev-server base, e.g. http://localhost:8082 */
   metroBase: string;
   /** Capture a simulator screenshot (injected so simctl stays out of the CDP core). */
   captureScreenshot?: () => Promise<{ base64: string; mimeType: string }>;
+  /** Booted simulator UDID — required for idb interactions + snapshot. */
+  device?: string;
+  /** Run `idb <args>` against the booted sim, returning stdout (injected; CI has none). */
+  idb?: (args: string[]) => Promise<string>;
   /** Override fetch (tests/harness). */
   fetchImpl?: typeof fetch;
   /** Per-CDP-command timeout — guards against a stale/dead target wedging a call. Default 8s. */
@@ -39,7 +44,7 @@ export interface ReactNativeOptions {
 }
 
 const unsupported = (op: string): never => {
-  throw new Error(`${op} is not supported on react-native targets (Phase 1: observability only)`);
+  throw new Error(`${op} is not supported on react-native targets`);
 };
 
 export class ReactNativeController implements IBrowserController {
@@ -247,31 +252,65 @@ export class ReactNativeController implements IBrowserController {
     this.ws = undefined;
   }
 
-  // --- not supported in Phase 1 (also gated at the tool layer) --------------
+  // --- native interactions + snapshot (idb) ---------------------------------
+
+  private runIdb(args: string[]): Promise<string> {
+    if (!this.opts.idb || !this.opts.device) throw new Error("native interactions need idb installed + a booted simulator");
+    return this.opts.idb(args);
+  }
+
+  /** Resolve a target to a tappable point: a "pt:x,y" ref, else an a11y name from snapshot. */
+  private async pointFor(selector: string): Promise<{ x: number; y: number }> {
+    const pt = pointFromRef(selector);
+    if (pt) return pt;
+    const snap = await this.snapshot();
+    const node = snap.nodes.find((n) => n.name === selector) ?? snap.nodes.find((n) => n.name.includes(selector));
+    const p = node && pointFromRef(node.ref);
+    if (!p) throw new Error(`no native element matching "${selector}" (use a "pt:x,y" ref from browser_snapshot, or its accessibility label)`);
+    return p;
+  }
+
+  async snapshot(): Promise<PageSnapshot> {
+    const out = await this.runIdb(idbDescribeAllArgs(this.opts.device!));
+    return parseDescribeAll(out, { url: this.url, title: this.url });
+  }
+
+  async click(selector: string): Promise<void> {
+    const { x, y } = await this.pointFor(selector);
+    await this.runIdb(idbTapArgs(this.opts.device!, x, y));
+  }
+
+  async type(selector: string, text: string): Promise<void> {
+    if (selector) await this.click(selector); // focus the field first
+    await this.runIdb(idbTextArgs(this.opts.device!, text));
+  }
+
+  async scroll(opts: { selector?: string; x?: number; y?: number }): Promise<void> {
+    // Swipe gesture. Anchor at the element (if given) or screen-ish center; a positive
+    // y scrolls the content down, which is a finger swipe UP (end = start − delta).
+    const anchor = opts.selector ? await this.pointFor(opts.selector) : { x: 200, y: 500 };
+    const dx = opts.x ?? 0;
+    const dy = opts.y ?? (opts.x ? 0 : 400);
+    await this.runIdb(idbSwipeArgs(this.opts.device!, anchor.x, anchor.y, anchor.x - dx, anchor.y - dy, 300));
+  }
+
+  async press(key: string, selector?: string): Promise<void> {
+    if (selector) await this.click(selector);
+    const code = keycodeFor(key);
+    if (code == null) throw new Error(`key "${key}" is not supported on react-native (try Enter/Backspace/Tab/arrows)`);
+    await this.runIdb(idbKeyArgs(this.opts.device!, code));
+  }
+
+  // --- not applicable to native (gated at the tool layer) -------------------
 
   async navigate(): Promise<{ url: string; status: number | null }> {
     return unsupported("navigate");
   }
-  async click(): Promise<void> {
-    unsupported("click");
-  }
-  async type(): Promise<void> {
-    unsupported("type");
-  }
   async hover(): Promise<void> {
     unsupported("hover");
   }
-  async scroll(): Promise<void> {
-    unsupported("scroll");
-  }
   async select(): Promise<void> {
     unsupported("select");
-  }
-  async press(): Promise<void> {
-    unsupported("press");
-  }
-  async snapshot(): Promise<PageSnapshot> {
-    return unsupported("snapshot");
   }
   async waitFor(): Promise<{ ok: boolean; waitedMs: number }> {
     return unsupported("wait_for");

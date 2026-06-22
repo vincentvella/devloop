@@ -48,11 +48,11 @@ const WEB_CAPABILITIES: Capability[] = [
   "throttle",
 ];
 
-// React Native, Phase 1: observability only. JS eval (Hermes Runtime.evaluate) and
-// screenshots (simctl) are validated; DOM-style interactions, the a11y snapshot,
-// viewport emulation, origin storage, and network idle/throttle are web concepts
-// or land in later phases (idb interactions, CDP Network).
-const REACT_NATIVE_CAPABILITIES: Capability[] = ["evaluate", "screenshot"];
+// React Native: observability (Hermes eval + simctl screenshots) plus Phase 2
+// interactions + a11y snapshot via idb (tap/type/scroll/press, describe-all).
+// navigate/hover/select/emulate/throttle/clearStorage/network-idle are web concepts
+// (or land later) and stay gated off.
+const REACT_NATIVE_CAPABILITIES: Capability[] = ["evaluate", "screenshot", "click", "type", "scroll", "press", "snapshot"];
 
 export const CAPABILITIES: Record<TargetKind, ReadonlySet<Capability>> = {
   web: new Set(WEB_CAPABILITIES),
