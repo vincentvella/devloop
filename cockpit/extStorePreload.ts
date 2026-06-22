@@ -15,7 +15,8 @@ import { ipcRenderer } from "electron";
 import { webStoreDetailId } from "../src/extensions.ts";
 
 const BTN_ID = "__devloop_install_btn";
-const PURPLE = "#8957e5";
+const PURPLE = "#8957e5"; // not installed → "Add"
+const SLATE = "#5f6368"; // installed → "Remove"
 
 function findNativeAddButton(): HTMLButtonElement | null {
   for (const b of document.querySelectorAll("button")) {
@@ -24,28 +25,46 @@ function findNativeAddButton(): HTMLButtonElement | null {
   return null;
 }
 
-function wire(btn: HTMLButtonElement, id: string): void {
-  btn.dataset.extId = id;
+async function isInstalled(id: string): Promise<boolean> {
+  try {
+    const list = (await ipcRenderer.invoke("devloop:extList")) as Array<{ id: string }>;
+    return Array.isArray(list) && list.some((e) => e.id === id);
+  } catch {
+    return false;
+  }
+}
+
+/** Reflect the real install state (Add ↔ Remove), like Chrome's own button. */
+function setMode(btn: HTMLButtonElement, mode: "add" | "remove"): void {
+  if (btn.dataset.busy) return;
+  btn.dataset.mode = mode;
+  btn.textContent = mode === "remove" ? "Remove from Devloop" : "+ Add to Devloop";
+  btn.style.background = mode === "remove" ? SLATE : PURPLE;
+}
+
+async function refreshMode(btn: HTMLButtonElement, id: string): Promise<void> {
+  if (btn.dataset.busy) return;
+  setMode(btn, (await isInstalled(id)) ? "remove" : "add");
+}
+
+function wire(btn: HTMLButtonElement): void {
   btn.addEventListener("click", async (e) => {
     e.preventDefault();
     e.stopPropagation();
     const extId = btn.dataset.extId;
     if (!extId || btn.dataset.busy) return;
+    const removing = btn.dataset.mode === "remove";
     btn.dataset.busy = "1";
-    const reset = btn.textContent;
-    btn.textContent = "Installing…";
+    btn.textContent = removing ? "Removing…" : "Installing…";
     try {
-      await ipcRenderer.invoke("devloop:extInstall", extId);
-      btn.textContent = "✓ Added to Devloop";
-      btn.style.background = "#238636";
+      await ipcRenderer.invoke(removing ? "devloop:extRemove" : "devloop:extInstall", extId);
+      delete btn.dataset.busy;
+      setMode(btn, removing ? "add" : "remove");
     } catch (err) {
-      btn.textContent = `Install failed — ${(err as Error)?.message?.split(":").pop()?.trim() ?? "error"}`;
+      btn.textContent = `${removing ? "Remove" : "Install"} failed — ${(err as Error)?.message?.split(":").pop()?.trim() ?? "error"}`;
       btn.style.background = "#da3633";
-      setTimeout(() => {
-        btn.textContent = reset;
-        btn.style.background = PURPLE;
-        delete btn.dataset.busy;
-      }, 3500);
+      delete btn.dataset.busy;
+      setTimeout(() => void refreshMode(btn, extId), 3500);
     }
   });
 }
@@ -57,7 +76,8 @@ function buildButton(id: string): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.id = BTN_ID;
   btn.type = "button";
-  btn.textContent = "+ Add to Devloop";
+  btn.dataset.extId = id;
+  btn.textContent = "+ Add to Devloop"; // refined by refreshMode once install state is known
   Object.assign(btn.style, {
     display: "inline-flex",
     alignItems: "center",
@@ -74,7 +94,7 @@ function buildButton(id: string): HTMLButtonElement {
     whiteSpace: "nowrap",
     boxShadow: "0 1px 3px rgba(0,0,0,.25)",
   });
-  wire(btn, id);
+  wire(btn);
   return btn;
 }
 
@@ -110,19 +130,30 @@ function ensure(): void {
   }
   const native = findNativeAddButton();
   if (native) native.style.display = "none"; // take its place
-  if (ours) {
-    ours.dataset.extId = id;
-    if (native && ours.previousElementSibling !== native) native.insertAdjacentElement("afterend", ours);
-    return;
+  if (!ours) {
+    ours = buildButton(id);
+    if (native?.parentElement) native.insertAdjacentElement("afterend", ours);
+    else {
+      // Fallback: the page structure changed — float it so it's still reachable.
+      Object.assign(ours.style, { position: "fixed", top: "14px", right: "16px", zIndex: "2147483647" });
+      document.body.appendChild(ours);
+    }
+  } else if (native && ours.previousElementSibling !== native) {
+    native.insertAdjacentElement("afterend", ours);
   }
-  ours = buildButton(id);
-  if (native?.parentElement) native.insertAdjacentElement("afterend", ours);
-  else {
-    // Fallback: the page structure changed — float it so it's still reachable.
-    Object.assign(ours.style, { position: "fixed", top: "14px", right: "16px", zIndex: "2147483647" });
-    document.body.appendChild(ours);
+  ours.dataset.extId = id;
+  // Reflect the install state (Add ↔ Remove) when first shown or after navigating to
+  // another extension. Cleared on extChanged so installs/removes elsewhere refresh it.
+  if (!ours.dataset.busy && ours.dataset.checkedId !== id) {
+    ours.dataset.checkedId = id;
+    void refreshMode(ours, id);
   }
 }
+
+ipcRenderer.on("devloop:extChanged", () => {
+  const b = document.getElementById(BTN_ID) as HTMLButtonElement | null;
+  if (b) delete b.dataset.checkedId; // force a re-check on the next tick
+});
 
 // The Web Store is a SPA — the detail page + URL change without a full reload, the
 // native button re-renders, and the nag dialog re-appears. Re-checking on an interval
