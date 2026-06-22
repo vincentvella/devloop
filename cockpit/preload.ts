@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("devloop", {
   clear: () => ipcRenderer.invoke("devloop:clear"),
   navigate: (url: string) => ipcRenderer.invoke("devloop:navigate", url),
   checkForUpdates: () => ipcRenderer.invoke("devloop:checkForUpdates"),
+  nativeEnv: () => ipcRenderer.invoke("devloop:nativeEnv"),
   updateDownload: () => ipcRenderer.invoke("devloop:updateDownload"),
   updateInstall: () => ipcRenderer.invoke("devloop:updateInstall"),
   openExtensions: () => ipcRenderer.invoke("devloop:openExtensions"),

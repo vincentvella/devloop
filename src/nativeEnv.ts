@@ -33,6 +33,22 @@ export function nativeEnvIssues(p: NativeEnvProbe): NativeEnvIssue[] {
 
 export const nativeEnvReady = (p: NativeEnvProbe): boolean => nativeEnvIssues(p).length === 0;
 
+export interface NativeEnvCheck {
+  label: string;
+  ok: boolean;
+  /** How to fix it (present only when !ok). */
+  fix?: string;
+}
+
+/** Per-requirement checklist for the cockpit's preflight panel (✓/✗ + fix). */
+export function nativeEnvChecks(p: NativeEnvProbe): NativeEnvCheck[] {
+  return [
+    { label: "idb_companion", ok: p.idbCompanion, fix: p.idbCompanion ? undefined : "brew install facebook/fb/idb-companion" },
+    { label: "idb CLI (fb-idb)", ok: p.idb, fix: p.idb ? undefined : "pipx install fb-idb  (needs Python <3.14)" },
+    { label: "Booted simulator", ok: p.bootedSim, fix: p.bootedSim ? undefined : "Boot one in Simulator.app, or run a build (▶ Build)" },
+  ];
+}
+
 /** One-line, agent/human-readable summary of native readiness. */
 export function nativeEnvSummary(p: NativeEnvProbe): string {
   const issues = nativeEnvIssues(p);

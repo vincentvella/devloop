@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test";
-import { nativeEnvIssues, nativeEnvReady, nativeEnvSummary } from "../src/nativeEnv.ts";
+import { nativeEnvIssues, nativeEnvReady, nativeEnvSummary, nativeEnvChecks } from "../src/nativeEnv.ts";
+
+test("nativeEnvChecks yields a ✓/✗ row per requirement with a fix only when failing", () => {
+  const checks = nativeEnvChecks({ idb: true, idbCompanion: false, bootedSim: true });
+  expect(checks.map((c) => [c.label, c.ok])).toEqual([
+    ["idb_companion", false],
+    ["idb CLI (fb-idb)", true],
+    ["Booted simulator", true],
+  ]);
+  expect(checks[0]!.fix).toContain("brew install facebook/fb/idb-companion");
+  expect(checks[1]!.fix).toBeUndefined(); // ok → no fix
+});
 
 const ALL = { idb: true, idbCompanion: true, bootedSim: true };
 

@@ -56,7 +56,7 @@ import { initAutoUpdate, type Updater } from "./updater.ts";
 import { ServeSim } from "./serveSim.ts";
 import { NativeObservability } from "./nativeObservability.ts";
 import { metroBaseFromUrl, deriveAppMatch } from "../src/nativeObservability.ts";
-import { nativeEnvIssues, nativeEnvSummary, type NativeEnvProbe } from "../src/nativeEnv.ts";
+import { nativeEnvIssues, nativeEnvSummary, nativeEnvChecks, nativeEnvReady, type NativeEnvProbe } from "../src/nativeEnv.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
 const SELFTEST = process.env.DEVLOOP_SELFTEST === "1";
@@ -255,6 +255,10 @@ function wireIpc(): void {
     return true;
   });
   ipcMain.handle("devloop:navigate", (_e, url: string) => manager.navigate(url));
+  ipcMain.handle("devloop:nativeEnv", () => {
+    const probe = probeNativeEnv();
+    return { ready: nativeEnvReady(probe), checks: nativeEnvChecks(probe) };
+  });
   ipcMain.handle("devloop:checkForUpdates", () => updater?.check(true));
   ipcMain.handle("devloop:updateDownload", () => updater?.download());
   ipcMain.handle("devloop:updateInstall", () => updater?.install());

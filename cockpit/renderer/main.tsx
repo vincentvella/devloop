@@ -87,6 +87,31 @@ function UpdateBanner({ status, onDownload, onInstall, onDismiss }: { status: Up
   );
 }
 
+type NativeEnv = { ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] } | null;
+
+/** Preflight checklist for driving the iOS simulator (idb + companion + a booted sim),
+ *  each row a ✓/✗ with the install fix when it's missing. */
+function NativeReadiness({ data, onRecheck }: { data: NativeEnv; onRecheck: () => void }): ReactNode {
+  return (
+    <div className="native-readiness">
+      {!data ? (
+        <div className="ext-empty">checking…</div>
+      ) : (
+        data.checks.map((c) => (
+          <div key={c.label} className={`native-check ${c.ok ? "ok" : "bad"}`}>
+            <span className="native-mark">{c.ok ? "✓" : "✗"}</span>
+            <span className="native-label">{c.label}</span>
+            {!c.ok && c.fix && <code className="native-fix">{c.fix}</code>}
+          </div>
+        ))
+      )}
+      <button className="labeled" title="re-run the native readiness checks" onClick={onRecheck}>
+        <RefreshCw size={13} /> re-check
+      </button>
+    </div>
+  );
+}
+
 // --- helpers ---------------------------------------------------------------
 function normalizeUrl(input: string): string {
   const v = input.trim();
@@ -222,6 +247,7 @@ function App() {
   const [filter, setFilter] = useState("");
   const [chips, setChips] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
+  const [nativeEnv, setNativeEnv] = useState<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] } | null>(null);
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
   const nativeInfo = useDevloopStore((s) => s.nativeInfo);
   const refreshNativeInfo = useDevloopStore((s) => s.refreshNativeInfo);
@@ -290,6 +316,11 @@ function App() {
       offUpdate();
     };
   }, [refreshPanes]);
+
+  // Refresh native (iOS) readiness when the settings modal opens or the iOS target is shown.
+  useEffect(() => {
+    if (settingsOpen || viewTarget === "ios") void dl().nativeEnv().then(setNativeEnv);
+  }, [settingsOpen, viewTarget]);
 
   // Transient update states clear themselves; downloading/downloaded persist until acted on.
   useEffect(() => {
@@ -665,6 +696,12 @@ function App() {
       </div>
       )}
 
+      {viewTarget === "ios" && nativeEnv && !nativeEnv.ready && (
+        <div className="native-warn" onClick={() => setSettingsOpen(true)} title="open Settings → native readiness">
+          ⚠ Native taps & snapshot need idb — {nativeEnv.checks.filter((c) => !c.ok).map((c) => c.label).join(", ")} missing. Click for setup.
+        </div>
+      )}
+
       <div className="body">
         <div className="pane-area" ref={paneAreaRef} style={fillTimeline ? { display: "none" } : undefined}>
           {panes.length === 0 && <div className="hint">no pane — open a project or add a pane (+)</div>}
@@ -954,6 +991,9 @@ function App() {
               ) : (
                 <div className="ext-empty" data-testid="ext-empty">No extensions installed yet.</div>
               )}
+              <div className="modal-section">native (iOS) readiness</div>
+              <NativeReadiness data={nativeEnv} onRecheck={() => void dl().nativeEnv().then(setNativeEnv)} />
+
               <div className="modal-section">updates</div>
               <button className="labeled" title="check GitHub for a newer Devloop release" onClick={() => void dl().checkForUpdates()}>
                 <RefreshCw size={13} /> check for updates
