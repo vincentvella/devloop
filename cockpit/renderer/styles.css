@@ -743,3 +743,17 @@
   border-bottom: 1px solid var(--color-warn);
   cursor: pointer;
 }
+
+/* Attention badge on the settings gear (e.g. native readiness check failed). */
+.icon-badge-wrap { position: relative; display: inline-flex; }
+.icon-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-warn);
+  border: 1.5px solid var(--color-bg2);
+  pointer-events: none;
+}

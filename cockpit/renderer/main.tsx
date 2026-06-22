@@ -317,10 +317,11 @@ function App() {
     };
   }, [refreshPanes]);
 
-  // Refresh native (iOS) readiness when the settings modal opens or the iOS target is shown.
+  // Refresh native (iOS) readiness for native projects (drives the gear badge) and
+  // whenever the settings modal opens or the iOS target is shown.
   useEffect(() => {
-    if (settingsOpen || viewTarget === "ios") void dl().nativeEnv().then(setNativeEnv);
-  }, [settingsOpen, viewTarget]);
+    if (settingsOpen || viewTarget === "ios" || nativeInfo?.isNative) void dl().nativeEnv().then(setNativeEnv);
+  }, [settingsOpen, viewTarget, nativeInfo?.isNative]);
 
   // Transient update states clear themselves; downloading/downloaded persist until acted on.
   useEffect(() => {
@@ -622,9 +623,15 @@ function App() {
           <IconBtn tip="pane settings — project & dev server" onClick={() => setWrenchOpen(true)}>
             <Wrench size={15} />
           </IconBtn>
-          <IconBtn tip="settings (⌘,) — extensions & updates" onClick={() => setSettingsOpen(true)}>
-            <Settings size={15} />
-          </IconBtn>
+          <span className="icon-badge-wrap">
+            <IconBtn
+              tip={nativeInfo?.isNative && nativeEnv && !nativeEnv.ready ? "settings — ⚠ native (iOS) readiness needs attention" : "settings (⌘,) — extensions & updates"}
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings size={15} />
+            </IconBtn>
+            {nativeInfo?.isNative && nativeEnv && !nativeEnv.ready && <span className="icon-badge" title="native readiness check failed" />}
+          </span>
         </div>
 
       </div>
