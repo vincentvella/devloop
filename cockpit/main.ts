@@ -56,6 +56,7 @@ import { initAutoUpdate, type Updater } from "./updater.ts";
 import { ServeSim } from "./serveSim.ts";
 import { NativeObservability } from "./nativeObservability.ts";
 import { metroBaseFromUrl, deriveAppMatch } from "../src/nativeObservability.ts";
+import { nativeEnvIssues, nativeEnvSummary, type NativeEnvProbe } from "../src/nativeEnv.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
 const SELFTEST = process.env.DEVLOOP_SELFTEST === "1";
@@ -89,6 +90,25 @@ function importShellPath(): void {
   } catch (e) {
     log(`shell PATH import failed: ${(e as Error).message}`);
   }
+}
+
+/** Probe native-interaction readiness (idb CLI + companion + a booted sim). */
+function probeNativeEnv(): NativeEnvProbe {
+  const has = (cmd: string): boolean => {
+    try {
+      execFileSync("/usr/bin/which", [cmd], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let bootedSim = false;
+  try {
+    bootedSim = /Booted/.test(execFileSync("xcrun", ["simctl", "list", "devices", "booted"], { encoding: "utf8", timeout: 5000 }));
+  } catch {
+    /* no xcrun / Xcode */
+  }
+  return { idb: has("idb"), idbCompanion: has("idb_companion"), bootedSim };
 }
 
 /** Best-effort native-log process match from a project's Expo config. */
@@ -257,6 +277,13 @@ function wireIpc(): void {
     await manager.setSimulatorActive(true, info);
     // Stream the native app's JS + native logs onto the timeline (scoped to its pane).
     const active = manager.listPanes().find((p) => p.active);
+    // Preflight: native taps/snapshot need idb + companion + a booted sim. Surface
+    // any gap (with the fix) on the timeline instead of failing cryptically on first tap.
+    const issues = nativeEnvIssues(probeNativeEnv());
+    if (issues.length) {
+      log(`native env: ${nativeEnvSummary(probeNativeEnv())}`);
+      buffer.push("native", "log", `⚠ native interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`, undefined, active?.id);
+    }
     const metroBase = metroBaseFromUrl(active?.url);
     if (active && metroBase) {
       const rn = observability.attach({ paneId: active.id, metroBase, device: "booted", appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined });
