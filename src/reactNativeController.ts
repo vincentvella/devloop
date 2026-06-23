@@ -21,6 +21,8 @@ import {
   consoleArgsToText,
   errorStackFromArgs,
   inspectorListUrl,
+  connectFailureMessage,
+  HERMES_BUSY_HINT,
   type InspectorTarget,
   type RemoteObject,
 } from "./reactNative.ts";
@@ -98,21 +100,30 @@ export class ReactNativeController implements IBrowserController {
     if (this.connecting) return;
     this.connecting = true;
     try {
+      let sawTarget = false; // we listed a Hermes target with a ws URL (vs none at all)
+      let busyHinted = false; // emit the "another debugger owns it" hint at most once
       for (let i = 0; i < 30 && !this.closed; i++) {
         const target = await this.discover();
         const wsUrl = target?.webSocketDebuggerUrl;
         if (wsUrl) {
+          sawTarget = true;
           await this.attach(wsUrl);
           if (await this.ping()) {
             this.buffer.push("browser", "console", "[devloop] attached to React Native (Hermes) over CDP", undefined, this.opts.target);
             return;
           }
-          this.deadTargets.add(wsUrl); // zombie — skip it next time
+          // Attached but unresponsive — a zombie (stale post-reload) or owned by another
+          // debugger (RN DevTools). Skip this ws + hint once; a freed target re-lists with a new id.
+          if (!busyHinted) {
+            busyHinted = true;
+            this.buffer.push("browser", "console", HERMES_BUSY_HINT, undefined, this.opts.target);
+          }
+          this.deadTargets.add(wsUrl);
           this.closeWs();
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
-      if (!this.closed) this.buffer.push("browser", "console", "[devloop] no live React Native (Hermes) target found via Metro", undefined, this.opts.target);
+      if (!this.closed) this.buffer.push("browser", "console", connectFailureMessage(sawTarget), undefined, this.opts.target);
     } finally {
       this.connecting = false;
     }

@@ -5,8 +5,17 @@ import {
   consoleArgsToText,
   errorStackFromArgs,
   inspectorListUrl,
+  connectFailureMessage,
   type InspectorTarget,
 } from "../src/reactNative.ts";
+
+test("connectFailureMessage distinguishes a busy/owned target from no target (#23)", () => {
+  // saw a target but couldn't attach → another debugger likely owns it
+  expect(connectFailureMessage(true)).toMatch(/couldn't attach|another debugger/i);
+  // never saw a target → app not running / JS debugging off
+  expect(connectFailureMessage(false)).toMatch(/no React Native .*target/i);
+  expect(connectFailureMessage(true)).not.toBe(connectFailureMessage(false));
+});
 
 // Shapes taken from a real Caliburr /json/list (RN 0.83, new architecture).
 const RUNTIME: InspectorTarget = {

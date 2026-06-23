@@ -79,3 +79,22 @@ export function errorStackFromArgs(args: RemoteObject[]): string | null {
 export function inspectorListUrl(metroBase: string): string {
   return `${metroBase.replace(/\/$/, "")}/json/list`;
 }
+
+/**
+ * Only one debugger can own a Hermes target. When ours attaches but the target
+ * never answers, RN DevTools ("fusebox") or the in-app JS debugger is likely
+ * holding it — hint the user to close it (emitted once while we keep retrying).
+ */
+export const HERMES_BUSY_HINT =
+  "[devloop] a React Native target isn't answering the debugger — if RN DevTools or the in-app JS debugger is attached, close it (only one debugger can own a Hermes target); Devloop will keep retrying.";
+
+/**
+ * Final message after the connect loop gives up. Distinguishes "we saw a target
+ * but couldn't attach" (busy/owned elsewhere) from "no target at all" (app not
+ * running / JS debugging off) — the old code always said the latter.
+ */
+export function connectFailureMessage(sawTarget: boolean): string {
+  return sawTarget
+    ? "[devloop] found a React Native (Hermes) target but couldn't attach — another debugger may own it. Close RN DevTools / the in-app debugger, then switch to the iOS target again."
+    : "[devloop] no React Native (Hermes) target found via Metro — is the app running with JS debugging enabled?";
+}
