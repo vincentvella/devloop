@@ -35,8 +35,12 @@ export const adbUiDumpArgs = (serial: string): string[] => [...dev(serial), "exe
 /** PNG screenshot bytes to stdout. */
 export const adbScreencapArgs = (serial: string): string[] => [...dev(serial), "exec-out", "screencap", "-p"];
 
-/** `logcat -v brief`, optionally cleared first; scope by tag/priority happens in the parser. */
-export const adbLogcatArgs = (serial: string): string[] => [...dev(serial), "logcat", "-v", "brief"];
+/**
+ * `logcat -v brief`, with an optional filterspec (e.g. ["*:W"] for warning+, or
+ * ["ReactNative:V","*:E"]). Native logs parallel iOS — JS console already arrives
+ * over CDP — so the default keeps warnings + errors and drops verbose chatter.
+ */
+export const adbLogcatArgs = (serial: string, filterSpec: string[] = ["*:W"]): string[] => [...dev(serial), "logcat", "-v", "brief", ...filterSpec];
 
 /** Android KeyEvent codes for the keys browser_press exposes. */
 const KEYCODES: Readonly<Record<string, number>> = { Enter: 66, Return: 66, Tab: 61, Escape: 111, Backspace: 67, Space: 62, ArrowUp: 19, ArrowDown: 20, ArrowLeft: 21, ArrowRight: 22, Back: 4, Home: 3 };

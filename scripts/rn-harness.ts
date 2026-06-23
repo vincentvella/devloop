@@ -12,10 +12,15 @@ import { execFile } from "node:child_process";
 import { LogBuffer } from "../src/logBuffer.ts";
 import { ReactNativeController } from "../src/reactNativeController.ts";
 import { NativeLogStream, captureSimctlScreenshot } from "../src/iosSimulator.ts";
+import { AndroidLogStream, captureAdbScreenshot, adbBinary } from "../src/androidLog.ts";
+import { idbDriver, adbDriver } from "../src/nativeDriver.ts";
 
+// usage: rn-harness.ts <metroBase> <appMatch> [ios|android] [device|serial]
 const metroBase = process.argv[2] ?? "http://localhost:8082";
 const appMatch = process.argv[3] ?? "Caliburr"; // native log scoping (process name)
-const device = "booted";
+const platform = (process.argv[4] as "ios" | "android") || "ios";
+const isAndroid = platform === "android";
+const device = process.argv[5] ?? (isAndroid ? "any" : "booted");
 const fails: string[] = [];
 const check = (name: string, cond: boolean) => {
   console.log(`${cond ? "  ✓" : "  ✗"} ${name}`);
@@ -23,18 +28,23 @@ const check = (name: string, cond: boolean) => {
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// idb runner for the Phase 2 interaction/snapshot path (needs idb on PATH).
+// idb runner (iOS) for the interaction/snapshot path (needs idb on PATH).
 const runIdb = (args: string[]): Promise<string> =>
   new Promise((resolve, reject) => execFile("idb", args, { maxBuffer: 16 * 1024 * 1024 }, (e, out, errOut) => (e ? reject(new Error(errOut || (e as Error).message)) : resolve(out))));
+// adb runner (Android).
+const runAdb = (args: string[]): Promise<string> =>
+  new Promise((resolve, reject) => execFile(adbBinary(), args, { maxBuffer: 16 * 1024 * 1024 }, (e, out, errOut) => (e ? reject(new Error(errOut || (e as Error).message)) : resolve(out))));
 
 const buffer = new LogBuffer(5000);
-const rn = new ReactNativeController(buffer, { metroBase, device, idb: runIdb, captureScreenshot: () => captureSimctlScreenshot(device) });
+const driver = isAndroid ? adbDriver(device, runAdb) : idbDriver(device, runIdb);
+const captureScreenshot = () => (isAndroid ? captureAdbScreenshot(device) : captureSimctlScreenshot(device));
+const rn = new ReactNativeController(buffer, { metroBase, driver, captureScreenshot });
 
-// Native device logs (simctl), scoped to the app — runs alongside the JS console.
-const nativeLogs = new NativeLogStream(buffer, { device, match: appMatch });
+// Native device logs (simctl on iOS, logcat on Android) — runs alongside the JS console.
+const nativeLogs = isAndroid ? new AndroidLogStream(buffer, { serial: device }) : new NativeLogStream(buffer, { device, match: appMatch });
 nativeLogs.start();
 
-console.log(`# attaching to ${metroBase} (native logs scoped to "${appMatch}")`);
+console.log(`# attaching to ${metroBase} (${platform}, native logs ${isAndroid ? "via logcat" : `scoped to "${appMatch}"`})`);
 await rn.start();
 await sleep(500);
 check("attached to Hermes over CDP", buffer.query({}).some((e) => e.line.includes("attached to React Native")));

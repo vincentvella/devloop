@@ -8,9 +8,11 @@ import { execFile } from "node:child_process";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import { ReactNativeController } from "../src/reactNativeController.ts";
 import { NativeLogStream, captureSimctlScreenshot } from "../src/iosSimulator.ts";
+import { AndroidLogStream, captureAdbScreenshot, adbBinary } from "../src/androidLog.ts";
+import { idbDriver, adbDriver } from "../src/nativeDriver.ts";
 
 /** Run `idb <args>` and resolve its stdout — the live interaction/snapshot path for
- *  react-native targets (idb taps/types/swipes + ui describe-all). idb must be on PATH. */
+ *  iOS react-native targets (idb taps/types/swipes + ui describe-all). idb must be on PATH. */
 function runIdb(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile("idb", args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
@@ -20,9 +22,19 @@ function runIdb(args: string[]): Promise<string> {
   });
 }
 
+/** Run `adb <args>` and resolve its stdout — the Android interaction/snapshot path. */
+function runAdb(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(adbBinary(), args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) reject(new Error(`adb failed (is the Android SDK installed?): ${stderr || (err as Error).message}`.trim()));
+      else resolve(stdout);
+    });
+  });
+}
+
 interface Attached {
   rn: ReactNativeController;
-  native?: NativeLogStream;
+  native?: NativeLogStream | AndroidLogStream;
 }
 
 export class NativeObservability {
@@ -40,20 +52,23 @@ export class NativeObservability {
   /** Start streaming JS + native logs for a pane; returns the RN controller (so it can
    *  be wired as the pane's native target for browser_*). Returns the existing one if
    *  already attached. */
-  attach(opts: { paneId: string; metroBase: string; device: string; appMatch?: string }): ReactNativeController {
+  attach(opts: { paneId: string; metroBase: string; device: string; platform?: "ios" | "android"; appMatch?: string }): ReactNativeController {
     const existing = this.byPane.get(opts.paneId);
     if (existing) return existing.rn;
-    this.log(`native observability: pane ${opts.paneId} → JS=${opts.metroBase}${opts.appMatch ? ` native~"${opts.appMatch}"` : ""}`);
+    const platform = opts.platform ?? "ios";
+    this.log(`native observability: pane ${opts.paneId} → ${platform} JS=${opts.metroBase}${opts.appMatch ? ` native~"${opts.appMatch}"` : ""}`);
     const rn = new ReactNativeController(this.buffer, {
       metroBase: opts.metroBase,
       target: opts.paneId,
-      device: opts.device,
-      idb: runIdb,
-      captureScreenshot: () => captureSimctlScreenshot(opts.device),
+      driver: platform === "android" ? adbDriver(opts.device, runAdb) : idbDriver(opts.device, runIdb),
+      captureScreenshot: () => (platform === "android" ? captureAdbScreenshot(opts.device) : captureSimctlScreenshot(opts.device)),
     });
     void rn.start();
-    let native: NativeLogStream | undefined;
-    if (opts.appMatch) {
+    let native: NativeLogStream | AndroidLogStream | undefined;
+    if (platform === "android") {
+      native = new AndroidLogStream(this.buffer, { serial: opts.device, target: opts.paneId });
+      native.start();
+    } else if (opts.appMatch) {
       native = new NativeLogStream(this.buffer, { device: opts.device, match: opts.appMatch, target: opts.paneId });
       native.start();
     }

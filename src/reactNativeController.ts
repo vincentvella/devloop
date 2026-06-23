@@ -26,17 +26,16 @@ import {
   type InspectorTarget,
   type RemoteObject,
 } from "./reactNative.ts";
-import { idbDescribeAllArgs, idbKeyArgs, idbSwipeArgs, idbTapArgs, idbTextArgs, keycodeFor, parseDescribeAll, pointFromRef } from "./idb.ts";
+import { pointFromRef } from "./idb.ts";
+import type { NativeDriver } from "./nativeDriver.ts";
 
 export interface ReactNativeOptions {
   /** Metro dev-server base, e.g. http://localhost:8082 */
   metroBase: string;
-  /** Capture a simulator screenshot (injected so simctl stays out of the CDP core). */
+  /** Capture a device screenshot (injected so simctl/adb stay out of the CDP core). */
   captureScreenshot?: () => Promise<{ base64: string; mimeType: string }>;
-  /** Booted simulator UDID — required for idb interactions + snapshot. */
-  device?: string;
-  /** Run `idb <args>` against the booted sim, returning stdout (injected; CI has none). */
-  idb?: (args: string[]) => Promise<string>;
+  /** Platform driver for snapshot + interactions (idb for iOS, adb for Android). */
+  driver?: NativeDriver;
   /** Override fetch (tests/harness). */
   fetchImpl?: typeof fetch;
   /** Per-CDP-command timeout — guards against a stale/dead target wedging a call. Default 8s. */
@@ -263,11 +262,11 @@ export class ReactNativeController implements IBrowserController {
     this.ws = undefined;
   }
 
-  // --- native interactions + snapshot (idb) ---------------------------------
+  // --- native interactions + snapshot (idb / adb via the driver) ------------
 
-  private runIdb(args: string[]): Promise<string> {
-    if (!this.opts.idb || !this.opts.device) throw new Error("native interactions need idb installed + a booted simulator");
-    return this.opts.idb(args);
+  private driver(): NativeDriver {
+    if (!this.opts.driver) throw new Error("native interactions need a device driver (idb + a booted simulator, or adb + an Android device)");
+    return this.opts.driver;
   }
 
   /** Resolve a target to a tappable point: a "pt:x,y" ref, else an a11y name from snapshot. */
@@ -282,18 +281,17 @@ export class ReactNativeController implements IBrowserController {
   }
 
   async snapshot(): Promise<PageSnapshot> {
-    const out = await this.runIdb(idbDescribeAllArgs(this.opts.device!));
-    return parseDescribeAll(out, { url: this.url, title: this.url });
+    return this.driver().snapshot(this.url);
   }
 
   async click(selector: string): Promise<void> {
     const { x, y } = await this.pointFor(selector);
-    await this.runIdb(idbTapArgs(this.opts.device!, x, y));
+    await this.driver().tap(x, y);
   }
 
   async type(selector: string, text: string): Promise<void> {
     if (selector) await this.click(selector); // focus the field first
-    await this.runIdb(idbTextArgs(this.opts.device!, text));
+    await this.driver().type(text);
   }
 
   async scroll(opts: { selector?: string; x?: number; y?: number }): Promise<void> {
@@ -302,14 +300,14 @@ export class ReactNativeController implements IBrowserController {
     const anchor = opts.selector ? await this.pointFor(opts.selector) : { x: 200, y: 500 };
     const dx = opts.x ?? 0;
     const dy = opts.y ?? (opts.x ? 0 : 400);
-    await this.runIdb(idbSwipeArgs(this.opts.device!, anchor.x, anchor.y, anchor.x - dx, anchor.y - dy, 300));
+    await this.driver().swipe(anchor.x, anchor.y, anchor.x - dx, anchor.y - dy, 300);
   }
 
   async press(key: string, selector?: string): Promise<void> {
     if (selector) await this.click(selector);
-    const code = keycodeFor(key);
-    if (code == null) throw new Error(`key "${key}" is not supported on react-native (try Enter/Backspace/Tab/arrows)`);
-    await this.runIdb(idbKeyArgs(this.opts.device!, code));
+    if (!(await this.driver().key(key))) {
+      throw new Error(`key "${key}" is not supported on react-native (try Enter/Backspace/Tab/arrows)`);
+    }
   }
 
   // --- not applicable to native (gated at the tool layer) -------------------
