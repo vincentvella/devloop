@@ -9,7 +9,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { TOOLS, handleTool } from "./toolLayer.ts";
 
 /** Build an MCP Server bound to the shared tool layer (errors returned as isError results). */
-export function buildMcpServer(name = "devloop-mcp", version = "0.4.0"): Server {
+export function buildMcpServer(name = "devloop-mcp", version = "0.5.0"): Server {
   const server = new Server({ name, version }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
