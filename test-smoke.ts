@@ -53,7 +53,9 @@ const netLogs = await J("get_logs", { stream: "network", limit: 20 });
 const nsample = netLogs.entries.find((e: any) => e.detail?.url);
 check("network entry has detail + request headers", !!nsample && !!nsample.detail.requestHeaders);
 const har = await J("export_har");
-check("HAR has an entry with request headers", har.log.entries.length >= 1 && (har.log.entries[0]?.request?.headers?.length ?? 0) > 0);
+// The full ring (#26) can include header-less responses (e.g. data: navigations), so assert
+// that SOME entry carries request headers rather than assuming the first one does.
+check("HAR has an entry with request headers", har.log.entries.length >= 1 && har.log.entries.some((e: any) => (e.request?.headers?.length ?? 0) > 0));
 
 // --- snapshot + wait_for ---
 console.log("\n# snapshot + wait_for");
@@ -138,6 +140,17 @@ if (fxUrl) {
   await sleep(600);
   const fnet = await J("get_logs", { stream: "network", limit: 30 });
   check("fixture /api/boom captured as 500 with body", fnet.entries.some((e: any) => (e.detail?.url ?? "").includes("/api/boom") && e.detail?.status === 500));
+
+  // #26 full network ring: a healthy 200 stays OFF the curated timeline (status < threshold)
+  // but IS captured in the ring (get_network / HAR), independent of DEVLOOP_NET_THRESHOLD.
+  await callText("browser_eval", { expression: "fetch('/api/slow?ms=0').then(r=>r.text()).catch(()=>{})" });
+  await sleep(600);
+  const timelineNet = await J("get_logs", { stream: "network", limit: 50 });
+  const ringNet = await J("get_network", { grep: "/api/slow", limit: 50 });
+  check("healthy 200 absent from the curated timeline", !timelineNet.entries.some((e: any) => (e.detail?.url ?? "").includes("/api/slow")));
+  check("healthy 200 present in the full network ring (#26)", ringNet.some((e: any) => (e.url ?? "").includes("/api/slow") && e.status === 200));
+  const har2 = await J("export_har");
+  check("HAR includes the sub-threshold request", har2.log.entries.some((e: any) => (e.request?.url ?? "").includes("/api/slow")));
 
   // throttle: offline blocks a (local) fetch; none restores it
   await callText("browser_throttle", { profile: "offline" });

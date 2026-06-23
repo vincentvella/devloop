@@ -56,6 +56,8 @@ export class ReactNativeController implements IBrowserController {
   private msgId = 0;
   private readonly pending = new Map<number, (result: unknown) => void>();
   private url = "";
+  /** Status threshold above which captured RN requests also hit the timeline (failures always do). */
+  private readonly netThreshold = Number(process.env.DEVLOOP_NET_THRESHOLD ?? 400);
   private closed = false;
   private connecting = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
@@ -205,7 +207,9 @@ export class ReactNativeController implements IBrowserController {
     // into network rows (same shape as web) instead of surfacing them as console logs.
     const net = parseNetMarker(text);
     if (net) {
-      this.buffer.push("browser", "network", net.line, net.detail, this.opts.target);
+      // Ring always; timeline for failures + status ≥ threshold (same curation as web).
+      const onTimeline = !!net.detail.failure || (net.detail.status ?? 0) >= this.netThreshold;
+      this.buffer.network(net.line, net.detail, this.opts.target, onTimeline);
       return;
     }
     if (isErrorConsoleType(type)) {

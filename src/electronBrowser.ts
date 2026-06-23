@@ -130,25 +130,25 @@ export class ElectronBrowserController implements IBrowserController {
       case "Network.responseReceived": {
         const status: number = params.response.status;
         if (params.type === "Document") this.lastDocStatus = status;
-        if (status >= this.opts.networkErrorThreshold) {
-          const req = this.requests.get(params.requestId);
-          const detail: NetDetail = {
-            kind: "network",
-            url: params.response.url,
-            status,
-            statusText: params.response.statusText,
-            method: req?.method,
-            resourceType: params.type ?? req?.type,
-            mimeType: params.response.mimeType,
-            startedAt: req?.startedAt,
-            durationMs: req ? Date.now() - req.startedAt : undefined,
-            requestHeaders: req?.headers,
-            responseHeaders: params.response.headers,
-            requestBody: cap(req?.postData),
-          };
-          const entry = this.buffer.push("browser", "network", `${status} ${req?.method ?? ""} ${params.response.url}`.trim(), detail, this.id);
-          this.pendingBodies.set(params.requestId, entry); // body fetched on loadingFinished
-        }
+        const onTimeline = status >= this.opts.networkErrorThreshold;
+        const req = this.requests.get(params.requestId);
+        const detail: NetDetail = {
+          kind: "network",
+          url: params.response.url,
+          status,
+          statusText: params.response.statusText,
+          method: req?.method,
+          resourceType: params.type ?? req?.type,
+          mimeType: params.response.mimeType,
+          startedAt: req?.startedAt,
+          durationMs: req ? Date.now() - req.startedAt : undefined,
+          requestHeaders: req?.headers,
+          responseHeaders: params.response.headers,
+          requestBody: cap(req?.postData),
+        };
+        // Ring always (full capture, #26); timeline + body-fetch only for the curated subset.
+        const entry = this.buffer.network(`${status} ${req?.method ?? ""} ${params.response.url}`.trim(), detail, this.id, onTimeline);
+        if (onTimeline) this.pendingBodies.set(params.requestId, entry); // body fetched on loadingFinished
         break;
       }
       case "Network.loadingFinished": {

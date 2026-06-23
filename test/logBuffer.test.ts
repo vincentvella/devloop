@@ -10,6 +10,37 @@ test("push assigns increasing seq and tracks latestSeq", () => {
   expect(b.latestSeq).toBe(1);
 });
 
+test("network() always rings; timeline=false stays off the timeline but in netEntries (#26)", () => {
+  const b = new LogBuffer(100, 50);
+  const minor = b.network("200 GET /asset.js", { kind: "network", url: "/asset.js", status: 200 }, "pane-1", false);
+  const major = b.network("500 GET /api", { kind: "network", url: "/api", status: 500 }, "pane-1", true);
+
+  // Timeline (query) only has the curated one; the ring has both.
+  expect(b.query({ stream: "network" }).map((e) => e.line)).toEqual(["500 GET /api"]);
+  expect(b.netEntries().map((e) => e.line)).toEqual(["200 GET /asset.js", "500 GET /api"]);
+  expect(minor.seq).toBeLessThan(major.seq); // both get real, monotonic seqs
+});
+
+test("netEntries scopes by target + honors limit; clear() empties the ring", () => {
+  const b = new LogBuffer(100, 50);
+  b.network("200 /a", { kind: "network", url: "/a" }, "pane-1", false);
+  b.network("200 /b", { kind: "network", url: "/b" }, "pane-2", false);
+  b.network("200 /c", { kind: "network", url: "/c" }, undefined, false); // untargeted (headless web) — always included
+
+  expect(b.netEntries({ targets: ["pane-1"] }).map((e) => e.line)).toEqual(["200 /a", "200 /c"]);
+  expect(b.netEntries({ limit: 1 }).map((e) => e.line)).toEqual(["200 /c"]);
+  b.clear();
+  expect(b.netEntries()).toEqual([]);
+});
+
+test("net ring evicts oldest past its own capacity, independent of the timeline", () => {
+  const b = new LogBuffer(100, 2);
+  b.network("1", { kind: "network", url: "/1" }, undefined, false);
+  b.network("2", { kind: "network", url: "/2" }, undefined, false);
+  b.network("3", { kind: "network", url: "/3" }, undefined, false);
+  expect(b.netEntries().map((e) => e.line)).toEqual(["2", "3"]); // capacity 2
+});
+
 test("query filters by source / stream / grep / sinceSeq / limit / targets", () => {
   const b = new LogBuffer(100);
   b.push("server", "stdout", "hello world");

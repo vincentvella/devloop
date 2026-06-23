@@ -221,9 +221,24 @@ export const TOOLS: Tool[] = [
     name: "export_har",
     description:
       "Export captured network requests as a HAR 1.2 document (importable into Chrome DevTools / Charles). " +
-      "Covers logged network — failures + responses with status ≥ DEVLOOP_NET_THRESHOLD (set the threshold to 0 to capture everything). " +
-      "Optionally scope to one `app` (pane label/id).",
+      "Covers ALL requests (the full network ring, independent of DEVLOOP_NET_THRESHOLD — bodies are kept for the " +
+      "curated subset: failures + status ≥ threshold). Optionally scope to one `app` (pane label/id).",
     inputSchema: { type: "object", properties: { app: { type: "string" } } },
+  },
+  {
+    name: "get_network",
+    description:
+      "List captured network requests (the full ring — every request, independent of DEVLOOP_NET_THRESHOLD, " +
+      "unlike get_logs which shows only the curated timeline). Each row has method/url/status/timing/headers " +
+      "(bodies for the curated subset). Optionally `grep` the request line, scope to one `app`, and cap with `limit`.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        grep: { type: "string", description: "Substring match on the request line (status/method/url)." },
+        app: { type: "string", description: "Scope to one app/project (pane label or id)." },
+        limit: { type: "number", description: "Max rows (most recent), default 200." },
+      },
+    },
   },
   {
     name: "dev_start",
@@ -588,8 +603,20 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       return json({ ok: true, latestSeq: buffer.latestSeq });
     case "export_har": {
       const targets = resolveTargets(args.app as string | undefined);
-      const entries = buffer.query({ stream: "network", targets, limit: 5000 });
+      // Full network ring (#26) — complete HAR regardless of DEVLOOP_NET_THRESHOLD.
+      const entries = buffer.netEntries({ targets, limit: 5000 });
       return json(toHar(entries));
+    }
+    case "get_network": {
+      const targets = resolveTargets(args.app as string | undefined);
+      const limit = typeof args.limit === "number" ? args.limit : 200;
+      let entries = buffer.netEntries({ targets });
+      if (typeof args.grep === "string" && args.grep) {
+        const needle = (args.grep as string).toLowerCase();
+        entries = entries.filter((e) => e.line.toLowerCase().includes(needle));
+      }
+      if (entries.length > limit) entries = entries.slice(entries.length - limit);
+      return json(entries.map((e) => ({ ts: e.ts, target: e.target, ...(e.detail as Record<string, unknown>) })));
     }
     case "diagnose": {
       const targets = resolveTargets(args.app as string | undefined);

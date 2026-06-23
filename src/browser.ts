@@ -135,7 +135,8 @@ export class PuppeteerBrowserController implements IBrowserController {
     });
 
     page.on("requestfailed", (req: HTTPRequest) => {
-      this.buffer.push("browser", "network", `FAILED ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "unknown"}`, {
+      // Failures always hit the timeline (and the ring).
+      this.buffer.network(`FAILED ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "unknown"}`, {
         kind: "network",
         url: req.url(),
         method: req.method(),
@@ -144,21 +145,25 @@ export class PuppeteerBrowserController implements IBrowserController {
         requestBody: cap(req.postData()),
         startedAt: Date.now(),
         failure: req.failure()?.errorText,
-      } satisfies NetDetail);
+      } satisfies NetDetail, undefined, true);
     });
 
     page.on("response", async (res: HTTPResponse) => {
       const status = res.status();
-      if (status < this.opts.networkErrorThreshold) return; // skip the healthy noise
+      const onTimeline = status >= this.opts.networkErrorThreshold;
       const req = res.request();
       let responseBody: string | undefined;
-      try {
-        const buf = await res.buffer();
-        responseBody = buf.includes(0) ? `<binary ${buf.length} bytes>` : cap(buf.toString("utf8"));
-      } catch {
-        /* no body (redirect/304/etc.) */
+      // Body fetch is the costly part — only for the curated (timeline) subset; the ring
+      // keeps full metadata for everything (#26).
+      if (onTimeline) {
+        try {
+          const buf = await res.buffer();
+          responseBody = buf.includes(0) ? `<binary ${buf.length} bytes>` : cap(buf.toString("utf8"));
+        } catch {
+          /* no body (redirect/304/etc.) */
+        }
       }
-      this.buffer.push("browser", "network", `${status} ${req.method()} ${res.url()}`, {
+      this.buffer.network(`${status} ${req.method()} ${res.url()}`, {
         kind: "network",
         url: res.url(),
         status,
@@ -171,7 +176,7 @@ export class PuppeteerBrowserController implements IBrowserController {
         requestBody: cap(req.postData()),
         responseBody,
         startedAt: Date.now(),
-      } satisfies NetDetail);
+      } satisfies NetDetail, undefined, onTimeline);
     });
   }
 

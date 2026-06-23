@@ -22,10 +22,17 @@ export interface LogEntry {
 
 export class LogBuffer {
   private entries: LogEntry[] = [];
+  /** Every network event, threshold-independent (#26) — feeds a complete HAR + get_network. */
+  private netRing: LogEntry[] = [];
   private nextSeq = 0;
   private listeners = new Set<(e: LogEntry) => void>();
 
-  constructor(private readonly capacity = 5000) {}
+  constructor(
+    private readonly capacity = 5000,
+    /** Capacity of the dedicated network ring (separate from the timeline so heavy
+     *  request volume can't evict console/server logs). */
+    private readonly netCapacity = Number(process.env.DEVLOOP_NET_RING ?? 3000),
+  ) {}
 
   /** Subscribe to live pushes (used by the cockpit timeline window). Returns an unsubscribe fn. */
   onPush(fn: (e: LogEntry) => void): () => void {
@@ -47,6 +54,28 @@ export class LogBuffer {
       }
     }
     return entry;
+  }
+
+  /**
+   * Record a network event. ALWAYS stored in the dedicated network ring (so HAR +
+   * get_network see every request without tuning DEVLOOP_NET_THRESHOLD); also added to
+   * the curated timeline when `timeline` is true (failures + status ≥ threshold).
+   */
+  network(line: string, detail: unknown, target: string | undefined, timeline: boolean): LogEntry {
+    const entry: LogEntry = timeline
+      ? this.push("browser", "network", line, detail, target)
+      : { seq: this.nextSeq++, ts: Date.now(), source: "browser", stream: "network", line, detail, target };
+    this.netRing.push(entry);
+    if (this.netRing.length > this.netCapacity) this.netRing.splice(0, this.netRing.length - this.netCapacity);
+    return entry;
+  }
+
+  /** The full network ring (threshold-independent), optionally scoped to panes. For HAR + get_network. */
+  netEntries(opts: { targets?: string[]; limit?: number } = {}): LogEntry[] {
+    const { targets, limit } = opts;
+    let out = this.netRing.filter((e) => !targets || (e.target ? targets.includes(e.target) : true));
+    if (limit && out.length > limit) out = out.slice(out.length - limit);
+    return out;
   }
 
   query(opts: {
@@ -95,6 +124,7 @@ export class LogBuffer {
 
   clear(): void {
     this.entries = [];
+    this.netRing = [];
   }
 
   get latestSeq(): number {
