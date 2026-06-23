@@ -80,7 +80,9 @@ export async function emulateThrottle(app: ElectronApplication, win: Page): Prom
   await selects.first().selectOption("responsive");
   await win.waitForTimeout(600);
   const wide = (await inPane("window.innerWidth")) as number | null;
-  check("device picker → Responsive restores a wide viewport", !!wide && wide > 700, `innerWidth=${wide}`);
+  // Relative, not absolute — the CI window is narrower than a dev machine's; what matters
+  // is that reset left mobile width behind (wider than the emulated 390).
+  check("device picker → Responsive restores a wide viewport", !!wide && wide > 430, `innerWidth=${wide}`);
 
   // Throttle picker → Offline blocks a (same-origin) fetch; None restores it.
   await selects.nth(1).selectOption("offline");
