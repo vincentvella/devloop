@@ -55,7 +55,8 @@ export class BrowserManager implements IBrowserManager {
   private bounds: Rect = { x: 0, y: 0, width: 800, height: 600 };
   private restoring = false;
   private overlay = false; // when true, the active view is detached so a DOM overlay can show on top
-  private simulatorActive = false; // when true, the simulator view owns the pane area
+  private simulatorActive = false; // when true, the serve-sim view owns the pane area (iOS)
+  private androidActive = false; // when true, browser_* route to adb + the renderer shows the mirror
   private simView?: WebContentsView; // serve-sim MJPEG stream viewer (created on first use)
   onChange?: () => void;
 
@@ -91,7 +92,19 @@ export class BrowserManager implements IBrowserManager {
   get kind(): TargetKind {
     const p = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (!p) return "web";
-    return this.simulatorActive && p.nativeCtl ? p.nativeCtl.kind : p.ctl.kind;
+    return this.nativeRouted && p.nativeCtl ? p.nativeCtl.kind : p.ctl.kind;
+  }
+
+  /** A native target (iOS sim or Android device) owns browser_* for the active pane. */
+  private get nativeRouted(): boolean {
+    return this.simulatorActive || this.androidActive;
+  }
+
+  /** Activate/deactivate Android routing — the mirror renders as renderer DOM, so the
+   *  pane area is cleared like an overlay (no second WebContentsView). */
+  setAndroidActive(on: boolean): void {
+    this.androidActive = on;
+    this.applyActive();
   }
 
   /** Detach/re-attach the active pane view so renderer DOM (e.g. a lightbox) can cover the area. */
@@ -212,7 +225,7 @@ export class BrowserManager implements IBrowserManager {
   private routed(): IBrowserController {
     const p = this.activeId ? this.panes.get(this.activeId) : undefined;
     if (!p) throw new Error("no active browser pane");
-    return this.simulatorActive && p.nativeCtl ? p.nativeCtl : p.ctl;
+    return this.nativeRouted && p.nativeCtl ? p.nativeCtl : p.ctl;
   }
 
   /** Register (or clear) a pane's native controller — wired when observability attaches. */
@@ -254,7 +267,7 @@ export class BrowserManager implements IBrowserManager {
         /* not attached */
       }
     }
-    if (this.overlay) return; // keep the area clear for a DOM overlay (modal/lightbox)
+    if (this.overlay || this.androidActive) return; // keep the area clear for a DOM overlay (modal/lightbox, Android mirror)
     if (this.simulatorActive && this.simView) {
       this.shell.contentView.addChildView(this.simView);
       this.simView.setBounds(this.bounds);
@@ -274,7 +287,7 @@ export class BrowserManager implements IBrowserManager {
       width: Math.round(rect.width),
       height: Math.round(rect.height),
     };
-    if (this.overlay) return;
+    if (this.overlay || this.androidActive) return;
     if (this.simulatorActive && this.simView && this.shell && !this.shell.isDestroyed()) {
       this.simView.setBounds(this.bounds);
       return;

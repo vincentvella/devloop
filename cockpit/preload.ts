@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld("devloop", {
   nativeBuild: (cwd: string, platform: string) => ipcRenderer.invoke("devloop:nativeBuild", cwd, platform),
   openSimulator: () => ipcRenderer.invoke("devloop:openSimulator"),
   closeSimulator: () => ipcRenderer.invoke("devloop:closeSimulator"),
+  androidEnv: () => ipcRenderer.invoke("devloop:androidEnv"),
+  openAndroid: () => ipcRenderer.invoke("devloop:openAndroid"),
+  closeAndroid: () => ipcRenderer.invoke("devloop:closeAndroid"),
+  androidTap: (x: number, y: number) => ipcRenderer.invoke("devloop:androidTap", x, y),
+  androidText: (text: string) => ipcRenderer.invoke("devloop:androidText", text),
+  androidKey: (key: string) => ipcRenderer.invoke("devloop:androidKey", key),
   devStart: (opts: { cmd?: string; cwd?: string }) => ipcRenderer.invoke("devloop:devStart", opts),
   devStop: () => ipcRenderer.invoke("devloop:devStop"),
   devRestart: () => ipcRenderer.invoke("devloop:devRestart"),
@@ -80,5 +86,15 @@ contextBridge.exposeInMainWorld("devloop", {
     const handler = (_e: unknown, status: unknown) => cb(status);
     ipcRenderer.on("devloop:update", handler);
     return () => ipcRenderer.removeListener("devloop:update", handler);
+  },
+  onAndroidFrame: (cb: (base64: string) => void) => {
+    const handler = (_e: unknown, b64: string) => cb(b64);
+    ipcRenderer.on("devloop:androidFrame", handler);
+    return () => ipcRenderer.removeListener("devloop:androidFrame", handler);
+  },
+  onAndroidSize: (cb: (size: { width: number; height: number }) => void) => {
+    const handler = (_e: unknown, size: { width: number; height: number }) => cb(size);
+    ipcRenderer.on("devloop:androidSize", handler);
+    return () => ipcRenderer.removeListener("devloop:androidSize", handler);
   },
 });

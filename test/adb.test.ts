@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { adbTapArgs, adbTextArgs, adbSwipeArgs, adbKeyeventArgs, adbUiDumpArgs, adbScreencapArgs, androidKeycodeFor, parseUiAutomatorDump, parseLogcatLine, androidErrorLevel } from "../src/adb.ts";
+import { adbTapArgs, adbTextArgs, adbSwipeArgs, adbKeyeventArgs, adbUiDumpArgs, adbScreencapArgs, adbLogcatArgs, androidKeycodeFor, parseUiAutomatorDump, parseLogcatLine, androidErrorLevel, parseAdbDevices, usableSerials, parseWmSize } from "../src/adb.ts";
 
 const S = "emulator-5554";
 
@@ -51,4 +51,26 @@ test("parseLogcatLine handles brief format, banners, and fallback", () => {
   expect(parseLogcatLine("loose line")).toEqual({ level: "log", message: "loose line" });
   expect(androidErrorLevel("error")).toBe(true);
   expect(androidErrorLevel("info")).toBe(false);
+});
+
+test("adbLogcatArgs starts from now (-T 1, no ring-buffer dump), defaults to warning+", () => {
+  expect(adbLogcatArgs(S)).toEqual(["-s", S, "logcat", "-v", "brief", "-T", "1", "*:W"]);
+  expect(adbLogcatArgs(S, ["ReactNative:V", "*:E"])).toEqual(["-s", S, "logcat", "-v", "brief", "-T", "1", "ReactNative:V", "*:E"]);
+});
+
+test("parseAdbDevices + usableSerials", () => {
+  const out = "List of devices attached\nemulator-5554\tdevice\nemulator-5556\toffline\n123abc\tunauthorized\n";
+  expect(parseAdbDevices(out)).toEqual([
+    { serial: "emulator-5554", state: "device" },
+    { serial: "emulator-5556", state: "offline" },
+    { serial: "123abc", state: "unauthorized" },
+  ]);
+  expect(usableSerials(out)).toEqual(["emulator-5554"]);
+  expect(parseAdbDevices("List of devices attached\n\n")).toEqual([]);
+});
+
+test("parseWmSize prefers Override over Physical", () => {
+  expect(parseWmSize("Physical size: 1080x2400")).toEqual({ width: 1080, height: 2400 });
+  expect(parseWmSize("Physical size: 1080x2400\nOverride size: 720x1600")).toEqual({ width: 720, height: 1600 });
+  expect(parseWmSize("garbage")).toBeNull();
 });

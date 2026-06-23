@@ -66,8 +66,10 @@ export class NativeObservability {
     void rn.start();
     let native: NativeLogStream | AndroidLogStream | undefined;
     if (platform === "android") {
-      native = new AndroidLogStream(this.buffer, { serial: opts.device, target: opts.paneId });
-      native.start();
+      if (!process.env.DEVLOOP_NO_ANDROID_LOGCAT) {
+        native = new AndroidLogStream(this.buffer, { serial: opts.device, target: opts.paneId });
+        native.start();
+      }
     } else if (opts.appMatch) {
       native = new NativeLogStream(this.buffer, { device: opts.device, match: opts.appMatch, target: opts.paneId });
       native.start();

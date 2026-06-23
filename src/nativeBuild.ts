@@ -53,15 +53,15 @@ export function buildStatusLabel(status: FingerprintStatus): string | null {
 }
 
 /** A view target the cockpit can switch between for an Expo project. Web is the
- * Metro web bundle (a normal browser pane); iOS is the simulator. Android view
- * lands with the emulator (Phase 3) — it can still be built via the build button. */
-export type ViewTarget = "web" | "ios";
+ * Metro web bundle (a normal browser pane); iOS is the simulator; Android is the
+ * adb-driven device mirror. */
+export type ViewTarget = "web" | "ios" | "android";
 
 export interface NativeInfo {
   isNative: boolean;
   /** Platforms a native build targets (ios/android). */
   platforms: Platform[];
-  /** View targets to offer in the switcher (web + ios). */
+  /** View targets to offer in the switcher (web + ios + android). */
   targets: ViewTarget[];
   buildStatus: FingerprintStatus;
   badge: string | null;
@@ -86,7 +86,9 @@ export function resolveNativeInfo(
   if (kind !== "react-native") return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
   const dirs = availablePlatforms(probe);
   const platforms: Platform[] = dirs.length ? dirs : ["ios"];
-  const targets: ViewTarget[] = [...(webCapable ? (["web"] as ViewTarget[]) : []), "ios"]; // iOS view supported in v1
+  // Offer iOS + Android views; both prebuild on first `expo run:<platform>`. Readiness
+  // (idb / adb + a booted device) is surfaced separately so an unset SDK warns, not blocks.
+  const targets: ViewTarget[] = [...(webCapable ? (["web"] as ViewTarget[]) : []), "ios", "android"];
   const buildStatus = fingerprintStatus(currentFingerprint, recordedFingerprint);
   return { isNative: true, platforms, targets, buildStatus, badge: buildStatusLabel(buildStatus) };
 }

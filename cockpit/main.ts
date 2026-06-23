@@ -19,7 +19,7 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, session } from "electron";
 import { createServer, type IncomingMessage } from "node:http";
-import { execFileSync } from "node:child_process";
+import { execFileSync, execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mergePath, parseShellPath } from "../src/shellPath.ts";
 import { existsSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
@@ -56,7 +56,10 @@ import { initAutoUpdate, type Updater } from "./updater.ts";
 import { ServeSim } from "./serveSim.ts";
 import { NativeObservability } from "./nativeObservability.ts";
 import { metroBaseFromUrl, deriveAppMatch } from "../src/nativeObservability.ts";
-import { nativeEnvIssues, nativeEnvSummary, nativeEnvChecks, nativeEnvReady, type NativeEnvProbe } from "../src/nativeEnv.ts";
+import { nativeEnvIssues, nativeEnvSummary, nativeEnvChecks, nativeEnvReady, type NativeEnvProbe, androidEnvIssues, androidEnvSummary, androidEnvChecks, androidEnvReady, type AndroidEnvProbe } from "../src/nativeEnv.ts";
+import { adbBinary } from "../src/androidLog.ts";
+import { usableSerials, adbTapArgs, adbTextArgs, adbKeyeventArgs, androidKeycodeFor } from "../src/adb.ts";
+import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
 const SELFTEST = process.env.DEVLOOP_SELFTEST === "1";
@@ -110,6 +113,38 @@ function probeNativeEnv(): NativeEnvProbe {
   }
   return { idb: has("idb"), idbCompanion: has("idb_companion"), bootedSim };
 }
+
+/** Run `adb <args>` → stdout (async). adb is resolved via the SDK if not on PATH. */
+function runAdb(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(adbBinary(), args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(new Error(stderr || (err as Error).message)) : resolve(stdout)));
+  });
+}
+
+/** Probe Android-interaction readiness: adb present + at least one usable device. */
+function probeAndroidEnv(): AndroidEnvProbe {
+  let adbOk = false;
+  let serials: string[] = [];
+  try {
+    const out = execFileSync(adbBinary(), ["devices"], { encoding: "utf8", timeout: 5000 });
+    adbOk = true;
+    serials = usableSerials(out);
+  } catch {
+    /* no adb / SDK */
+  }
+  return { adb: adbOk, bootedDevice: serials.length > 0 };
+}
+
+/** First usable Android serial, or null. */
+function firstAndroidSerial(): string | null {
+  try {
+    return usableSerials(execFileSync(adbBinary(), ["devices"], { encoding: "utf8", timeout: 5000 }))[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+let androidStream: AndroidScreenStream | undefined;
 
 /** Best-effort native-log process match from a project's Expo config. */
 function appMatchFor(cwd: string): string {
@@ -239,6 +274,8 @@ function createWindows(): void {
     log(`renderer: ${msg}`);
   });
   shellWin.webContents.on("preload-error", (_e, path, err) => log(`preload-error ${path}: ${err}`));
+  shellWin.webContents.on("render-process-gone", (_e, details) => log(`renderer gone: ${details.reason} (exitCode=${details.exitCode})`));
+  app.on("child-process-gone", (_e, details) => log(`child process gone: ${details.type}/${details.name ?? ""} ${details.reason} (exitCode=${details.exitCode})`));
   // The timeline is the control surface — closing it tears the whole app down.
   shellWin.on("closed", () => quitHard());
   void shellWin.loadFile(join(BASE, "renderer/index.html"));
@@ -313,6 +350,67 @@ function wireIpc(): void {
     const active = manager.listPanes().find((p) => p.active);
     if (active) manager.setNativeController(active.id, undefined);
     return { ok: true };
+  });
+
+  // --- Android: drive an emulator/device + mirror its screen into the pane ---
+  ipcMain.handle("devloop:androidEnv", () => {
+    const probe = probeAndroidEnv();
+    return { ready: androidEnvReady(probe), checks: androidEnvChecks(probe), summary: androidEnvSummary(probe) };
+  });
+  ipcMain.handle("devloop:openAndroid", async () => {
+    const probe = probeAndroidEnv();
+    const issues = androidEnvIssues(probe);
+    const active = manager.listPanes().find((p) => p.active);
+    if (issues.length) {
+      log(`android env: ${androidEnvSummary(probe)}`);
+      buffer.push("native", "log", `⚠ Android interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`, undefined, active?.id);
+      if (!probe.adb || !probe.bootedDevice) return { ok: false, summary: androidEnvSummary(probe) };
+    }
+    const serial = firstAndroidSerial();
+    if (!serial) return { ok: false, summary: "no usable Android device" };
+    // Route browser_* to the adb-backed controller + show the mirror.
+    const metroBase = metroBaseFromUrl(active?.url);
+    if (active && metroBase) {
+      const rn = observability.attach({ paneId: active.id, metroBase, device: serial, platform: "android" });
+      manager.setNativeController(active.id, rn);
+    } else if (active) {
+      // No Metro yet (not an RN project, or bundler not started) — still mirror + allow taps.
+      const rn = observability.attach({ paneId: active.id, metroBase: metroBase || "http://localhost:8081", device: serial, platform: "android" });
+      manager.setNativeController(active.id, rn);
+    }
+    manager.setAndroidActive(true);
+    const size = await deviceSize(serial).catch(() => null);
+    shellWin?.webContents.send("devloop:androidSize", size ?? { width: 1080, height: 2400 });
+    androidStream?.stop();
+    if (!process.env.DEVLOOP_NO_ANDROID_STREAM) {
+      androidStream = new AndroidScreenStream({ serial, onFrame: (b64) => shellWin?.webContents.send("devloop:androidFrame", b64) });
+      androidStream.start();
+    }
+    log(`android: mirroring ${serial}${metroBase ? ` (JS=${metroBase})` : ""}`);
+    return { ok: true, serial };
+  });
+  ipcMain.handle("devloop:closeAndroid", async () => {
+    androidStream?.stop();
+    androidStream = undefined;
+    manager.setAndroidActive(false);
+    observability.detachAll();
+    const active = manager.listPanes().find((p) => p.active);
+    if (active) manager.setNativeController(active.id, undefined);
+    return { ok: true };
+  });
+  // Input from the mirror's click/key layer → adb. Coordinates arrive in device px.
+  ipcMain.handle("devloop:androidTap", async (_e, x: number, y: number) => {
+    const serial = firstAndroidSerial();
+    if (serial) await runAdb(adbTapArgs(serial, x, y)).catch((e) => log(`android tap failed: ${(e as Error).message}`));
+  });
+  ipcMain.handle("devloop:androidText", async (_e, text: string) => {
+    const serial = firstAndroidSerial();
+    if (serial && text) await runAdb(adbTextArgs(serial, text)).catch((e) => log(`android text failed: ${(e as Error).message}`));
+  });
+  ipcMain.handle("devloop:androidKey", async (_e, key: string) => {
+    const serial = firstAndroidSerial();
+    const code = androidKeycodeFor(key);
+    if (serial && code != null) await runAdb(adbKeyeventArgs(serial, code)).catch((e) => log(`android key failed: ${(e as Error).message}`));
   });
 
   // Per-pane dev lifecycle (top-bar controls act on the active pane).
@@ -1103,6 +1201,8 @@ function quitHard(): void {
   setTimeout(() => app.exit(0), 1200);
 }
 
+process.on("uncaughtException", (e) => log(`UNCAUGHT main exception: ${(e as Error).stack ?? e}`));
+process.on("unhandledRejection", (e) => log(`UNHANDLED main rejection: ${(e as Error)?.stack ?? e}`));
 app.on("before-quit", cleanup);
 app.on("window-all-closed", quitHard);
 process.on("SIGTERM", () => {

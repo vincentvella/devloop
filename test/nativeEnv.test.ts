@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { nativeEnvIssues, nativeEnvReady, nativeEnvSummary, nativeEnvChecks } from "../src/nativeEnv.ts";
+import { nativeEnvIssues, nativeEnvReady, nativeEnvSummary, nativeEnvChecks, androidEnvIssues, androidEnvReady, androidEnvChecks, androidEnvSummary } from "../src/nativeEnv.ts";
 
 test("nativeEnvChecks yields a ✓/✗ row per requirement with a fix only when failing", () => {
   const checks = nativeEnvChecks({ idb: true, idbCompanion: false, bootedSim: true });
@@ -32,4 +32,15 @@ test("summary names the gap + fix when not ready", () => {
   const s = nativeEnvSummary({ idb: false, idbCompanion: true, bootedSim: true });
   expect(s).toContain("idb CLI not found");
   expect(s).toContain("pipx install fb-idb");
+});
+
+test("Android readiness needs only adb + a booted device", () => {
+  expect(androidEnvReady({ adb: true, bootedDevice: true })).toBe(true);
+  expect(androidEnvSummary({ adb: true, bootedDevice: true })).toMatch(/ready/);
+  const issues = androidEnvIssues({ adb: false, bootedDevice: false });
+  expect(issues.map((i) => i.what)).toEqual(["adb not found", "no booted device"]);
+  expect(androidEnvChecks({ adb: true, bootedDevice: false }).map((c) => [c.label, c.ok])).toEqual([
+    ["adb (Android SDK)", true],
+    ["Booted device/emulator", false],
+  ]);
 });

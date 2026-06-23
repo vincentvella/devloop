@@ -37,10 +37,12 @@ export const adbScreencapArgs = (serial: string): string[] => [...dev(serial), "
 
 /**
  * `logcat -v brief`, with an optional filterspec (e.g. ["*:W"] for warning+, or
- * ["ReactNative:V","*:E"]). Native logs parallel iOS — JS console already arrives
- * over CDP — so the default keeps warnings + errors and drops verbose chatter.
+ * ["ReactNative:V","*:E"]). `-T 1` starts from NOW: without it logcat first dumps the
+ * entire existing ring buffer (thousands of lines) in one burst, which floods the
+ * timeline IPC. Native logs parallel iOS — JS console already arrives over CDP — so
+ * the default keeps warnings + errors and drops verbose chatter.
  */
-export const adbLogcatArgs = (serial: string, filterSpec: string[] = ["*:W"]): string[] => [...dev(serial), "logcat", "-v", "brief", ...filterSpec];
+export const adbLogcatArgs = (serial: string, filterSpec: string[] = ["*:W"]): string[] => [...dev(serial), "logcat", "-v", "brief", "-T", "1", ...filterSpec];
 
 /** Android KeyEvent codes for the keys browser_press exposes. */
 const KEYCODES: Readonly<Record<string, number>> = { Enter: 66, Return: 66, Tab: 61, Escape: 111, Backspace: 67, Space: 62, ArrowUp: 19, ArrowDown: 20, ArrowLeft: 21, ArrowRight: 22, Back: 4, Home: 3 };
@@ -96,3 +98,38 @@ export function parseLogcatLine(raw: string): NativeLogLine | null {
 }
 
 export const androidErrorLevel = (level: string): boolean => level === "error" || level === "fault";
+
+// --- device detection ------------------------------------------------------
+
+export interface AdbDevice {
+  serial: string;
+  /** "device" (usable), "offline", "unauthorized", "bootloader", … */
+  state: string;
+}
+
+/** Parse `adb devices` output into {serial,state} rows (drops the header + blanks). */
+export function parseAdbDevices(stdout: string): AdbDevice[] {
+  const out: AdbDevice[] = [];
+  for (const raw of stdout.split("\n")) {
+    const line = raw.trim();
+    if (!line || /^List of devices/i.test(line) || /^\*/.test(line)) continue;
+    const m = /^(\S+)\s+(\S+)/.exec(line);
+    if (m) out.push({ serial: m[1]!, state: m[2]! });
+  }
+  return out;
+}
+
+/** Usable (state === "device") serials only. */
+export const usableSerials = (stdout: string): string[] => parseAdbDevices(stdout).filter((d) => d.state === "device").map((d) => d.serial);
+
+/** Parse `adb shell wm size` → device pixels (prefers an Override over Physical size). */
+export function parseWmSize(stdout: string): { width: number; height: number } | null {
+  let phys: { width: number; height: number } | null = null;
+  let over: { width: number; height: number } | null = null;
+  for (const m of stdout.matchAll(/(Physical|Override) size:\s*(\d+)x(\d+)/gi)) {
+    const size = { width: +m[2]!, height: +m[3]! };
+    if (/override/i.test(m[1]!)) over = size;
+    else phys = size;
+  }
+  return over ?? phys;
+}

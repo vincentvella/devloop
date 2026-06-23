@@ -55,3 +55,38 @@ export function nativeEnvSummary(p: NativeEnvProbe): string {
   if (!issues.length) return "native interactions ready (idb + companion + booted simulator)";
   return `native interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`;
 }
+
+// --- Android readiness (adb) -----------------------------------------------
+
+/**
+ * Android needs far less than iOS: just `adb` (Android SDK platform-tools) and a
+ * booted emulator/device. No companion, no Python-version trap.
+ */
+export interface AndroidEnvProbe {
+  /** `adb` resolvable (on PATH or the SDK's platform-tools). */
+  adb: boolean;
+  /** At least one usable device (`adb devices` state === "device"). */
+  bootedDevice: boolean;
+}
+
+export function androidEnvIssues(p: AndroidEnvProbe): NativeEnvIssue[] {
+  const issues: NativeEnvIssue[] = [];
+  if (!p.adb) issues.push({ what: "adb not found", fix: "install Android SDK platform-tools (`brew install --cask android-platform-tools`) or set $ANDROID_HOME" });
+  if (!p.bootedDevice) issues.push({ what: "no booted device", fix: "start an emulator (Android Studio ▸ Device Manager), or run a build (▶ Build / `expo run:android`)" });
+  return issues;
+}
+
+export const androidEnvReady = (p: AndroidEnvProbe): boolean => androidEnvIssues(p).length === 0;
+
+export function androidEnvChecks(p: AndroidEnvProbe): NativeEnvCheck[] {
+  return [
+    { label: "adb (Android SDK)", ok: p.adb, fix: p.adb ? undefined : "Install Android SDK platform-tools or set $ANDROID_HOME" },
+    { label: "Booted device/emulator", ok: p.bootedDevice, fix: p.bootedDevice ? undefined : "Start an emulator, or run a build (▶ Build)" },
+  ];
+}
+
+export function androidEnvSummary(p: AndroidEnvProbe): string {
+  const issues = androidEnvIssues(p);
+  if (!issues.length) return "Android interactions ready (adb + booted device)";
+  return `Android interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`;
+}

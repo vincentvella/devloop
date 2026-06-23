@@ -232,6 +232,62 @@ function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
   );
 }
 
+const KEYMAP: Record<string, string> = { Enter: "Enter", Backspace: "Backspace", Tab: "Tab", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight", Escape: "Back" };
+
+/**
+ * Live Android screen mirror (the parallel to serve-sim's iOS preview). Subscribes
+ * to `screencap` frames and sets the <img> src IMPERATIVELY — multi-MB PNG data URLs
+ * never enter React state, so a 2-3fps stream can't thrash reconciliation (an earlier
+ * state-driven version OOM'd the renderer). Clicks/keys map to adb input; a click maps
+ * from the rendered <img> rect back to device pixels via the reported `wm size`.
+ */
+function AndroidMirror(): ReactNode {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const waitRef = useRef<HTMLDivElement>(null);
+  const sizeRef = useRef<{ width: number; height: number }>({ width: 1080, height: 2400 });
+
+  useEffect(() => {
+    const offSize = dl().onAndroidSize((s) => (sizeRef.current = s));
+    const offFrame = dl().onAndroidFrame((b64) => {
+      const img = imgRef.current;
+      if (!img) return;
+      img.src = `data:image/png;base64,${b64}`;
+      if (waitRef.current) waitRef.current.style.display = "none";
+      img.style.display = "block";
+    });
+    return () => {
+      offSize();
+      offFrame();
+    };
+  }, []);
+
+  const onClick = (e: React.MouseEvent) => {
+    const el = imgRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
+    const { width, height } = sizeRef.current;
+    const x = ((e.clientX - r.left) / r.width) * width;
+    const y = ((e.clientY - r.top) / r.height) * height;
+    void dl().androidTap(x, y);
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (KEYMAP[e.key]) {
+      e.preventDefault();
+      void dl().androidKey(KEYMAP[e.key]!);
+    } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      void dl().androidText(e.key);
+    }
+  };
+  return (
+    <div className="android-mirror" tabIndex={0} onKeyDown={onKeyDown} title="click to tap · type to send keys">
+      <img ref={imgRef} className="android-frame" style={{ display: "none" }} onClick={onClick} draggable={false} />
+      <div ref={waitRef} className="android-waiting">connecting to device…</div>
+    </div>
+  );
+}
+
 // --- app -------------------------------------------------------------------
 function App() {
   // Domain/IPC state lives in the zustand store (store.ts).
@@ -248,6 +304,7 @@ function App() {
   const [chips, setChips] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
   const [nativeEnv, setNativeEnv] = useState<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] } | null>(null);
+  const [androidEnv, setAndroidEnv] = useState<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] } | null>(null);
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
   const nativeInfo = useDevloopStore((s) => s.nativeInfo);
   const refreshNativeInfo = useDevloopStore((s) => s.refreshNativeInfo);
@@ -324,6 +381,11 @@ function App() {
     if (settingsOpen || viewTarget === "ios" || nativeInfo?.isNative) void dl().nativeEnv().then(setNativeEnv);
   }, [settingsOpen, viewTarget, nativeInfo?.isNative]);
 
+  // Android readiness, refreshed when its target is shown (drives the warn bar).
+  useEffect(() => {
+    if (viewTarget === "android") void dl().androidEnv().then(setAndroidEnv);
+  }, [viewTarget]);
+
   // Transient update states clear themselves; downloading/downloaded persist until acted on.
   useEffect(() => {
     if (update.state !== "uptodate" && update.state !== "error") return;
@@ -378,12 +440,18 @@ function App() {
     };
   }, [devCwd, refreshNativeInfo]);
 
-  // Switch an Expo project's view target: Web (browser pane) ↔ iOS (simulator overlay).
-  const switchTarget = useCallback(async (t: string) => {
-    setViewTarget(t);
-    if (t === "ios") await dl().openSimulator();
-    else await dl().closeSimulator();
-  }, []);
+  // Switch an Expo project's view target: Web (browser pane) ↔ iOS (simulator) ↔ Android (mirror).
+  const switchTarget = useCallback(
+    async (t: string) => {
+      const prev = viewTarget;
+      setViewTarget(t);
+      if (prev === "ios" && t !== "ios") await dl().closeSimulator();
+      if (prev === "android" && t !== "android") await dl().closeAndroid();
+      if (t === "ios") await dl().openSimulator();
+      else if (t === "android") await dl().openAndroid();
+    },
+    [viewTarget],
+  );
 
   const saveSession = useCallback(() => {
     void dl().sessionSave({ cmd: devCmd.trim(), cwd: devCwd.trim(), steps, project: selProject });
@@ -655,24 +723,24 @@ function App() {
           <Eraser size={15} />
         </IconBtn>
         {nativeInfo?.isNative && nativeInfo.targets.length > 0 && (
-          <div className="segmented target-switch" title="view target — Web (browser) or iOS (simulator)">
+          <div className="segmented target-switch" title="view target — Web (browser), iOS (simulator), or Android (device mirror)">
             {nativeInfo.targets.map((t) => (
               <button key={t} className={`seg${viewTarget === t ? " on" : ""}`} onClick={() => void switchTarget(t)}>
-                {t === "web" ? "Web" : t === "ios" ? "iOS" : t}
+                {t === "web" ? "Web" : t === "ios" ? "iOS" : t === "android" ? "Android" : t}
               </button>
             ))}
           </div>
         )}
-        {nativeInfo?.isNative && viewTarget === "ios" && (
+        {nativeInfo?.isNative && (viewTarget === "ios" || viewTarget === "android") && (
           <>
             <button
               className="labeled btn-primary"
               disabled={building}
-              title={`build + launch the iOS dev build (output → timeline)${nativeInfo.badge ? " · " + nativeInfo.badge : ""}`}
+              title={`build + launch the ${viewTarget} dev build (output → timeline)${nativeInfo.badge ? " · " + nativeInfo.badge : ""}`}
               onClick={() => {
                 setBuilding(true);
                 void dl()
-                  .nativeBuild(devCwd, "ios")
+                  .nativeBuild(devCwd, viewTarget)
                   .finally(() => setBuilding(false));
               }}
             >
@@ -709,10 +777,16 @@ function App() {
           ⚠ Native taps & snapshot need idb — {nativeEnv.checks.filter((c) => !c.ok).map((c) => c.label).join(", ")} missing. Click for setup.
         </div>
       )}
+      {viewTarget === "android" && androidEnv && !androidEnv.ready && (
+        <div className="native-warn" title="Android readiness">
+          ⚠ Android needs {androidEnv.checks.filter((c) => !c.ok).map((c) => c.label).join(", ")} — {androidEnv.checks.find((c) => !c.ok)?.fix}
+        </div>
+      )}
 
       <div className="body">
         <div className="pane-area" ref={paneAreaRef} style={fillTimeline ? { display: "none" } : undefined}>
           {panes.length === 0 && <div className="hint">no pane — open a project or add a pane (+)</div>}
+          {viewTarget === "android" && <AndroidMirror />}
         </div>
 
         {!sidebarHidden && !fillTimeline && <div className={`divider${dragging ? " drag" : ""}`} onMouseDown={startDrag} />}

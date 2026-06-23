@@ -109,6 +109,12 @@ export interface DevloopApi {
   nativeBuild: (cwd: string, platform: string) => Promise<{ started: boolean }>;
   openSimulator: () => Promise<{ ok: boolean }>;
   closeSimulator: () => Promise<{ ok: boolean }>;
+  androidEnv: () => Promise<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[]; summary: string }>;
+  openAndroid: () => Promise<{ ok: boolean; serial?: string; summary?: string }>;
+  closeAndroid: () => Promise<{ ok: boolean }>;
+  androidTap: (x: number, y: number) => Promise<void>;
+  androidText: (text: string) => Promise<void>;
+  androidKey: (key: string) => Promise<void>;
   reload: (hard: boolean) => Promise<void>;
   back: () => Promise<void>;
   forward: () => Promise<void>;
@@ -147,6 +153,8 @@ export interface DevloopApi {
   onExtChanged: (cb: () => void) => () => void;
   onPush: (cb: (e: Entry) => void) => () => void;
   onUpdate: (cb: (status: import("../../src/update.ts").UpdateStatus) => void) => () => void;
+  onAndroidFrame: (cb: (base64: string) => void) => () => void;
+  onAndroidSize: (cb: (size: { width: number; height: number }) => void) => () => void;
 }
 
 declare global {
