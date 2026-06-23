@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld("devloop", {
   back: () => ipcRenderer.invoke("devloop:back"),
   forward: () => ipcRenderer.invoke("devloop:forward"),
   screenshot: () => ipcRenderer.invoke("devloop:screenshot"),
+  emulate: (opts: { device?: string; reset?: boolean }) => ipcRenderer.invoke("devloop:emulate", opts),
+  throttle: (profile: string) => ipcRenderer.invoke("devloop:throttle", profile),
   pick: () => ipcRenderer.invoke("devloop:pick"),
   clearStorage: (opts?: { allOrigins?: boolean }) => ipcRenderer.invoke("devloop:clearStorage", opts),
   exportBundle: () => ipcRenderer.invoke("devloop:exportBundle"),

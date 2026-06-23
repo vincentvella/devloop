@@ -305,6 +305,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
   const [nativeEnv, setNativeEnv] = useState<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] } | null>(null);
   const [androidEnv, setAndroidEnv] = useState<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] } | null>(null);
+  const [emuDevice, setEmuDevice] = useState("responsive"); // #25 viewport picker (web)
+  const [netProfile, setNetProfile] = useState("none"); // #25 throttle picker (web)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
   const nativeInfo = useDevloopStore((s) => s.nativeInfo);
   const refreshNativeInfo = useDevloopStore((s) => s.refreshNativeInfo);
@@ -461,6 +463,14 @@ function App() {
   useEffect(() => {
     setUrl(active?.url && active.url !== "about:blank" ? active.url : "");
   }, [active?.url]);
+
+  // Emulation/throttle are per-pane (applied via the routed controller); reset the
+  // pickers' display to neutral when the active pane changes so they don't imply a
+  // setting the newly-shown pane doesn't have.
+  useEffect(() => {
+    setEmuDevice("responsive");
+    setNetProfile("none");
+  }, [active?.id]);
 
   // Persist the form (incl. project + save-as) on any change, debounced.
   // Gated on `loaded` so the initial blank render can't overwrite the saved session.
@@ -757,6 +767,40 @@ function App() {
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && void navigate()}
         />
+        {(!nativeInfo?.isNative || viewTarget === "web") && (
+          <>
+            <select
+              className="bar-select"
+              title="emulate a device viewport (browser_emulate)"
+              value={emuDevice}
+              onChange={(e) => {
+                const v = e.target.value;
+                setEmuDevice(v);
+                void dl().emulate(v === "responsive" ? { reset: true } : { device: v });
+              }}
+            >
+              <option value="responsive">Responsive</option>
+              <option value="iphone">iPhone</option>
+              <option value="ipad">iPad</option>
+              <option value="pixel">Pixel</option>
+            </select>
+            <select
+              className="bar-select"
+              title="throttle the network (browser_throttle)"
+              value={netProfile}
+              onChange={(e) => {
+                const v = e.target.value;
+                setNetProfile(v);
+                void dl().throttle(v);
+              }}
+            >
+              <option value="none">No throttle</option>
+              <option value="fast-3g">Fast 3G</option>
+              <option value="slow-3g">Slow 3G</option>
+              <option value="offline">Offline</option>
+            </select>
+          </>
+        )}
         <IconBtn tip="screenshot → timeline" onClick={() => void dl().screenshot()}>
           <Camera size={15} />
         </IconBtn>

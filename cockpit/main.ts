@@ -552,6 +552,9 @@ function wireIpc(): void {
     const active = manager.listPanes().find((p) => p.active);
     buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, active?.id);
   });
+  // #25 viewport/throttle picker → the same browser_emulate / browser_throttle the MCP tools drive.
+  ipcMain.handle("devloop:emulate", (_e, opts: { device?: string; reset?: boolean }) => manager.emulate(opts ?? {}));
+  ipcMain.handle("devloop:throttle", (_e, profile: string) => manager.throttle(profile));
 
   ipcMain.handle("devloop:pickFolder", async () => {
     const r = await dialog.showOpenDialog(shellWin!, { properties: ["openDirectory"] });

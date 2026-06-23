@@ -119,6 +119,8 @@ export interface DevloopApi {
   back: () => Promise<void>;
   forward: () => Promise<void>;
   screenshot: () => Promise<void>;
+  emulate: (opts: { device?: string; reset?: boolean }) => Promise<void>;
+  throttle: (profile: string) => Promise<void>;
   pick: () => Promise<string | null>;
   clearStorage: (opts?: { allOrigins?: boolean }) => Promise<void>;
   exportBundle: () => Promise<string | null>;

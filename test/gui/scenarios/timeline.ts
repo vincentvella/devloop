@@ -50,6 +50,49 @@ export async function manualNavigation(_app: ElectronApplication, win: Page): Pr
   check("address bar navigates the active pane", !!ap, ap?.url ?? target);
 }
 
+/** #25: the viewport/throttle pickers in the browser bar drive browser_emulate/throttle. */
+export async function emulateThrottle(app: ElectronApplication, win: Page): Promise<void> {
+  // Read a value from the pane's web content (main-process side) by fixture origin.
+  const inPane = (expr: string): Promise<unknown> =>
+    app.evaluate(
+      async ({ webContents }, [origin, e]) => {
+        const wc = webContents.getAllWebContents().find((c) => c.getURL().startsWith(origin as string));
+        return wc ? await wc.executeJavaScript(e as string) : null;
+      },
+      [ctx.fixtureOrigin, expr] as [string, string],
+    );
+
+  // Navigate to the fixture root — it has <meta viewport width=device-width>, so an
+  // emulated mobile device reports its device width (a viewport-less page like /api/ok
+  // would fall back to the 980px mobile default and mask the change).
+  const addr = win.locator(".browser-bar input.address");
+  await addr.fill(ctx.fixtureOrigin);
+  await addr.press("Enter");
+  await waitForActive(win, (p) => (p.url || "").startsWith(ctx.fixtureOrigin), 15_000);
+  await win.waitForTimeout(300);
+
+  const selects = win.locator(".browser-bar select.bar-select");
+  // Device picker → iPhone narrows the layout viewport; Responsive restores it.
+  await selects.first().selectOption("iphone");
+  await win.waitForTimeout(600);
+  const narrow = (await inPane("window.innerWidth")) as number | null;
+  check("device picker → iPhone narrows the pane viewport", !!narrow && narrow > 0 && narrow <= 430, `innerWidth=${narrow}`);
+  await selects.first().selectOption("responsive");
+  await win.waitForTimeout(600);
+  const wide = (await inPane("window.innerWidth")) as number | null;
+  check("device picker → Responsive restores a wide viewport", !!wide && wide > 700, `innerWidth=${wide}`);
+
+  // Throttle picker → Offline blocks a (same-origin) fetch; None restores it.
+  await selects.nth(1).selectOption("offline");
+  await win.waitForTimeout(300);
+  const offl = await inPane("fetch('/api/ok').then(()=>'ok').catch(()=>'fail')");
+  check("throttle picker → Offline blocks a fetch", offl === "fail", String(offl));
+  await selects.nth(1).selectOption("none");
+  await win.waitForTimeout(300);
+  const onl = await inPane("fetch('/api/ok').then(()=>'ok').catch(()=>'fail')");
+  check("throttle picker → None restores fetch", onl === "ok", String(onl));
+}
+
 export async function exports(app: ElectronApplication, win: Page): Promise<void> {
   const harPath = join(tmpdir(), "devloop-gui-export.har");
   const htmlPath = join(tmpdir(), "devloop-gui-export.html");

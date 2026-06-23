@@ -35,7 +35,7 @@ if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
 const { check, launchReady, results, run } = await import("./harness.ts");
 const { shellAndPanes, multiPane, popOut } = await import("./scenarios/panes.ts");
 const { devServerAndLogs, devServerStop } = await import("./scenarios/devServer.ts");
-const { logsFilter, screenshot, repro, manualNavigation, exports } = await import("./scenarios/timeline.ts");
+const { logsFilter, screenshot, repro, manualNavigation, emulateThrottle, exports } = await import("./scenarios/timeline.ts");
 const { projectRegistry, settingsAndExtensions, storeInjectedButton } = await import("./scenarios/settings.ts");
 const { updateFeedback } = await import("./scenarios/updates.ts");
 const { persistence } = await import("./scenarios/persistence.ts");
@@ -59,6 +59,7 @@ async function main(): Promise<void> {
     await run("screenshot", () => screenshot(a, win));
     await run("repro builder", () => repro(a, win));
     await run("manual navigation", () => manualNavigation(a, win));
+    await run("emulate & throttle pickers", () => emulateThrottle(a, win));
     await run("exports", () => exports(a, win));
     await run("project registry", () => projectRegistry(a, win));
     await run("multi-pane", () => multiPane(a, win));
