@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Devloop — browser + dev-server logs on one timeline</title>
-    <meta name="description" content="Devloop drives a browser and your dev server, putting both on one correlated timeline. An MCP server with a headless (stdio) mode and an Electron cockpit." />
+    <meta name="description" content="Devloop drives a browser — or a native iOS/Android Expo app — and your dev server, putting both on one correlated timeline. An MCP server with a headless (stdio) mode, a shared HTTP/SSE daemon, and an Electron cockpit." />
     <meta property="og:title" content="Devloop" />
-    <meta property="og:description" content="Browser control + dev-server logs on one correlated timeline — for AI agents and humans." />
+    <meta property="og:description" content="Browser + native (iOS/Android) control + dev-server logs on one correlated timeline — for AI agents and humans." />
     <style>
       :root {
         --bg: #0d1117; --bg2: #161b22; --edge: #30363d; --fg: #c9d1d9; --dim: #8b949e;
@@ -65,12 +65,12 @@
       <section>
         <h2>Use it with Claude (MCP)</h2>
         <pre><code>claude mcp add devloop --scope user -- npx -y devloop-mcp</code></pre>
-        <p class="tag" style="font-size:14px">Then, in any project: <em>“dev_start and repro a navigate to /projects.”</em> It starts your dev server, drives the browser, and returns a correlated slice of both sides.</p>
+        <p class="tag" style="font-size:14px">Then, in any project: <em>“dev_start and repro a navigate to /projects.”</em> It starts your dev server, drives the browser, and returns a correlated slice of both sides. Need one instance shared across agents? <code>devloop-mcp daemon</code>. MCP blocked by an enterprise sandbox? Drive the tools as shell commands — see the <a href="https://github.com/vincentvella/devloop#when-mcp-is-blocked-enterprise-sandbox--drive-devloop-via-mcporter">mcporter guide</a>.</p>
       </section>
 
       <section>
         <h2>Or run the cockpit</h2>
-        <p class="tag" style="font-size:14px;margin-bottom:14px">A desktop app: tabbed browser panes beside a unified, filterable timeline, a repro builder, and pop-out browser windows. Grab your platform:</p>
+        <p class="tag" style="font-size:14px;margin-bottom:14px">A desktop app: tabbed browser panes (and Expo iOS/Android targets) beside a unified, filterable timeline, a repro builder, an element picker, and pop-out browser windows. Grab your platform:</p>
         <div class="dl">
           <a href="https://github.com/vincentvella/devloop/releases/latest">macOS&nbsp;.dmg</a>
           <a href="https://github.com/vincentvella/devloop/releases/latest">Windows&nbsp;.exe</a>
@@ -83,9 +83,11 @@
         <h2>What it does</h2>
         <div class="grid">
           <div class="card"><h3>One timeline</h3><p>Server stdout/stderr and browser console/network/page-errors share one clock — correlate cause and effect across the stack.</p></div>
+          <div class="card"><h3>Web <em>and</em> native</h3><p>Drive a browser, or an Expo/React Native app on the iOS simulator or an Android emulator — live device in the pane, native logs + RN network on the same timeline, snapshot/tap via idb/adb.</p></div>
           <div class="card"><h3>repro</h3><p>Run an action sequence (navigate / click / type / eval), wait for network idle, and get everything that happened on both sides.</p></div>
-          <div class="card"><h3>Per-app scoping</h3><p>Run several projects at once; query logs by app name, not just the active pane.</p></div>
-          <div class="card"><h3>Agent-drivable</h3><p>Headless stdio for Claude Code, or MCP-over-HTTP so an agent can drive the running cockpit.</p></div>
+          <div class="card"><h3>Per-app scoping</h3><p>Run several projects at once; query logs by app name, not just the active pane. Each project gets isolated browser storage.</p></div>
+          <div class="card"><h3>Shared daemon</h3><p>Run one <code>devloop-mcp daemon</code> and many agents/sessions share it over HTTP/SSE — one browser, one dev server, one timeline.</p></div>
+          <div class="card"><h3>Agent-drivable</h3><p>Headless stdio for Claude Code, MCP-over-HTTP for the cockpit + daemon, or call the tools as plain shell commands via mcporter when MCP is sandboxed.</p></div>
         </div>
       </section>
 
