@@ -49,6 +49,8 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
+      - name: Ensure electron binary (postinstall is flaky — path.txt sometimes unwritten)
+        run: test -f node_modules/electron/path.txt || node node_modules/electron/install.js
       - name: Cockpit selftest (offscreen Electron)
         run: bun run app:selftest
 
