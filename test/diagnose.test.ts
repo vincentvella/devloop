@@ -1,8 +1,25 @@
 import { test, expect } from "bun:test";
-import { diagnose } from "../src/diagnose.ts";
+import { diagnose, staleNativeBuildNote } from "../src/diagnose.ts";
 import type { LogEntry } from "../src/logBuffer.ts";
 
 const e = (over: Partial<LogEntry>): LogEntry => ({ seq: 0, ts: 1000, source: "browser", stream: "console", line: "", ...over });
+
+test("#14: a missing native module flags a stale native build (and leads the summary)", () => {
+  const r = diagnose([e({ stream: "pageerror", line: "Error: Cannot find native module 'ExpoCamera'", ts: 100 })]);
+  expect(r.nativeNotes.length).toBe(1);
+  expect(r.nativeNotes[0]).toContain("native build looks stale");
+  expect(r.nativeNotes[0]).toContain("ExpoCamera");
+  expect(r.summary.startsWith("native build looks stale")).toBe(true);
+  // a plain error doesn't trip the rule
+  expect(diagnose([e({ stream: "pageerror", line: "Error: boom" })]).nativeNotes).toEqual([]);
+});
+
+test("staleNativeBuildNote matches the known signatures, not unrelated errors", () => {
+  const g = (sample: string) => [{ source: "browser", stream: "pageerror", sample, count: 1, firstTs: 0, lastTs: 0, targets: [] }];
+  expect(staleNativeBuildNote(g("Cannot find native module 'X'"))).not.toBeNull();
+  expect(staleNativeBuildNote(g("Your JavaScript code tried to access a native module that doesn't exist"))).not.toBeNull();
+  expect(staleNativeBuildNote(g("TypeError: undefined is not a function"))).toBeNull();
+});
 
 test("groups repeated errors with counts and collects network failures", () => {
   const r = diagnose([

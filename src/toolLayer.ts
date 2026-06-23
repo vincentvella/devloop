@@ -21,6 +21,9 @@ export interface ToolDeps {
   buffer: LogBuffer;
   browser: IBrowserController;
   devServer: DevServerLike;
+  /** Native (iOS) interaction readiness — provided by the cockpit so `diagnose` can
+   *  flag "idb not installed" on a react-native target. Absent in stdio (web-only). */
+  nativeEnv?: () => { ready: boolean; summary: string } | null;
 }
 
 let deps: ToolDeps;
@@ -591,7 +594,14 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
     case "diagnose": {
       const targets = resolveTargets(args.app as string | undefined);
       const entries = buffer.query({ targets, limit: 5000 });
-      return json(diagnose(entries, { windowMs: args.windowMs as number | undefined }));
+      const result = diagnose(entries, { windowMs: args.windowMs as number | undefined });
+      // #21: on a react-native target, surface idb/native readiness in triage too.
+      const ne = deps.browser.kind === "react-native" ? deps.nativeEnv?.() : null;
+      if (ne && !ne.ready) {
+        result.nativeNotes.push(ne.summary);
+        result.summary = result.summary === "no errors detected" ? ne.summary : `${ne.summary} | ${result.summary}`;
+      }
+      return json(result);
     }
     case "export_bundle": {
       const targets = resolveTargets(args.app as string | undefined);

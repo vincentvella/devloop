@@ -255,6 +255,15 @@ function wireIpc(): void {
     return true;
   });
   ipcMain.handle("devloop:navigate", (_e, url: string) => manager.navigate(url));
+  ipcMain.handle("devloop:nativeElements", async () => {
+    // The native (idb) a11y snapshot for the iOS picker — routed to the RN controller
+    // while the simulator target is active. Returns [] off-native or on error.
+    try {
+      return (await manager.snapshot()).nodes;
+    } catch {
+      return [];
+    }
+  });
   ipcMain.handle("devloop:nativeEnv", () => {
     const probe = probeNativeEnv();
     return { ready: nativeEnvReady(probe), checks: nativeEnvChecks(probe) };
@@ -691,7 +700,15 @@ async function main() {
     stop: () => manager.devStop(),
     status: () => manager.devStatus(),
   };
-  configureTools({ buffer, browser: manager, devServer: devFacade });
+  configureTools({
+    buffer,
+    browser: manager,
+    devServer: devFacade,
+    nativeEnv: () => {
+      const p = probeNativeEnv();
+      return { ready: nativeEnvReady(p), summary: nativeEnvSummary(p) };
+    },
+  });
 
   await startHttp();
   log("ready");

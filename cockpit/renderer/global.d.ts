@@ -103,6 +103,7 @@ export interface DevloopApi {
   updateDownload: () => Promise<void>;
   updateInstall: () => Promise<void>;
   nativeEnv: () => Promise<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] }>;
+  nativeElements: () => Promise<{ ref: string; role: string; name: string }[]>;
   openExtensions: () => Promise<void>;
   nativeInfo: (cwd: string) => Promise<NativeInfo>;
   nativeBuild: (cwd: string, platform: string) => Promise<{ started: boolean }>;

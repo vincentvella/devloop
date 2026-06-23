@@ -270,6 +270,7 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [panelTab, setPanelTab] = useState<"logs" | "repro">("logs");
   const [picking, setPicking] = useState(false);
+  const [nativePick, setNativePick] = useState<{ ref: string; role: string; name: string }[] | null>(null); // null = closed
   const [extInput, setExtInput] = useState("");
 
   const paneAreaRef = useRef<HTMLDivElement>(null);
@@ -750,9 +751,17 @@ function App() {
                 </button>
                 <button
                   className="labeled"
-                  title={viewTarget === "ios" ? "pick is web-only — on iOS, browser_snapshot returns pt:x,y refs to use in a click step" : "pick an element in the page → adds a click step"}
-                  disabled={picking || viewTarget === "ios"}
+                  title={viewTarget === "ios" ? "pick a native element (from the iOS accessibility tree)" : "pick an element in the page → adds a click step"}
+                  disabled={picking}
                   onClick={async () => {
+                    if (viewTarget === "ios") {
+                      // Native: no DOM overlay — list the a11y elements and let the user choose.
+                      setReproStatus("loading native elements…");
+                      const nodes = await dl().nativeElements();
+                      setNativePick(nodes);
+                      setReproStatus(nodes.length ? "" : "no native elements — is idb ready + the app in the foreground?");
+                      return;
+                    }
                     setPicking(true);
                     setReproStatus("pick an element… (Esc cancels)");
                     try {
@@ -1005,6 +1014,39 @@ function App() {
               <button className="labeled" title="check GitHub for a newer Devloop release" onClick={() => void dl().checkForUpdates()}>
                 <RefreshCw size={13} /> check for updates
               </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Native (iOS) element picker — list the a11y tree (no DOM overlay on the sim). */}
+      <Dialog.Root open={nativePick !== null} onOpenChange={(o) => !o && setNativePick(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="modal-overlay" />
+          <Dialog.Content className="modal-content" aria-describedby={undefined}>
+            <Dialog.Title className="modal-title">
+              <Crosshair size={14} /> Pick a native element
+            </Dialog.Title>
+            <div className="native-pick-list">
+              {nativePick && nativePick.length === 0 ? (
+                <div className="ext-empty">No elements found — is idb ready and the app in the foreground?</div>
+              ) : (
+                nativePick?.map((n, i) => (
+                  <button
+                    key={`${n.ref}:${i}`}
+                    className="native-pick-row"
+                    onClick={() => {
+                      const selector = n.name || n.ref; // controller resolves a label or a pt:x,y ref
+                      setSteps((s) => [...s, { kind: "click", selector }]);
+                      setReproStatus(`picked ${selector}`);
+                      setNativePick(null);
+                    }}
+                  >
+                    <span className="native-pick-role">{n.role}</span>
+                    <span className="native-pick-name">{n.name || n.ref}</span>
+                  </button>
+                ))
+              )}
             </div>
           </Dialog.Content>
         </Dialog.Portal>

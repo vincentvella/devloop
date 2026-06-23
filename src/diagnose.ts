@@ -28,7 +28,22 @@ export interface DiagnoseResult {
   errorCount: number;
   groups: ErrorGroup[];
   network: NetFailure[];
+  /** Actionable native (RN/iOS) findings — e.g. a stale native build, idb not ready. */
+  nativeNotes: string[];
   summary: string;
+}
+
+// A missing native module at runtime almost always means the native build is stale
+// (JS references a module the compiled app doesn't include) — a rebuild fixes it.
+const STALE_NATIVE_RE =
+  /cannot find native module|tried to access a native module that does(?:n'|n')t exist|requirenativecomponent|turbomodule\b.*(?:not found|null)|native module .*(?:cannot be null|is null|doesn'?t exist)/i;
+
+/** A one-line "native build is stale — rebuild" note if the error groups show the signature. */
+export function staleNativeBuildNote(groups: ErrorGroup[]): string | null {
+  const hit = groups.find((g) => STALE_NATIVE_RE.test(g.sample));
+  if (!hit) return null;
+  const mod = /native module '([^']+)'/i.exec(hit.sample)?.[1];
+  return `native build looks stale — a native module${mod ? ` ('${mod}')` : ""} the JS uses isn't in the running build. Rebuild (▶ Build / \`expo run:ios\`) so the binary matches the JS.`;
 }
 
 const isServerError = (e: LogEntry) => e.source === "server" && /error|exception|traceback|unhandled|fatal|\bpanic\b/i.test(e.line);
@@ -73,7 +88,11 @@ export function diagnose(entries: LogEntry[], opts: { windowMs?: number | null; 
 
   const groupList = [...groups.values()].sort((a, b) => b.count - a.count);
   const netList = [...network.values()].sort((a, b) => b.count - a.count);
-  const summary =
+  const nativeNotes: string[] = [];
+  const stale = staleNativeBuildNote(groupList);
+  if (stale) nativeNotes.push(stale);
+
+  const errPart =
     errorCount === 0
       ? "no errors detected"
       : `${errorCount} error${errorCount > 1 ? "s" : ""}${windowMs ? ` in the last ${Math.round(windowMs / 1000)}s` : ""}: ` +
@@ -81,6 +100,8 @@ export function diagnose(entries: LogEntry[], opts: { windowMs?: number | null; 
           ...groupList.slice(0, 3).map((g) => `${g.count}× ${g.sample.slice(0, 80)}`),
           ...netList.slice(0, 3).map((n) => `${n.count}× ${n.status ?? n.failure} ${n.method ?? ""} ${n.url}`),
         ].join("; ");
+  // Lead with native findings — they're usually the root cause when present.
+  const summary = nativeNotes.length ? `${nativeNotes.join(" ")} | ${errPart}` : errPart;
 
-  return { windowMs, errorCount, groups: groupList, network: netList, summary };
+  return { windowMs, errorCount, groups: groupList, network: netList, nativeNotes, summary };
 }

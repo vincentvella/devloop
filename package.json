@@ -54,7 +54,8 @@
     "dist:win": "bun run app:build && electron-builder --win",
     "dist:linux": "bun run app:build && electron-builder --linux",
     "prepublishOnly": "bun run mcp:build",
-    "app:gui": "bun run app:build && node test/gui/run.ts"
+    "app:gui": "bun run app:build && node test/gui/run.ts",
+    "rn:smoke": "bun run scripts/rn-harness.ts"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
