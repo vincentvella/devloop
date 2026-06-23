@@ -36,29 +36,33 @@ serve-sim is **vendored into the cockpit** and run via Electron's own Node, so t
 Three **transports** expose one **shared core**, which drives one of several **substrates** (a real browser, or — in the cockpit — a native device). Everything pushes onto a single timestamped **timeline**.
 
 ```
-                    MCP clients  (Claude Code · agents · mcporter)
-                          │              │                 │
-   ┌──────────────────────┤              │                 ├───────────────────────────┐
-   │ stdio                 │  HTTP/SSE (/mcp)               │  HTTP/SSE (/mcp)           │
-   │ src/index.ts          │  src/daemon.ts                 │  cockpit/main.ts           │
-   │ Claude spawns/session  │  one shared headless instance  │  Electron desktop app      │
-   └──────────┬────────────┴───────────────┬────────────────┴──────────────┬────────────┘
-              │      src/mcpServer.ts (MCP Server)   src/httpMcp.ts (Streamable HTTP, multi-session)
-              ▼                              ▼                               ▼
-   ┌──────────────────────────────── shared core (src/) ─────────────────────────────────┐
-   │  toolLayer — TOOLS + handleTool, bound to {buffer, browser, devServer, …} via        │
-   │              configureTools(); transport- & substrate-agnostic                        │
-   │  logBuffer — ONE timeline (server + browser + native) + a separate network ring       │
-   │  devServer · registry · target(capabilities) · diagnose · sourcemap · har · bundle     │
-   └─────────────────────────────────────────────────────────────────────────────────────┘
-              │  IBrowserController            │  IBrowserManager (N panes)      │  ITargetController
-              ▼                                ▼                                 ▼
-   Puppeteer / Chrome                  Electron WebContentsView panes      React Native (Hermes)
-   src/browser.ts                      src/electronBrowser.ts (CDP)        src/reactNativeController.ts
-   (stdio + daemon)                    (cockpit; per-project partitions)   JS+errors over Metro CDP;
-                                                                           network via injected XHR hook;
-                                       native target ──▶ NativeDriver ─────┤  taps/snapshot/screens via
-                                       (idb ⇄ adb)                          │  iOS idb  ·  Android adb
+  MCP clients — Claude Code · agents · mcporter
+       │   connect via one of three transports:
+       │
+       ├─ stdio    src/index.ts     spawned per session
+       ├─ daemon   src/daemon.ts    HTTP/SSE · one shared instance
+       └─ cockpit  cockpit/main.ts  HTTP/SSE · Electron app
+       │           (HTTP via src/mcpServer.ts + src/httpMcp.ts)
+       ▼
+  ── shared core (src/) ──────────────────────────────────────
+    toolLayer  TOOLS + handleTool, wired via configureTools()
+               — transport- & substrate-agnostic
+    logBuffer  one shared timeline + a separate network ring
+    devServer · registry · target · diagnose · sourcemap ·
+    har · bundle
+  ────────────────────────────────────────────────────────────
+       │   via IBrowserController / IBrowserManager /
+       │   ITargetController, gated by the target's capabilities
+       ▼
+  ── substrates ──────────────────────────────────────────────
+    web · Puppeteer/Chrome   src/browser.ts        (stdio+daemon)
+    web · Electron CDP       src/electronBrowser.ts (cockpit panes,
+                             per-project storage partitions)
+    native · React Native    src/reactNativeController.ts
+             (Hermes)        JS + network over Metro CDP; taps &
+                             snapshot via NativeDriver — iOS idb /
+                             Android adb
+  ────────────────────────────────────────────────────────────
 ```
 
 **The tool layer never knows what's behind it** — Puppeteer or Electron, stdio or HTTP, web page or native app. It's wired once with `configureTools()`. The browser sits behind `IBrowserController`; the cockpit's `BrowserManager` implements the richer `IBrowserManager` (multiple panes, delegating browser_* to the active one — or to the native controller when an iOS/Android target is open). `target.ts` gates tools by the active target's capabilities, so an agent gets a clear message instead of a substrate error.
