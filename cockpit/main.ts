@@ -139,6 +139,85 @@ function firstAndroidSerial(): string | null {
 
 let androidStream: AndroidScreenStream | undefined;
 
+// --- native target control (shared by the renderer IPCs + the native_* MCP tools) ---
+
+async function doOpenSimulator(): Promise<{ ok: boolean; summary?: string }> {
+  const info = await serveSim.ensure(); // serve-sim captures the booted iOS sim as an interactive MJPEG preview
+  if (!info) {
+    log("simulator: serve-sim has no booted device (boot a simulator first)");
+    return { ok: false, summary: "no booted iOS simulator (boot one in Simulator.app)" };
+  }
+  await manager.setSimulatorActive(true, info);
+  const active = manager.listPanes().find((p) => p.active);
+  // Preflight: native taps/snapshot need idb + companion + a booted sim — surface gaps on the timeline.
+  const issues = nativeEnvIssues(probeNativeEnv());
+  if (issues.length) {
+    log(`native env: ${nativeEnvSummary(probeNativeEnv())}`);
+    buffer.push("native", "log", `⚠ native interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`, undefined, active?.id);
+  }
+  const metroBase = metroBaseFromUrl(active?.url);
+  if (active && metroBase) {
+    const rn = observability.attach({ paneId: active.id, metroBase, device: "booted", appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined });
+    manager.setNativeController(active.id, rn); // browser_* → the RN/idb controller while iOS is active
+  } else {
+    log("simulator: no Metro URL on the active pane — start its bundler to stream JS logs");
+  }
+  return { ok: true };
+}
+
+async function doCloseSimulator(): Promise<void> {
+  await manager.setSimulatorActive(false); // browser_* route back to the web pane
+  observability.detachAll();
+  const active = manager.listPanes().find((p) => p.active);
+  if (active) manager.setNativeController(active.id, undefined);
+}
+
+async function doOpenAndroid(): Promise<{ ok: boolean; summary?: string; serial?: string }> {
+  const probe = probeAndroidEnv();
+  const issues = androidEnvIssues(probe);
+  const active = manager.listPanes().find((p) => p.active);
+  if (issues.length) {
+    log(`android env: ${androidEnvSummary(probe)}`);
+    buffer.push("native", "log", `⚠ Android interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`, undefined, active?.id);
+    if (!probe.adb || !probe.bootedDevice) return { ok: false, summary: androidEnvSummary(probe) };
+  }
+  const serial = firstAndroidSerial();
+  if (!serial) return { ok: false, summary: "no usable Android device" };
+  const metroBase = metroBaseFromUrl(active?.url);
+  if (active) {
+    // With Metro → JS over CDP too; without → still mirror + allow taps.
+    const rn = observability.attach({ paneId: active.id, metroBase: metroBase || "http://localhost:8081", device: serial, platform: "android" });
+    manager.setNativeController(active.id, rn);
+  }
+  manager.setAndroidActive(true);
+  const size = await deviceSize(serial).catch(() => null);
+  shellWin?.webContents.send("devloop:androidSize", size ?? { width: 1080, height: 2400 });
+  androidStream?.stop();
+  if (!process.env.DEVLOOP_NO_ANDROID_STREAM) {
+    androidStream = new AndroidScreenStream({ serial, onFrame: (b64) => shellWin?.webContents.send("devloop:androidFrame", b64) });
+    androidStream.start();
+  }
+  log(`android: mirroring ${serial}${metroBase ? ` (JS=${metroBase})` : ""}`);
+  return { ok: true, serial };
+}
+
+async function doCloseAndroid(): Promise<void> {
+  androidStream?.stop();
+  androidStream = undefined;
+  manager.setAndroidActive(false);
+  observability.detachAll();
+  const active = manager.listPanes().find((p) => p.active);
+  if (active) manager.setNativeController(active.id, undefined);
+}
+
+function doNativeBuild(platform: Platform, cwd?: string): { started: boolean; detail?: string } {
+  const active = manager.listPanes().find((p) => p.active);
+  const root = cwd || active?.dev?.cwd;
+  if (!root || !platform) return { started: false, detail: "no project cwd — set the pane's project or pass cwd" };
+  runNativeBuild({ buffer, projectRoot: root, platform }); // streams to the timeline; fingerprint recorded on success
+  return { started: true, detail: `building ${platform} in ${root}` };
+}
+
 /** Best-effort native-log process match from a project's Expo config. */
 function appMatchFor(cwd: string): string {
   let cfg: { name?: string; expo?: { name?: string } } | null = null;
@@ -217,45 +296,11 @@ function wireIpc(): void {
   ipcMain.handle("devloop:updateInstall", () => updater?.install());
   ipcMain.handle("devloop:openExtensions", () => openExtensionsWindow());
   ipcMain.handle("devloop:nativeInfo", (_e, cwd: string) => nativeInfo(cwd));
-  ipcMain.handle("devloop:nativeBuild", (_e, cwd: string, platform: Platform) => {
-    if (!cwd || !platform) return { started: false };
-    runNativeBuild({ buffer, projectRoot: cwd, platform }); // streams to the timeline; fingerprint recorded on success
-    return { started: true };
-  });
-  // Simulator: a serve-sim child window overlaying the pane area (see simulatorWindow.ts).
-  ipcMain.handle("devloop:openSimulator", async () => {
-    // serve-sim captures the booted sim; we load its interactive preview mode in a
-    // pane view (MJPEG <img> + input layer → composites + interactive; no overlay window).
-    const info = await serveSim.ensure();
-    if (!info) {
-      log("simulator: serve-sim has no booted device (boot a simulator first)");
-      return { ok: false };
-    }
-    await manager.setSimulatorActive(true, info);
-    // Stream the native app's JS + native logs onto the timeline (scoped to its pane).
-    const active = manager.listPanes().find((p) => p.active);
-    // Preflight: native taps/snapshot need idb + companion + a booted sim. Surface
-    // any gap (with the fix) on the timeline instead of failing cryptically on first tap.
-    const issues = nativeEnvIssues(probeNativeEnv());
-    if (issues.length) {
-      log(`native env: ${nativeEnvSummary(probeNativeEnv())}`);
-      buffer.push("native", "log", `⚠ native interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`, undefined, active?.id);
-    }
-    const metroBase = metroBaseFromUrl(active?.url);
-    if (active && metroBase) {
-      const rn = observability.attach({ paneId: active.id, metroBase, device: "booted", appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined });
-      // Route browser_* to the RN controller (idb taps/snapshot) while the iOS target is active.
-      manager.setNativeController(active.id, rn);
-    } else {
-      log("simulator: no Metro URL on the active pane — start its bundler to stream JS logs");
-    }
-    return { ok: true };
-  });
+  ipcMain.handle("devloop:nativeBuild", (_e, cwd: string, platform: Platform) => doNativeBuild(platform, cwd));
+  // Simulator: serve-sim's interactive MJPEG preview in a pane view (see doOpenSimulator).
+  ipcMain.handle("devloop:openSimulator", () => doOpenSimulator());
   ipcMain.handle("devloop:closeSimulator", async () => {
-    await manager.setSimulatorActive(false); // browser_* route back to the web pane
-    observability.detachAll();
-    const active = manager.listPanes().find((p) => p.active);
-    if (active) manager.setNativeController(active.id, undefined);
+    await doCloseSimulator();
     return { ok: true };
   });
 
@@ -264,45 +309,9 @@ function wireIpc(): void {
     const probe = probeAndroidEnv();
     return { ready: androidEnvReady(probe), checks: androidEnvChecks(probe), summary: androidEnvSummary(probe) };
   });
-  ipcMain.handle("devloop:openAndroid", async () => {
-    const probe = probeAndroidEnv();
-    const issues = androidEnvIssues(probe);
-    const active = manager.listPanes().find((p) => p.active);
-    if (issues.length) {
-      log(`android env: ${androidEnvSummary(probe)}`);
-      buffer.push("native", "log", `⚠ Android interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`, undefined, active?.id);
-      if (!probe.adb || !probe.bootedDevice) return { ok: false, summary: androidEnvSummary(probe) };
-    }
-    const serial = firstAndroidSerial();
-    if (!serial) return { ok: false, summary: "no usable Android device" };
-    // Route browser_* to the adb-backed controller + show the mirror.
-    const metroBase = metroBaseFromUrl(active?.url);
-    if (active && metroBase) {
-      const rn = observability.attach({ paneId: active.id, metroBase, device: serial, platform: "android" });
-      manager.setNativeController(active.id, rn);
-    } else if (active) {
-      // No Metro yet (not an RN project, or bundler not started) — still mirror + allow taps.
-      const rn = observability.attach({ paneId: active.id, metroBase: metroBase || "http://localhost:8081", device: serial, platform: "android" });
-      manager.setNativeController(active.id, rn);
-    }
-    manager.setAndroidActive(true);
-    const size = await deviceSize(serial).catch(() => null);
-    shellWin?.webContents.send("devloop:androidSize", size ?? { width: 1080, height: 2400 });
-    androidStream?.stop();
-    if (!process.env.DEVLOOP_NO_ANDROID_STREAM) {
-      androidStream = new AndroidScreenStream({ serial, onFrame: (b64) => shellWin?.webContents.send("devloop:androidFrame", b64) });
-      androidStream.start();
-    }
-    log(`android: mirroring ${serial}${metroBase ? ` (JS=${metroBase})` : ""}`);
-    return { ok: true, serial };
-  });
+  ipcMain.handle("devloop:openAndroid", () => doOpenAndroid());
   ipcMain.handle("devloop:closeAndroid", async () => {
-    androidStream?.stop();
-    androidStream = undefined;
-    manager.setAndroidActive(false);
-    observability.detachAll();
-    const active = manager.listPanes().find((p) => p.active);
-    if (active) manager.setNativeController(active.id, undefined);
+    await doCloseAndroid();
     return { ok: true };
   });
   // Input from the mirror's click/key layer → adb. Coordinates arrive in device px.
@@ -740,6 +749,15 @@ async function main() {
       const p = probeNativeEnv();
       return { ready: nativeEnvReady(p), summary: nativeEnvSummary(p) };
     },
+    // native_open / native_close / native_build over MCP — same path as the cockpit buttons.
+    nativeControl: {
+      open: (platform) => (platform === "android" ? doOpenAndroid() : doOpenSimulator()),
+      close: async () => {
+        await doCloseSimulator();
+        await doCloseAndroid();
+      },
+      build: async (platform, cwd) => doNativeBuild(platform as Platform, cwd),
+    },
   });
 
   await startHttp();
@@ -1023,6 +1041,18 @@ async function runSelfTest() {
     console.log(`SELFTEST extension FAILED (path=${extPath}): ${e}`);
   }
 
+  // 9h) native_* MCP tools are wired (nativeControl) in the cockpit. native_close is safe
+  // to call with nothing open (idempotent); native_open/native_build need a real device, so
+  // we just confirm the close path dispatches without error (the tool layer is unit-tested).
+  let nativeToolsOk = false;
+  try {
+    const r = await handleTool("native_close", {});
+    nativeToolsOk = JSON.parse(r.content[0]!.text as string).ok === true;
+    console.log(`SELFTEST native tools: native_close ok=${nativeToolsOk}`);
+  } catch (e) {
+    console.log(`SELFTEST native tools FAILED: ${e}`);
+  }
+
   // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
   manager.__crashActive();
   await new Promise((r) => setTimeout(r, 1500));
@@ -1091,6 +1121,7 @@ async function runSelfTest() {
     ["diagnose (group + network)", diagnoseOk],
     ["export bundle", bundleOk],
     ["chrome extension (unpacked)", extLoadedOk],
+    ["native_* MCP tools wired (native_close)", nativeToolsOk],
   ];
   for (const [name, c] of checks) console.log(`  ${c ? "✓" : "✗"} ${name}`);
   const failed = checks.filter(([, c]) => !c).map(([n]) => n);

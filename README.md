@@ -69,12 +69,18 @@ bun run app          # build + launch the Electron cockpit
 bun run start        # or run the stdio MCP directly
 ```
 
-## Tools (33)
+## Tools (37)
 
 **Dev server** — runtime, no per-project registration needed
 - `dev_start({ project?, cmd?, cwd? })` — start a dev server and tee its logs. Specify it three ways: a saved registry `project`; explicit `cmd`+`cwd`; or neither (`cwd` defaults to the server's dir, `cmd` auto-detected from `package.json` scripts: `dev`/`develop`/`web`/`start`/`serve`).
 - `dev_stop()` — stop it. Kills the whole **process group** (so `next dev`/`metro` grandchildren die too).
 - `dev_status()` — running?, plus cmd/cwd/pid.
+
+**Native targets** — Expo/React Native (cockpit only; needs Electron + a simulator/emulator)
+- `native_open({ platform })` — open the iOS simulator or Android device mirror for the active pane; `browser_*` then drive the native app (idb/adb) and JS + native logs stream to the timeline. Returns `ok:false` with a reason if the device/tooling isn't ready.
+- `native_close()` — back to the pane's web content.
+- `native_build({ platform, cwd? })` — `expo run:ios` / `expo run:android`, streamed to the timeline (`cwd` defaults to the active pane's project).
+- In headless stdio/daemon mode these report that the cockpit is required (Puppeteer is web-only).
 
 **Browser control** — act on the active pane
 - `browser_navigate({ url })`
@@ -93,8 +99,9 @@ bun run start        # or run the stdio MCP directly
 **Logs & correlation**
 - `get_logs({ source?, stream?, grep?, app?, sinceSeq?, limit? })` — unified tail. `source` is `server`|`browser`; `stream` is `stdout`/`stderr`/`console`/`network`/`pageerror`. `app` scopes to one project's logs — it matches a pane's **label** (project name) or id (see `pane_list`) and filters *both* that pane's server and browser logs, regardless of which pane is active. Pass the last `seq` as `sinceSeq` to tail incrementally.
 - `get_logs_around({ ts, windowMs?, source?, app? })` — **the correlation tool**: all events within ±`windowMs` of a timestamp, time-ordered across both sources (optionally scoped to one `app`).
-- Logged **network** events (failures + status ≥ `DEVLOOP_NET_THRESHOLD`; set the threshold to `0` to capture everything) carry rich `detail` on **both substrates**: method, status, resource type, mime, duration, request + response **headers**, and capped request/response **bodies**.
-- `export_har({ app? })` — export captured network as a **HAR 1.2** document (import into Chrome DevTools / Charles). Scope to one `app` if you like.
+- The **timeline** shows network events that are failures or status ≥ `DEVLOOP_NET_THRESHOLD` (set it to `0` to surface everything inline), carrying rich `detail` on **all substrates** (Puppeteer / CDP / React Native): method, status, resource type, mime, duration, request + response **headers**, and capped request/response **bodies**.
+- `get_network({ grep?, app?, limit? })` — every request from the **full capture ring**, independent of the threshold (vs `get_logs`, which shows only the curated timeline). Use it when a fast 200 you care about isn't on the timeline.
+- `export_har({ app? })` — export the full network ring as a **HAR 1.2** document (import into Chrome DevTools / Charles); complete regardless of the threshold. Scope to one `app` if you like.
 - `diagnose({ windowMs?, app? })` — **triage what's broken right now**: groups/dedupes repeated errors (console / page / server) with counts, lists failed/4xx-5xx network requests, and returns a one-line summary. Start here before digging through `get_logs`.
 - **Page errors carry a `resolvedStack`** — minified browser stack traces are mapped back to original source via the bundle's source map (the browser only de-minifies in its DevTools UI; `error.stack` stays compiled, so we resolve it for you). On the entry's `detail`.
 - `export_bundle({ app?, windowMs? })` — a shareable **bug-report bundle** (JSON): diagnose summary + timeline + screenshots + HAR + repro. The cockpit's **report** button saves it as a self-contained HTML page.

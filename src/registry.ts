@@ -44,14 +44,14 @@ export interface PanesState {
   activeIndex?: number;
 }
 
-const DIR = process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop");
-const FILE = join(DIR, "projects.json");
-const SESSION_FILE = join(DIR, "session.json");
-const PANES_FILE = join(DIR, "panes.json");
+// Read DEVLOOP_HOME lazily (not at module load) so it's honored regardless of import
+// order — e.g. a test that sets it after importing a module which transitively loads this.
+const dir = (): string => process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop");
+const file = (name: string): string => join(dir(), name);
 
 export function listProjects(): Project[] {
   try {
-    const parsed = JSON.parse(readFileSync(FILE, "utf8"));
+    const parsed = JSON.parse(readFileSync(file("projects.json"), "utf8"));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return []; // no file yet
@@ -63,8 +63,8 @@ export function getProject(name: string): Project | undefined {
 }
 
 function saveAll(projects: Project[]): void {
-  mkdirSync(DIR, { recursive: true });
-  writeFileSync(FILE, JSON.stringify(projects, null, 2));
+  mkdirSync(dir(), { recursive: true });
+  writeFileSync(file("projects.json"), JSON.stringify(projects, null, 2));
 }
 
 /** Add or replace a project by name. Returns the full list. */
@@ -85,20 +85,20 @@ export function removeProject(name: string): Project[] {
 
 export function getSession(): Session {
   try {
-    return JSON.parse(readFileSync(SESSION_FILE, "utf8"));
+    return JSON.parse(readFileSync(file("session.json"), "utf8"));
   } catch {
     return {};
   }
 }
 
 export function setSession(s: Session): void {
-  mkdirSync(DIR, { recursive: true });
-  writeFileSync(SESSION_FILE, JSON.stringify(s, null, 2));
+  mkdirSync(dir(), { recursive: true });
+  writeFileSync(file("session.json"), JSON.stringify(s, null, 2));
 }
 
 export function getPanes(): PanesState {
   try {
-    const parsed = JSON.parse(readFileSync(PANES_FILE, "utf8"));
+    const parsed = JSON.parse(readFileSync(file("panes.json"), "utf8"));
     return Array.isArray(parsed.panes) ? parsed : { panes: [] };
   } catch {
     return { panes: [] };
@@ -106,17 +106,16 @@ export function getPanes(): PanesState {
 }
 
 export function setPanes(state: PanesState): void {
-  mkdirSync(DIR, { recursive: true });
-  writeFileSync(PANES_FILE, JSON.stringify(state, null, 2));
+  mkdirSync(dir(), { recursive: true });
+  writeFileSync(file("panes.json"), JSON.stringify(state, null, 2));
 }
 
-const FINGERPRINT_FILE = join(DIR, "fingerprints.json");
 
 /** Native build fingerprint (from @expo/fingerprint) recorded per project dir at
  * last Devloop build, so we can detect when the installed binary is stale. */
 export function getProjectFingerprint(cwd: string): string | undefined {
   try {
-    const map = JSON.parse(readFileSync(FINGERPRINT_FILE, "utf8")) as Record<string, string>;
+    const map = JSON.parse(readFileSync(file("fingerprints.json"), "utf8")) as Record<string, string>;
     return map[cwd];
   } catch {
     return undefined;
@@ -124,23 +123,22 @@ export function getProjectFingerprint(cwd: string): string | undefined {
 }
 
 export function setProjectFingerprint(cwd: string, hash: string): void {
-  mkdirSync(DIR, { recursive: true });
+  mkdirSync(dir(), { recursive: true });
   let map: Record<string, string> = {};
   try {
-    map = JSON.parse(readFileSync(FINGERPRINT_FILE, "utf8")) as Record<string, string>;
+    map = JSON.parse(readFileSync(file("fingerprints.json"), "utf8")) as Record<string, string>;
   } catch {
     /* first write */
   }
   map[cwd] = hash;
-  writeFileSync(FINGERPRINT_FILE, JSON.stringify(map, null, 2));
+  writeFileSync(file("fingerprints.json"), JSON.stringify(map, null, 2));
 }
 
-const EXT_FILE = join(DIR, "unpacked-extensions.json");
 
 /** Paths of unpacked extensions to reload on launch (store extensions persist themselves). */
 export function getUnpackedExtensions(): string[] {
   try {
-    const parsed = JSON.parse(readFileSync(EXT_FILE, "utf8"));
+    const parsed = JSON.parse(readFileSync(file("unpacked-extensions.json"), "utf8"));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
@@ -148,16 +146,15 @@ export function getUnpackedExtensions(): string[] {
 }
 
 export function setUnpackedExtensions(paths: string[]): void {
-  mkdirSync(DIR, { recursive: true });
-  writeFileSync(EXT_FILE, JSON.stringify([...new Set(paths)], null, 2));
+  mkdirSync(dir(), { recursive: true });
+  writeFileSync(file("unpacked-extensions.json"), JSON.stringify([...new Set(paths)], null, 2));
 }
 
-const DISABLED_EXT_FILE = join(DIR, "disabled-extensions.json");
 
 /** Extension ids the user toggled off — kept installed but not loaded. */
 export function getDisabledExtensions(): string[] {
   try {
-    const parsed = JSON.parse(readFileSync(DISABLED_EXT_FILE, "utf8"));
+    const parsed = JSON.parse(readFileSync(file("disabled-extensions.json"), "utf8"));
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
@@ -165,6 +162,6 @@ export function getDisabledExtensions(): string[] {
 }
 
 export function setDisabledExtensions(ids: string[]): void {
-  mkdirSync(DIR, { recursive: true });
-  writeFileSync(DISABLED_EXT_FILE, JSON.stringify([...new Set(ids)], null, 2));
+  mkdirSync(dir(), { recursive: true });
+  writeFileSync(file("disabled-extensions.json"), JSON.stringify([...new Set(ids)], null, 2));
 }

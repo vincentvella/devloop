@@ -24,6 +24,19 @@ export interface ToolDeps {
   /** Native (iOS) interaction readiness — provided by the cockpit so `diagnose` can
    *  flag "idb not installed" on a react-native target. Absent in stdio (web-only). */
   nativeEnv?: () => { ready: boolean; summary: string } | null;
+  /** Open/close a native target + run a native build — cockpit-only (needs Electron +
+   *  a simulator/emulator). Absent in stdio/daemon (Puppeteer is web-only), where the
+   *  native_* tools report that the cockpit is required. */
+  nativeControl?: NativeControl;
+}
+
+export interface NativeControl {
+  /** Open the iOS simulator or Android device mirror + route browser_* to it. */
+  open(platform: "ios" | "android"): Promise<{ ok: boolean; summary?: string }>;
+  /** Close the active native target; browser_* route back to the web pane. */
+  close(): Promise<void>;
+  /** Build + launch the native dev build (expo run:<platform>); streams to the timeline. */
+  build(platform: "ios" | "android", cwd?: string): Promise<{ started: boolean; detail?: string }>;
 }
 
 let deps: ToolDeps;
@@ -314,6 +327,27 @@ export const TOOLS: Tool[] = [
     name: "dev_status",
     description: "Report whether the dev server is running, plus its cmd/cwd/pid.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "native_open",
+    description:
+      "Open a native target for the active pane (Expo/React Native): the iOS simulator or the Android device " +
+      "mirror. browser_* (snapshot/click/type/scroll/press/screenshot) then drive the native app via idb/adb, " +
+      "and JS + native logs stream to the timeline. Cockpit-only (needs the Electron app + a booted simulator/" +
+      "emulator). Returns ok:false with a reason if the device/tooling isn't ready.",
+    inputSchema: { type: "object", properties: { platform: { type: "string", enum: ["ios", "android"] } }, required: ["platform"] },
+  },
+  {
+    name: "native_close",
+    description: "Close the active native target; browser_* route back to the pane's web content. Cockpit-only.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "native_build",
+    description:
+      "Build + launch the native dev build for the active pane (`expo run:ios` / `expo run:android`); output " +
+      "streams to the timeline. `cwd` defaults to the active pane's project. Cockpit-only (needs the native toolchain).",
+    inputSchema: { type: "object", properties: { platform: { type: "string", enum: ["ios", "android"] }, cwd: { type: "string" } }, required: ["platform"] },
   },
   {
     name: "repro",
@@ -646,6 +680,19 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       return json({ stopped: devServer.stop() });
     case "dev_status":
       return json(devServer.status());
+    case "native_open": {
+      if (!deps.nativeControl) throw new Error("native targets require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      return json(await deps.nativeControl.open(args.platform as "ios" | "android"));
+    }
+    case "native_close": {
+      if (!deps.nativeControl) throw new Error("native targets require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      await deps.nativeControl.close();
+      return json({ ok: true });
+    }
+    case "native_build": {
+      if (!deps.nativeControl) throw new Error("native builds require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      return json(await deps.nativeControl.build(args.platform as "ios" | "android", args.cwd as string | undefined));
+    }
     case "project_list":
       return json({ projects: listProjects() });
     case "project_add":
