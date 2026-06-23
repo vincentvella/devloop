@@ -55,7 +55,8 @@ export function detectDevCommand(cwd: string): string {
 
 /** Minimal dev-server surface the tool layer depends on (DevServer, or a per-pane facade). */
 export interface DevServerLike {
-  start(cmd: string, cwd: string): DevStatus;
+  // May be async in the cockpit (a project change can recreate the pane's session, #27).
+  start(cmd: string, cwd: string): DevStatus | Promise<DevStatus>;
   stop(): boolean;
   status(): DevStatus;
 }

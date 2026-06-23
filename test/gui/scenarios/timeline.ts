@@ -2,7 +2,7 @@ import type { ElectronApplication, Page } from "playwright-core";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { check, ctx, waitForActive } from "../harness.ts";
+import { check, ctx, waitForActive, activePane } from "../harness.ts";
 
 export async function logsFilter(_app: ElectronApplication, win: Page): Promise<void> {
   const filter = win.getByPlaceholder("filter (substring)…");
@@ -93,6 +93,53 @@ export async function emulateThrottle(app: ElectronApplication, win: Page): Prom
   await win.waitForTimeout(300);
   const onl = await inPane("fetch('/api/ok').then(()=>'ok').catch(()=>'fail')");
   check("throttle picker → None restores fetch", onl === "ok", String(onl));
+}
+
+/** #27: two projects on the SAME origin get isolated storage (per-project partition). */
+export async function projectStorageIsolation(app: ElectronApplication, win: Page): Promise<void> {
+  const origin = ctx.fixtureOrigin;
+  const inPane = (expr: string): Promise<unknown> =>
+    app.evaluate(
+      async ({ webContents }, [o, e]) => {
+        const wc = webContents.getAllWebContents().find((c) => c.getURL().startsWith(o as string));
+        return wc ? await wc.executeJavaScript(e as string) : null;
+      },
+      [origin, expr] as [string, string],
+    );
+  const gotoFixture = async () => {
+    const addr = win.locator(".browser-bar input.address");
+    await addr.fill(origin);
+    await addr.press("Enter");
+    await waitForActive(win, (p) => (p.url || "").startsWith(origin), 15_000);
+    await win.waitForTimeout(400);
+  };
+  const setCwd = async (cwd: string) => {
+    await win.evaluate((c) => (window as unknown as { devloop: { setDevConfig(o: { cwd: string }): Promise<unknown> } }).devloop.setDevConfig({ cwd: c }), cwd);
+    await win.waitForTimeout(900); // pane view is recreated on the new project's partition
+  };
+
+  const origCwd = (await activePane(win))?.dev?.cwd ?? ""; // restore at the end so later scenarios see the same pane
+
+  // No project → default partition: stash a value.
+  await setCwd("");
+  await gotoFixture();
+  await inPane("localStorage.setItem('dl27', 'default-v'); 'ok'");
+
+  // Bind a project cwd → the pane is recreated on a per-project partition; same origin,
+  // fresh storage.
+  await setCwd("/tmp/devloop-proj-a");
+  await gotoFixture();
+  const isolated = await inPane("localStorage.getItem('dl27')");
+  check("a different project gets isolated storage on the same origin", isolated === null, `got=${isolated}`);
+
+  // Back to no project → the default partition's storage survived the round-trip.
+  await setCwd("");
+  await gotoFixture();
+  const restored = await inPane("localStorage.getItem('dl27')");
+  check("the default project's storage persists across the switch", restored === "default-v", `got=${restored}`);
+
+  await setCwd(origCwd); // leave the active pane as we found it
+  await gotoFixture();
 }
 
 export async function exports(app: ElectronApplication, win: Page): Promise<void> {

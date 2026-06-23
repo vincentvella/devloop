@@ -28,7 +28,7 @@ import { homedir } from "node:os";
 import { installExtension, uninstallExtension, loadAllExtensions, installChromeWebStore } from "electron-chrome-web-store";
 import { extensionIdFromInput, unifyExtensions, type ExtMeta } from "../src/extensions.ts";
 import { getUnpackedExtensions, setUnpackedExtensions, getDisabledExtensions, setDisabledExtensions } from "../src/registry.ts";
-import { PANE_PARTITION } from "./browserManager.ts";
+import { DEFAULT_PARTITION } from "../src/partition.ts";
 
 // Where main.cjs/preload.cjs/renderer live. Bun inlines __dirname to the SOURCE dir,
 // so we can't use it. Packaged: <app.asar>/out via getAppPath(). Dev (`electron
@@ -468,7 +468,9 @@ function wireIpc(): void {
   ipcMain.handle("devloop:extInstall", async (_e, input: string) => {
     const id = extensionIdFromInput(String(input));
     if (!id) throw new Error("not a valid extension id or Chrome Web Store URL");
-    await installExtension(id, { session: extSession(), extensionsPath: EXT_DIR });
+    await installExtension(id, { session: extSession(), extensionsPath: EXT_DIR }); // downloads + loads into default
+    const dir = extDir(id);
+    if (dir) await loadExtIntoAll(dir); // mirror into every other per-project session (#27)
     return extList();
   });
   ipcMain.handle("devloop:extLoadUnpacked", async () => {
@@ -476,6 +478,7 @@ function wireIpc(): void {
     if (r.canceled || !r.filePaths[0]) return null;
     const dir = r.filePaths[0];
     const ext = await extSession().extensions.loadExtension(dir, { allowFileAccess: true });
+    await loadExtIntoAll(dir); // also load into the other per-project sessions (#27)
     unpackedById.set(ext.id, dir);
     setUnpackedExtensions([...getUnpackedExtensions(), dir]);
     return extList();
@@ -486,58 +489,25 @@ function wireIpc(): void {
     const disabled = new Set(getDisabledExtensions());
     if (enabled) {
       const dir = extDir(id);
-      if (dir) {
-        try {
-          await extSession().extensions.loadExtension(dir, { allowFileAccess: true });
-        } catch (e) {
-          log(`extensions: enable failed (${id}): ${e}`);
-        }
-      }
+      if (dir) await loadExtIntoAll(dir); // enable across every per-project session (#27)
       disabled.delete(id);
     } else {
-      try {
-        extSession().extensions.removeExtension(id);
-      } catch {
-        /* already unloaded */
-      }
+      await purgeExtFromAll(id); // disable across every session
       disabled.add(id);
     }
     setDisabledExtensions([...disabled]);
     return extList();
   });
   ipcMain.handle("devloop:extRemove", async (_e, id: string) => {
-    const ses = extSession();
     setDisabledExtensions(getDisabledExtensions().filter((x) => x !== id)); // forget any disabled flag
+    await purgeExtFromAll(id); // unload from every per-project session (#27), purging persisted settings
     if (unpackedById.has(id)) {
-      try {
-        ses.extensions.removeExtension(id);
-      } catch {
-        /* not loaded */
-      }
       const dir = unpackedById.get(id)!;
       unpackedById.delete(id);
       setUnpackedExtensions(getUnpackedExtensions().filter((p) => p !== dir));
     } else {
-      // A *disabled* store extension isn't loaded, so removeExtension would no-op
-      // and orphan its persisted `extensions.settings` entry in the session Prefs.
-      // Load it first so removeExtension actually purges that entry, then delete files.
-      if (!ses.extensions.getExtension(id)) {
-        const dir = extDir(id);
-        if (dir) {
-          try {
-            await ses.extensions.loadExtension(dir, { allowFileAccess: true });
-          } catch {
-            /* can't load — fall through to file removal */
-          }
-        }
-      }
       try {
-        ses.extensions.removeExtension(id);
-      } catch {
-        /* not loaded */
-      }
-      try {
-        await uninstallExtension(id, { session: ses, extensionsPath: EXT_DIR });
+        await uninstallExtension(id, { session: extSession(), extensionsPath: EXT_DIR }); // delete store files (once)
       } catch {
         /* store uninstall best-effort */
       }
@@ -593,9 +563,9 @@ function wireIpc(): void {
     await manager.ensureActive(); // open into a pane even if all were closed
     const label = projectName(p.cwd);
     // Configure + start this project on the ACTIVE pane; auto-navigate (or use saved url).
-    manager.setDevConfig(undefined, p.cmd, p.cwd);
-    if (manager.devStatus().running) manager.devRestart();
-    else manager.devStart(undefined, p.cmd, p.cwd);
+    await manager.setDevConfig(undefined, p.cmd, p.cwd);
+    if (manager.devStatus().running) await manager.devRestart();
+    else await manager.devStart(undefined, p.cmd, p.cwd);
     if (p.url) await manager.navigate(p.url);
     return { dev: manager.devStatus(), url: p.url ?? null, name: label };
   });
@@ -615,7 +585,7 @@ function log(msg: string): void {
 const EXT_DIR = join(process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop"), "extensions");
 const WEB_STORE_URL = "https://chromewebstore.google.com/";
 const unpackedById = new Map<string, string>(); // loaded unpacked extension id → source dir
-const extSession = () => session.fromPartition(PANE_PARTITION);
+const extSession = () => session.fromPartition(DEFAULT_PARTITION);
 let extWin: BrowserWindow | undefined;
 
 /**
@@ -642,7 +612,7 @@ function openExtensionsWindow(): void {
     icon: [join(BASE, "../assets/icon.png"), join(BASE, "assets/icon.png")].find(existsSync),
     // Inject our own "Add to Devloop" button — Google greys the native "Add to
     // Chrome" for non-Chrome browsers, so we install via the direct-CRX path instead.
-    webPreferences: { partition: PANE_PARTITION, contextIsolation: true, sandbox: false, preload: join(BASE, "extStorePreload.cjs") },
+    webPreferences: { partition: DEFAULT_PARTITION, contextIsolation: true, sandbox: false, preload: join(BASE, "extStorePreload.cjs") },
   });
   extWin.on("closed", () => (extWin = undefined));
   void extWin.loadURL(WEB_STORE_URL);
@@ -683,9 +653,62 @@ const extList = () => {
   return unifyExtensions(loaded, disabled);
 };
 
+// Partitions whose extensions are already set up (#27 — one session per project). The
+// default partition is the canonical set; project sessions get the same extensions loaded.
+const preparedPartitions = new Set<string>();
+
+/** Prepare a session partition (idempotent): load all installed extensions + the Web Store
+ *  hook into it, so a per-project pane has the same extensions as the default. */
+async function prepareSession(partition: string): Promise<void> {
+  if (preparedPartitions.has(partition)) return;
+  preparedPartitions.add(partition);
+  await setupExtensionsFor(session.fromPartition(partition));
+}
+
+/** Run `fn` against every prepared session (so install/remove/toggle apply everywhere). */
+async function eachExtSession(fn: (ses: ReturnType<typeof session.fromPartition>) => Promise<void> | void): Promise<void> {
+  for (const partition of preparedPartitions) await fn(session.fromPartition(partition));
+}
+
+/** Load an extension dir into every prepared session (best-effort; an already-loaded one throws → ignored). */
+async function loadExtIntoAll(dir: string): Promise<void> {
+  await eachExtSession(async (ses) => {
+    try {
+      await ses.extensions.loadExtension(dir, { allowFileAccess: true });
+    } catch {
+      /* already loaded in this session, or bad dir */
+    }
+  });
+}
+
+/** Unload an extension id from every prepared session (loading it first if needed, so a
+ *  disabled store extension's persisted settings entry is actually purged). */
+async function purgeExtFromAll(id: string): Promise<void> {
+  await eachExtSession(async (ses) => {
+    if (!ses.extensions.getExtension(id)) {
+      const dir = extDir(id);
+      if (dir) {
+        try {
+          await ses.extensions.loadExtension(dir, { allowFileAccess: true });
+        } catch {
+          /* can't load — removeExtension below will just no-op */
+        }
+      }
+    }
+    try {
+      ses.extensions.removeExtension(id);
+    } catch {
+      /* not loaded */
+    }
+  });
+}
+
 async function initExtensions(): Promise<void> {
-  const ses = extSession();
-  // Enable the real Chrome Web Store inside our panes' session: this intercepts
+  await prepareSession(DEFAULT_PARTITION); // the default/Web Store session, set up before panes navigate
+}
+
+async function setupExtensionsFor(ses: ReturnType<typeof session.fromPartition>): Promise<void> {
+  // Enable the real Chrome Web Store inside this session: this intercepts
   // the store's "Add to Chrome" button and installs into EXT_DIR. It registers
   // its own preload (chrome-web-store.preload.js, copied beside main.cjs by the
   // build) into this session. loadExtensions:false — we load persisted ones below.
@@ -780,6 +803,7 @@ async function main() {
     },
     SELFTEST,
     { indexPath: join(BASE, "renderer/index.html"), preloadPath: join(BASE, "preload.cjs"), simPreloadPath: join(BASE, "simPreload.cjs") },
+    prepareSession, // #27: load extensions into each per-project session before its pane navigates
   );
   manager.attachTo(shellWin!);
   manager.onChange = () => {
@@ -1081,6 +1105,7 @@ async function runSelfTest() {
   const extPath = [join(BASE, "../test/fixture-ext"), join(BASE, "test/fixture-ext")].find(existsSync);
   try {
     const loaded = await extSession().extensions.loadExtension(extPath!, { allowFileAccess: true });
+    await loadExtIntoAll(extPath!); // #27: also into the active pane's per-project session (mirrors extLoadUnpacked)
     const listed = extSession().extensions.getAllExtensions().some((x) => x.id === loaded.id && x.name === "devloop-test-ext");
     await manager.navigate(`http://localhost:${chosenPort}/ext-check`);
     await new Promise((r) => setTimeout(r, 700));

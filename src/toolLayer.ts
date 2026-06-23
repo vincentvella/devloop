@@ -640,7 +640,7 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       if (args.project && !proj) throw new Error(`no saved project named "${args.project}"`);
       const cwd = (args.cwd as string | undefined) ?? proj?.cwd ?? process.cwd();
       const cmd = (args.cmd as string | undefined) ?? proj?.cmd ?? detectDevCommand(cwd);
-      return json(devServer.start(cmd, cwd));
+      return json(await devServer.start(cmd, cwd));
     }
     case "dev_stop":
       return json({ stopped: devServer.stop() });

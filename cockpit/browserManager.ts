@@ -16,10 +16,12 @@ import type { TargetKind } from "../src/target.ts";
 import { SERVE_SIM_URL, type SimInfo } from "../src/simulator.ts";
 import { getPanes, setPanes } from "../src/registry.ts";
 import { DevServer, detectDevCommand, type DevStatus } from "../src/devServer.ts";
+import { partitionForCwd, DEFAULT_PARTITION } from "../src/partition.ts";
 
-/** Persistent session shared by all panes — separate from the shell's default session so
- *  loaded extensions (and their content scripts) never inject into the cockpit UI itself. */
-export const PANE_PARTITION = "persist:devloop-panes";
+/** Default session for panes with no project bound — separate from the shell's default
+ *  session so loaded extensions never inject into the cockpit UI itself. Panes bound to a
+ *  project get their own per-project partition (#27) via partitionForCwd. */
+export const PANE_PARTITION = DEFAULT_PARTITION;
 import { ElectronBrowserController, type ElectronBrowserOptions } from "../src/electronBrowser.ts";
 
 interface Pane {
@@ -34,6 +36,7 @@ interface Pane {
   cwd?: string;
   label?: string;
   url: string; // canonical URL (persisted) — may differ from what's displayed (e.g. a placeholder)
+  partition: string; // the pane's session partition (per-project, #27); recreated on change
   awaitingUrl?: boolean; // auto-navigate this pane to the first server URL it logs
   popped?: BrowserWindow;
 }
@@ -120,6 +123,8 @@ export class BrowserManager implements IBrowserManager {
     /** Paths so a popped-out pane can load the same renderer (in `?pop=<id>` mode) as its chrome,
      * plus the simulator-view preload (serve-sim preview/mjpeg shim). */
     private readonly popChrome: { indexPath: string; preloadPath: string; simPreloadPath: string },
+    /** Prepare a session partition (load extensions into it) before a view uses it (#27). */
+    private readonly prepareSession?: (partition: string) => Promise<void>,
   ) {
     // Per-pane auto-navigate: when a pane's dev server logs a localhost URL, open it there.
     buffer.onPush((e) => {
@@ -297,16 +302,16 @@ export class BrowserManager implements IBrowserManager {
   }
 
   // --- pane management ---
-  async newPane(url?: string, label?: string, cmd?: string, cwd?: string): Promise<PaneInfo> {
-    const id = `pane-${++this.counter}`;
-    const view = new WebContentsView({ webPreferences: { partition: PANE_PARTITION, sandbox: false, offscreen: this.offscreen } });
+  /** Create a WebContentsView + controller on a prepared partition, and wire address-bar
+   *  URL tracking onto the given pane. Shared by newPane + recreateView (#27). */
+  private async createView(pane: Pane, partition: string): Promise<{ view: WebContentsView; ctl: ElectronBrowserController }> {
+    await this.prepareSession?.(partition); // load extensions into this session first
+    const view = new WebContentsView({ webPreferences: { partition, sandbox: false, offscreen: this.offscreen } });
     await view.webContents.loadURL("about:blank");
-    const ctl = new ElectronBrowserController(this.buffer, view.webContents, this.opts, id);
+    const ctl = new ElectronBrowserController(this.buffer, view.webContents, this.opts, pane.id);
     await ctl.start();
-    const pane: Pane = { id, view, ctl, dev: new DevServer(this.buffer, id), cmd, cwd, label, url: url ?? "about:blank" };
-    this.panes.set(id, pane);
-    // Track the live URL (link clicks, SPA routes) for the address bar — but ignore
-    // placeholder/blank pages so the canonical (persisted) url isn't clobbered.
+    // Track the live URL (link clicks, SPA routes) — but ignore placeholder/blank pages
+    // so the canonical (persisted) url isn't clobbered.
     const sync = (u: string) => {
       if (u.startsWith("data:") || u === "about:blank") return;
       pane.url = u;
@@ -315,12 +320,57 @@ export class BrowserManager implements IBrowserManager {
     };
     view.webContents.on("did-navigate", (_e, u) => sync(u));
     view.webContents.on("did-navigate-in-page", (_e, u, isMainFrame) => isMainFrame && sync(u));
+    return { view, ctl };
+  }
+
+  async newPane(url?: string, label?: string, cmd?: string, cwd?: string): Promise<PaneInfo> {
+    const id = `pane-${++this.counter}`;
+    const partition = partitionForCwd(cwd);
+    const pane: Pane = { id, view: undefined as unknown as WebContentsView, ctl: undefined as unknown as ElectronBrowserController, dev: new DevServer(this.buffer, id), cmd, cwd, label, url: url ?? "about:blank", partition };
+    const { view, ctl } = await this.createView(pane, partition);
+    pane.view = view;
+    pane.ctl = ctl;
+    this.panes.set(id, pane);
     this.activeId = id;
     this.applyActive();
     if (url) await ctl.navigate(url);
     this.persist();
     this.notify();
     return this.info(id);
+  }
+
+  /**
+   * Recreate a pane's view on a new partition (#27 — Electron partitions are immutable
+   * per view, so changing a pane's project means a fresh view). Preserves the canonical
+   * URL; tears down the old view/controller after swapping in the new one.
+   */
+  private async recreateView(pane: Pane, partition: string): Promise<void> {
+    if (pane.popped) return; // a popped pane owns its own window; leave it
+    const old = { view: pane.view, ctl: pane.ctl };
+    const { view, ctl } = await this.createView(pane, partition);
+    pane.view = view;
+    pane.ctl = ctl;
+    pane.partition = partition;
+    if (this.activeId === pane.id) this.applyActive(); // swaps the new view in (removes the old)
+    const dest = pane.url && pane.url !== "about:blank" ? pane.url : undefined;
+    if (dest) await ctl.navigate(isLocalUrl(dest) ? this.placeholder(pane.label, dest) : dest);
+    try {
+      if (this.shell && !this.shell.isDestroyed()) this.shell.contentView.removeChildView(old.view);
+    } catch {
+      /* not attached */
+    }
+    void old.ctl.close().catch(() => {});
+    try {
+      old.view.webContents.close();
+    } catch {
+      /* already gone */
+    }
+  }
+
+  /** If a pane's project cwd now maps to a different partition, recreate its view (#27). */
+  private async ensurePaneSession(pane: Pane): Promise<void> {
+    const want = partitionForCwd(pane.cwd);
+    if (want !== pane.partition) await this.recreateView(pane, want);
   }
 
   listPanes(): PaneInfo[] {
@@ -405,18 +455,20 @@ export class BrowserManager implements IBrowserManager {
   }
 
   // --- per-pane dev lifecycle (default: active pane) ---
-  setDevConfig(id: string | undefined, cmd: string | undefined, cwd: string | undefined): void {
+  async setDevConfig(id: string | undefined, cmd: string | undefined, cwd: string | undefined): Promise<void> {
     const p = this.paneOrActive(id);
     p.cmd = cmd;
     p.cwd = cwd;
+    await this.ensurePaneSession(p); // isolate storage per project (#27)
     this.persist();
     this.notify();
   }
 
-  devStart(id?: string, cmd?: string, cwd?: string): DevStatus {
+  async devStart(id?: string, cmd?: string, cwd?: string): Promise<DevStatus> {
     const p = this.paneOrActive(id);
     if (cmd !== undefined) p.cmd = cmd;
     if (cwd !== undefined) p.cwd = cwd;
+    await this.ensurePaneSession(p); // a project's cwd drives its session partition (#27)
     const resolvedCwd = p.cwd || process.cwd();
     const resolvedCmd = p.cmd || detectDevCommand(resolvedCwd);
     p.awaitingUrl = true; // auto-navigate this pane when the server announces its URL
@@ -432,7 +484,7 @@ export class BrowserManager implements IBrowserManager {
     return r;
   }
 
-  devRestart(id?: string): DevStatus {
+  devRestart(id?: string): Promise<DevStatus> {
     const p = this.paneOrActive(id);
     p.dev.stop();
     return this.devStart(p.id);
