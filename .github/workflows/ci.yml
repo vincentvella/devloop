@@ -50,7 +50,12 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
       - name: Ensure electron binary (postinstall is flaky — path.txt sometimes unwritten)
-        run: test -f node_modules/electron/path.txt || node node_modules/electron/install.js
+        run: |
+          for i in 1 2 3; do
+            test -f node_modules/electron/path.txt && exit 0
+            echo "electron binary missing — install attempt $i"; node node_modules/electron/install.js || true; sleep 3
+          done
+          test -f node_modules/electron/path.txt
       - name: Cockpit selftest (offscreen Electron)
         run: bun run app:selftest
 
@@ -69,7 +74,12 @@ jobs:
       # binary postinstall (path.txt never gets written → electron.launch ENOENT).
       - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
       - name: Ensure the Electron binary is present
-        run: test -f node_modules/electron/path.txt || node node_modules/electron/install.js
+        run: |
+          for i in 1 2 3; do
+            test -f node_modules/electron/path.txt && exit 0
+            echo "electron binary missing — install attempt $i"; node node_modules/electron/install.js || true; sleep 3
+          done
+          test -f node_modules/electron/path.txt
       - uses: actions/setup-node@v4
         with:
           node-version: 24 # the driver runs under node (TS type-stripping needs >= 22.18)
