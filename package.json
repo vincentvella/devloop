@@ -43,6 +43,7 @@
     "start": "bun run src/index.ts",
     "test": "bun test",
     "test:e2e": "bun run test-smoke.ts && bun run app:selftest",
+    "test:daemon": "bun run mcp:build && bun run scripts/test-daemon.ts",
     "test:all": "bun run typecheck && bun test && bun run test-smoke.ts && bun run app:selftest",
     "typecheck": "tsc --noEmit && tsc -p cockpit/renderer/tsconfig.json && tsc -p test/gui/tsconfig.json",
     "mcp:build": "bun run scripts/build-mcp.ts",

@@ -18,9 +18,7 @@
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, session } from "electron";
-import { createServer, type IncomingMessage } from "node:http";
 import { execFileSync, execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mergePath, parseShellPath } from "../src/shellPath.ts";
 import { existsSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
@@ -35,17 +33,12 @@ import { DEFAULT_PARTITION } from "../src/partition.ts";
 // out/main.cjs`): the dir of the script Electron actually ran.
 const BASE = app.isPackaged ? join(app.getAppPath(), "out") : dirname(resolve(process.argv[1] ?? "."));
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  isInitializeRequest,
-} from "@modelcontextprotocol/sdk/types.js";
+import { buildMcpServer } from "../src/mcpServer.ts";
+import { startHttpMcp } from "../src/httpMcp.ts";
 
 import { LogBuffer } from "../src/logBuffer.ts";
 import { projectName, type DevServerLike } from "../src/devServer.ts";
-import { TOOLS, handleTool, configureTools } from "../src/toolLayer.ts";
+import { handleTool, configureTools } from "../src/toolLayer.ts";
 import { listProjects, addProject, getProject, getSession, setSession, getPanes, getProjectFingerprint } from "../src/registry.ts";
 import { bundleToHtml } from "../src/bundle.ts";
 import { detectTargetKind } from "../src/target.ts";
@@ -156,100 +149,14 @@ function appMatchFor(cwd: string): string {
   }
   return deriveAppMatch(cfg, cwd);
 }
-let httpServer: ReturnType<typeof createServer> | undefined;
+let httpServer: { close(): void } | undefined;
 let cleanedUp = false;
 
-// --- MCP over HTTP (stateful sessions) ------------------------------------
-function buildMcpServer(): Server {
-  const server = new Server({ name: "devloop-cockpit", version: "0.2.0" }, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const { name, arguments: args = {} } = req.params;
-    try {
-      return await handleTool(name, args as Record<string, unknown>);
-    } catch (err) {
-      return {
-        isError: true,
-        content: [{ type: "text", text: `${name} failed: ${err instanceof Error ? err.message : String(err)}` }],
-      };
-    }
-  });
-  return server;
-}
-
-function readBody(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve) => {
-    let data = "";
-    req.on("data", (c) => (data += c));
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(data));
-      } catch {
-        resolve(undefined);
-      }
-    });
-  });
-}
-
+// --- MCP over HTTP (stateful sessions) — shared transport with the daemon (#22) ---
 async function startHttp(): Promise<void> {
-  const transports = new Map<string, StreamableHTTPServerTransport>();
-
-  const http = (httpServer = createServer(async (req, res) => {
-    if (!req.url?.startsWith("/mcp")) {
-      res.statusCode = 404;
-      res.setHeader("Access-Control-Allow-Origin", "*"); // so cross-origin probes get the response
-      res.setHeader("Content-Type", "text/html; charset=utf-8"); // an HTML doc so content scripts inject
-      return res.end("<!doctype html><title>404</title>not found");
-    }
-    const sid = req.headers["mcp-session-id"] as string | undefined;
-
-    if (req.method === "POST") {
-      const body = await readBody(req);
-      let transport = sid ? transports.get(sid) : undefined;
-      if (!transport && isInitializeRequest(body)) {
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (id) => transports.set(id, transport!),
-        });
-        transport.onclose = () => {
-          if (transport!.sessionId) transports.delete(transport!.sessionId);
-        };
-        await buildMcpServer().connect(transport);
-      }
-      if (!transport) {
-        res.statusCode = 400;
-        return res.end(JSON.stringify({ error: "no valid session" }));
-      }
-      return transport.handleRequest(req, res, body);
-    }
-
-    // GET (SSE stream) / DELETE (close) reuse an existing session
-    const transport = sid ? transports.get(sid) : undefined;
-    if (!transport) {
-      res.statusCode = 400;
-      return res.end("invalid session");
-    }
-    return transport.handleRequest(req, res);
-  }));
-
-  // Bind to PORT, or the next free port if it's taken — so a stray instance
-  // never wedges startup.
-  for (let p = PORT; p < PORT + 10; p++) {
-    const bound = await new Promise<boolean>((resolve, reject) => {
-      const onErr = (err: NodeJS.ErrnoException) => {
-        if (err.code === "EADDRINUSE") resolve(false);
-        else reject(err);
-      };
-      http.once("error", onErr);
-      http.listen(p, () => {
-        http.removeListener("error", onErr);
-        chosenPort = p;
-        resolve(true);
-      });
-    });
-    if (bound) break;
-  }
-  log(`MCP over HTTP listening on http://localhost:${chosenPort}/mcp`);
+  const { server, port } = await startHttpMcp({ buildServer: () => buildMcpServer("devloop-cockpit"), port: PORT, log });
+  httpServer = server;
+  chosenPort = port;
 }
 
 // --- windows ---------------------------------------------------------------

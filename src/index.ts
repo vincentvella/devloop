@@ -1,9 +1,11 @@
 /**
- * devloop-mcp — stdio entry point.
+ * devloop-mcp — CLI entry point.
  *
- * Headless mode: drives Chrome via Puppeteer, spawns the dev server, and serves
- * the shared tool layer over stdio (the transport Claude Code spawns per
- * session). The Electron cockpit reuses the same tool layer over HTTP.
+ * Default (stdio): drives Chrome via Puppeteer, spawns the dev server, and serves
+ * the shared tool layer over stdio (the transport Claude Code spawns per session).
+ *   `devloop-mcp daemon` instead runs a long-running, headless HTTP/SSE server that
+ * many agents/sessions share (#22, see src/daemon.ts). The Electron cockpit reuses
+ * the same tool layer over HTTP too.
  *
  * stdout is reserved for the MCP protocol. Everything human-facing → stderr.
  *
@@ -12,42 +14,34 @@
  * optional boot auto-start DEVLOOP_DEV_CMD / DEVLOOP_DEV_CWD.
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import { LogBuffer } from "./logBuffer.ts";
 import { DevServer } from "./devServer.ts";
 import { PuppeteerBrowserController } from "./browser.ts";
-import { TOOLS, handleTool, configureTools } from "./toolLayer.ts";
+import { configureTools } from "./toolLayer.ts";
+import { buildMcpServer } from "./mcpServer.ts";
 
-const buffer = new LogBuffer(Number(process.env.DEVLOOP_LOG_CAPACITY ?? 5000));
-const devServer = new DevServer(buffer);
-const browser = new PuppeteerBrowserController(buffer, {
-  headless: process.env.DEVLOOP_HEADLESS === "true",
-  executablePath: process.env.DEVLOOP_CHROME_PATH,
-  networkErrorThreshold: Number(process.env.DEVLOOP_NET_THRESHOLD ?? 400),
-  actionTimeoutMs: Number(process.env.DEVLOOP_ACTION_TIMEOUT ?? 10_000),
-  navTimeoutMs: Number(process.env.DEVLOOP_NAV_TIMEOUT ?? 30_000),
-});
+async function runStdio(): Promise<void> {
+  const buffer = new LogBuffer(Number(process.env.DEVLOOP_LOG_CAPACITY ?? 5000));
+  const devServer = new DevServer(buffer);
+  const browser = new PuppeteerBrowserController(buffer, {
+    headless: process.env.DEVLOOP_HEADLESS === "true",
+    executablePath: process.env.DEVLOOP_CHROME_PATH,
+    networkErrorThreshold: Number(process.env.DEVLOOP_NET_THRESHOLD ?? 400),
+    actionTimeoutMs: Number(process.env.DEVLOOP_ACTION_TIMEOUT ?? 10_000),
+    navTimeoutMs: Number(process.env.DEVLOOP_NAV_TIMEOUT ?? 30_000),
+  });
+  configureTools({ buffer, browser, devServer });
 
-configureTools({ buffer, browser, devServer });
+  const shutdown = async () => {
+    devServer.stop();
+    await browser.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 
-const server = new Server({ name: "devloop-mcp", version: "0.1.1" }, { capabilities: { tools: {} } });
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const { name, arguments: args = {} } = req.params;
-  try {
-    return await handleTool(name, args as Record<string, unknown>);
-  } catch (err) {
-    return {
-      isError: true,
-      content: [{ type: "text", text: `${name} failed: ${err instanceof Error ? err.message : String(err)}` }],
-    };
-  }
-});
-
-async function main() {
   try {
     await browser.start();
   } catch (err) {
@@ -60,18 +54,18 @@ async function main() {
       process.stderr.write(`[devloop] WARN: DEVLOOP_DEV_CMD auto-start failed: ${err}\n`);
     }
   }
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  await buildMcpServer().connect(new StdioServerTransport());
   process.stderr.write("[devloop] unified dev-loop MCP ready on stdio\n");
 }
 
-const shutdown = async () => {
-  devServer.stop();
-  await browser.close();
-  process.exit(0);
-};
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+async function main(): Promise<void> {
+  if (process.argv.slice(2).includes("daemon")) {
+    const { runDaemon } = await import("./daemon.ts"); // long-running shared HTTP/SSE server (#22)
+    await runDaemon();
+  } else {
+    await runStdio();
+  }
+}
 
 main().catch((err) => {
   process.stderr.write(`[devloop] fatal: ${err?.stack ?? err}\n`);

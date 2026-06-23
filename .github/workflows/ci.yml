@@ -39,6 +39,8 @@ jobs:
         run: bunx puppeteer browsers install chrome
       - name: Smoke test (stdio MCP + fixture)
         run: bun run test-smoke.ts
+      - name: Daemon test (HTTP/SSE MCP, shared backend)
+        run: bun run test:daemon
 
   # Behavioral: the offscreen Electron cockpit selftest (macOS — no xvfb needed).
   selftest:

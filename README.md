@@ -10,7 +10,7 @@
 
 A unified dev-loop tool: it drives a **browser** and your **dev server**, pushing both sides into one timestamped buffer so you can correlate a browser console error with the backend stack trace from the same moment. It runs two ways from a shared core:
 
-- **Headless (stdio)** — drives Chrome via Puppeteer, served over stdio. The lightweight mode Claude Code spawns per session.
+- **Headless (stdio)** — drives Chrome via Puppeteer, served over stdio. The lightweight mode Claude Code spawns per session. Run `devloop-mcp daemon` to instead serve one shared, long-running instance over HTTP/SSE that many agents/sessions connect to (see **Daemon mode**).
 - **Cockpit (Electron)** — a single desktop window: tabbed browser panes (embedded `WebContentsView`s driven via CDP) with a browser bar (back/forward/reload + address) beside a collapsible side panel that toggles between **logs** and a **repro builder**. Project picker, auto-navigate, pop-out targets. The renderer is React 19 + Tailwind v4 + Radix + lucide-react. Serves the same tools over HTTP.
 
 Because every event (browser console/network/page-errors **and** server stdout/stderr) shares one monotonic clock, `get_logs_around` / `repro` return a correlated, cross-source slice of the timeline.
@@ -140,6 +140,18 @@ Then, in any project: *"dev_start and repro a navigate to /projects"*. `dev_star
 | `DEVLOOP_LOG_CAPACITY` | `5000` | Max buffered events. |
 | `DEVLOOP_DEV_CMD` / `DEVLOOP_DEV_CWD` | _(none)_ | Optional dev-server auto-start on boot (normally use `dev_start`). |
 | `DEVLOOP_HOME` | `~/.devloop` | Registry location. |
+
+## Daemon mode (shared HTTP/SSE)
+
+Instead of every agent/session spawning its own stdio server (its own browser + timeline), run **one long-running daemon** they all connect to over HTTP/SSE — many clients, one Devloop instance (one browser, one dev server, one correlated timeline):
+
+```sh
+devloop-mcp daemon                 # headless; serves MCP at http://localhost:7333/mcp
+# then point any number of MCP clients at it:
+claude mcp add --transport http devloop http://localhost:7333/mcp
+```
+
+Same backend + env vars as stdio (defaults headless; set `DEVLOOP_HEADLESS=false` to watch), and it auto-picks a free port from `DEVLOOP_HTTP_PORT` (default 7333). Each client gets its own MCP session but shares the same backend, so one agent's `dev_start` / navigation shows up on another's `get_logs`. (The Electron cockpit serves the very same HTTP transport — the daemon is just the headless version of it.)
 
 ## Cockpit mode (Electron)
 
