@@ -58,6 +58,17 @@ await rn.evaluate("console.log('devloop-rn-harness hello', { ok: true })");
 await sleep(400);
 check("console.log captured", buffer.query({}).some((e) => e.stream === "console" && e.line.includes("devloop-rn-harness hello")));
 
+// #17 network capture: the injected XHR interceptor should turn a fetch into a network row.
+await rn.evaluate("fetch('https://example.com/').then(function(r){return r.text()}).catch(function(){})");
+let netEntry: ReturnType<typeof buffer.query>[number] | undefined;
+for (let i = 0; i < 10; i++) {
+  await sleep(500);
+  netEntry = buffer.query({ stream: "network" }).find((e) => e.line.includes("example.com"));
+  if (netEntry) break;
+}
+check("RN network request captured (XHR interceptor)", !!netEntry);
+if (netEntry) console.log(`    network row: ${netEntry.line} (${(netEntry.detail as any)?.mimeType ?? "?"}, ${(netEntry.detail as any)?.durationMs ?? "?"}ms)`);
+
 // error via console.error (the RN path) → pageerror + source-mapped stack.
 // Trigger it from BUNDLE code (Metro's global require __r on a bad id) so the
 // stack has real entry.bundle frames to resolve — a `new Error()` made inside

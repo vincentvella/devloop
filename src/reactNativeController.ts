@@ -28,6 +28,7 @@ import {
 } from "./reactNative.ts";
 import { pointFromRef } from "./idb.ts";
 import type { NativeDriver } from "./nativeDriver.ts";
+import { NET_INTERCEPTOR_JS, parseNetMarker } from "./reactNativeNet.ts";
 
 export interface ReactNativeOptions {
   /** Metro dev-server base, e.g. http://localhost:8082 */
@@ -109,6 +110,9 @@ export class ReactNativeController implements IBrowserController {
           await this.attach(wsUrl);
           if (await this.ping()) {
             this.buffer.push("browser", "console", "[devloop] attached to React Native (Hermes) over CDP", undefined, this.opts.target);
+            // Inject the network interceptor (Hermes has no CDP Network domain) — the global
+            // resets on reload, so (re)inject on every successful attach.
+            void this.send("Runtime.evaluate", { expression: NET_INTERCEPTOR_JS, returnByValue: true });
             return;
           }
           // Attached but unresponsive — a zombie (stale post-reload) or owned by another
@@ -197,6 +201,13 @@ export class ReactNativeController implements IBrowserController {
     const type = params.type ?? "log";
     const args = params.args ?? [];
     const text = consoleArgsToText(args);
+    // Our injected XHR interceptor reports requests as a console marker — turn those
+    // into network rows (same shape as web) instead of surfacing them as console logs.
+    const net = parseNetMarker(text);
+    if (net) {
+      this.buffer.push("browser", "network", net.line, net.detail, this.opts.target);
+      return;
+    }
     if (isErrorConsoleType(type)) {
       // RN routes uncaught errors + LogBox through console.error — treat as a page error.
       const stack = errorStackFromArgs(args) ?? text;
