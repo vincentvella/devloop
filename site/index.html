@@ -112,7 +112,7 @@ flowchart TD
   mcp(["&lt;b&gt;MCP Server&lt;/b&gt;&lt;br/&gt;&lt;i&gt;stdio transport, or HTTP/SSE for the daemon + cockpit&lt;/i&gt;"])
   mcp --&gt; core
 
-  core["&lt;b&gt;shared core&lt;/b&gt; · &lt;i&gt;transport- and substrate-agnostic&lt;/i&gt;&lt;br/&gt;tool layer · unified timeline + network ring&lt;br/&gt;dev server · registry · diagnostics · source-maps · HAR · bundle"]
+  core["&lt;b&gt;shared core&lt;/b&gt; · &lt;i&gt;transport- and substrate-agnostic&lt;/i&gt;&lt;br/&gt;the MCP tool layer + one unified, correlated timeline"]
 
   core --&gt; iface(["&lt;b&gt;IBrowserController · IBrowserManager · ITargetController&lt;/b&gt;&lt;br/&gt;&lt;i&gt;capability-gated by the active target&lt;/i&gt;"])
   iface --&gt; pup &amp; elec &amp; rn

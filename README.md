@@ -51,7 +51,7 @@ flowchart TD
   mcp(["<b>MCP Server</b><br/><i>stdio transport, or HTTP/SSE for the daemon + cockpit</i>"])
   mcp --> core
 
-  core["<b>shared core</b> · <i>transport- and substrate-agnostic</i><br/>tool layer · unified timeline + network ring<br/>dev server · registry · diagnostics · source-maps · HAR · bundle"]
+  core["<b>shared core</b> · <i>transport- and substrate-agnostic</i><br/>the MCP tool layer + one unified, correlated timeline"]
 
   core --> iface(["<b>IBrowserController · IBrowserManager · ITargetController</b><br/><i>capability-gated by the active target</i>"])
   iface --> pup & elec & rn
@@ -63,22 +63,18 @@ flowchart TD
   rn -->|"idb / adb"| nd["<b>NativeDriver</b><br/>iOS idb · Android adb<br/>taps · snapshot · screens · logs"]
 ```
 
-**The tool layer never knows what's behind it** — Puppeteer or Electron, stdio or HTTP, web page or native app. It's wired once with `configureTools()`. The browser sits behind `IBrowserController`; the cockpit's `BrowserManager` implements the richer `IBrowserManager` (multiple panes, delegating browser_* to the active one — or to the native controller when an iOS/Android target is open). `target.ts` gates tools by the active target's capabilities, so an agent gets a clear message instead of a substrate error.
+**The tool layer never knows what's behind it** — Puppeteer or Electron, stdio or HTTP, web page or native app. It's wired once at startup. The browser sits behind a single `IBrowserController` interface; the cockpit's pane manager implements the richer `IBrowserManager` (multiple panes, delegating browser_* to the active one — or to the native controller when an iOS/Android target is open). A capability layer gates tools by the active target, so an agent gets a clear message instead of a substrate error.
 
 stdout is reserved for the MCP protocol in stdio mode; all human-facing output goes to stderr.
 
-### Module map (`src/` — the shared, Electron-free core)
+### The layers
 
-- **Transports & MCP** — `index.ts` (stdio entry + `daemon` subcommand dispatch) · `daemon.ts` (headless long-running HTTP/SSE server) · `httpMcp.ts` (the Streamable-HTTP server behind **the daemon + cockpit only** — one session per connecting client, shared backend; stdio uses `StdioServerTransport`) · `mcpServer.ts` (the MCP `Server` factory, shared by **all three** transports) · `toolLayer.ts` (the 37 tools + `handleTool` + `configureTools`).
-- **Timeline & dev server** — `logBuffer.ts` (the bounded, monotonic timeline + the threshold-independent network ring) · `devServer.ts` (spawn a dev server in its own process group, tee its output, auto-detect the command).
-- **Browser substrates** — `browserController.ts` (the `IBrowserController` / `IBrowserManager` interfaces + `PaneInfo`) · `browser.ts` (Puppeteer/Chrome, used by stdio + daemon) · `electronBrowser.ts` (a cockpit pane's `WebContentsView` driven over CDP) · `pageActions.ts` (shared click/type/scroll/select/press/snapshot logic injected into the page) · `pageSnapshot.ts` (the a11y-tree snapshot shape) · `emulation.ts` (device-metrics + network-throttle presets).
-- **Native targets** — `target.ts` (target kinds + per-kind capability gating) · `reactNativeController.ts` (attach to Hermes over Metro CDP: JS console/errors + eval/screenshot, delegating taps/snapshot to a driver) · `reactNative.ts` (pure Hermes-inspector helpers: target selection, busy-debugger messaging) · `reactNativeNet.ts` (the injected `XMLHttpRequest` interceptor + marker parser for RN network capture) · `nativeDriver.ts` (the `NativeDriver` abstraction: `idbDriver` for iOS, `adbDriver` for Android) · `idb.ts` / `adb.ts` (pure arg-builders + `describe-all`/`uiautomator` snapshot parsers + `logcat` parsing) · `iosSimulator.ts` (simctl logs + screenshots) · `androidLog.ts` (adb logcat stream + screencap) · `androidMirror.ts` (the polled `screencap` frame stream) · `nativeObservability.ts` (wires a controller + log stream onto the timeline) · `nativeBuild.ts` / `nativeBuildRunner.ts` (`expo run:<platform>` + `@expo/fingerprint` staleness) · `nativeEnv.ts` (idb/adb readiness preflight) · `simulator.ts` (serve-sim launch + `/api` parsing).
-- **Intelligence** — `diagnose.ts` (group/dedupe errors + collect failed requests) · `sourcemap.ts` (de-minify page-error stacks via bundle source maps) · `har.ts` (HAR 1.2 from the network ring + the `NetDetail` shape) · `bundle.ts` (the shareable bug-report bundle).
-- **State & isolation** — `registry.ts` (saved projects / session / panes / fingerprints / extension prefs, on disk under `DEVLOOP_HOME`) · `partition.ts` (per-project session partitions, keyed by cwd) · `extensions.ts` (Chrome-extension id/URL parsing + dedupe) · `shellPath.ts` (import a login-shell PATH for packaged apps) · `update.ts` (the update-status shape).
-
-### Cockpit (`cockpit/` — the Electron layer)
-
-`main.ts` (app + IPC + the HTTP MCP server + native open/build) · `browserManager.ts` (panes, per-project partitions, native routing) · `renderer/main.tsx` (the React UI: timeline, browser bar, repro builder, target switch, Android mirror) · `preload.ts` (the renderer↔main bridge) · `serveSim.ts` (vendored serve-sim lifecycle for the iOS mirror) · `simPreload.ts` / `extStorePreload.ts` (preloads for the simulator view + the Web Store "Add to Devloop" injection) · `updater.ts` (in-app update banner via electron-updater) · `build.ts` (esbuild bundling of main/preload/renderer).
+- **Transports** — three entrypoints over two protocols: **stdio** (one server per session) and **HTTP/SSE** (the long-running **daemon**, and the **cockpit**). All build the same MCP server bound to the tool layer; only the HTTP transports are multi-client (each connecting client gets its own session, one shared backend).
+- **Shared core** — the **tool layer** (the MCP tools + a capability-gated dispatcher) over **one unified, correlated timeline** (server output, browser console/network/errors, native logs), backed by a separate full-capture network ring. The cross-cutting features the tools expose — a project registry, error diagnostics, source-map resolution, HAR export, and bug-report bundles — live here too.
+- **Browser substrates** — a shared controller interface with two web implementations (**Puppeteer/Chrome** for headless; **Electron `WebContentsView`** panes over CDP in the cockpit) and a native one (**React Native** over Hermes/Metro). Shared page-action + accessibility-snapshot logic and device/throttle emulation sit above them.
+- **Native targets** — an RN controller (JS/errors/network over Metro CDP) delegates taps + snapshots to a **`NativeDriver`** (idb on iOS, adb on Android); native logs (simctl / logcat), screenshots + live mirrors, build orchestration (`expo run`), and a readiness preflight round it out.
+- **State & isolation** — an on-disk registry (projects / session / panes), per-project session partitions, and Chrome-extension management.
+- **Cockpit (Electron)** — the desktop shell: a pane manager (per-project partitions, native routing), the React UI (timeline, browser bar, repro builder, target switch, Android mirror), the vendored serve-sim iOS mirror, the in-store "Add to Devloop" injection, and the in-app updater.
 
 ## Install
 
