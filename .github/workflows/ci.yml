@@ -45,8 +45,6 @@ jobs:
   # Behavioral: the offscreen Electron cockpit selftest (macOS — no xvfb needed).
   selftest:
     runs-on: macos-latest
-    env:
-      ELECTRON_CACHE: ${{ github.workspace }}/.electron-cache # @electron/get downloads here (cached below)
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -57,10 +55,10 @@ jobs:
       - name: Cache the Electron binary
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/.electron-cache
+          path: ~/Library/Caches/electron # @electron/get's default macOS download cache
           key: ${{ runner.os }}-electron-${{ hashFiles('bun.lock') }}
           restore-keys: ${{ runner.os }}-electron-
-      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies (uses ELECTRON_CACHE)
+      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
       - name: Ensure electron binary (postinstall is flaky — path.txt sometimes unwritten)
         run: |
           for i in 1 2 3; do
@@ -77,8 +75,6 @@ jobs:
   # Chrome Web Store and is left for manual runs.
   gui:
     runs-on: macos-latest
-    env:
-      ELECTRON_CACHE: ${{ github.workspace }}/.electron-cache # @electron/get downloads here (cached below)
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -87,12 +83,12 @@ jobs:
       - name: Cache the Electron binary
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/.electron-cache
+          path: ~/Library/Caches/electron # @electron/get's default macOS download cache
           key: ${{ runner.os }}-electron-${{ hashFiles('bun.lock') }}
           restore-keys: ${{ runner.os }}-electron-
       # Install with bun FIRST, in a clean env — setup-node before this skips electron's
       # binary postinstall (path.txt never gets written → electron.launch ENOENT).
-      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies (uses ELECTRON_CACHE)
+      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
       - name: Ensure the Electron binary is present
         run: |
           for i in 1 2 3; do
