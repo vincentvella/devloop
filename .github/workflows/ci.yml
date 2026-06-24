@@ -50,15 +50,17 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      # Cache the Electron binary so most runs skip the (flaky) CDN download. restore-keys
-      # falls back to the latest electron cache when only bun.lock changed.
+      # Cache the EXTRACTED electron binary (node_modules/electron, incl. dist + path.txt),
+      # not just the download zip — extracting from the zip cache proved ~50% flaky. On a
+      # hit there's no download AND no extraction. restore-keys reuses it across lockfile bumps.
       - name: Cache the Electron binary
         uses: actions/cache@v4
         with:
-          path: ~/Library/Caches/electron # @electron/get's default macOS download cache
-          key: ${{ runner.os }}-electron-v2-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-electron-v2-
-      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
+          path: node_modules/electron
+          key: ${{ runner.os }}-electron-nm-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-electron-nm-
+      # --ignore-scripts: don't run electron's flaky postinstall; the guard below owns the binary.
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Ensure electron binary (postinstall is flaky — path.txt sometimes unwritten)
         run: |
           for i in 1 2 3; do
