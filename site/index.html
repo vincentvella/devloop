@@ -105,13 +105,16 @@ flowchart TD
   daemon["&lt;b&gt;daemon&lt;/b&gt;&lt;br/&gt;src/daemon.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · one shared instance&lt;/i&gt;"]
   cockpit["&lt;b&gt;cockpit&lt;/b&gt;&lt;br/&gt;cockpit/main.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · Electron app&lt;/i&gt;"]
 
-  stdio --&gt;|"mcpServer.ts&lt;br/&gt;(stdio transport)"| core
-  daemon --&gt;|"mcpServer.ts&lt;br/&gt;+ httpMcp.ts"| core
-  cockpit --&gt;|"mcpServer.ts&lt;br/&gt;+ httpMcp.ts"| core
+  stdio --&gt; mcp
+  daemon --&gt; mcp
+  cockpit --&gt; mcp
+  mcp(["&lt;b&gt;MCP Server&lt;/b&gt; — src/mcpServer.ts&lt;br/&gt;&lt;i&gt;stdio: StdioServerTransport · daemon + cockpit: httpMcp.ts&lt;/i&gt;"])
+  mcp --&gt; core
 
   core["&lt;b&gt;shared core — src/&lt;/b&gt; · &lt;i&gt;transport- and substrate-agnostic&lt;/i&gt;&lt;br/&gt;toolLayer (TOOLS + handleTool · configureTools) · logBuffer (one timeline + network ring)&lt;br/&gt;devServer · registry · target · diagnose · sourcemap · har · bundle"]
 
-  core --&gt;|"IBrowserController · IBrowserManager · ITargetController · capability-gated"| pup &amp; elec &amp; rn
+  core --&gt; iface(["&lt;b&gt;IBrowserController · IBrowserManager · ITargetController&lt;/b&gt;&lt;br/&gt;&lt;i&gt;capability-gated by the active target&lt;/i&gt;"])
+  iface --&gt; pup &amp; elec &amp; rn
 
   pup["&lt;b&gt;web&lt;/b&gt; · Puppeteer / Chrome&lt;br/&gt;src/browser.ts&lt;br/&gt;&lt;i&gt;stdio + daemon&lt;/i&gt;"]
   elec["&lt;b&gt;web&lt;/b&gt; · Electron CDP panes&lt;br/&gt;src/electronBrowser.ts&lt;br/&gt;&lt;i&gt;cockpit · per-project partitions&lt;/i&gt;"]

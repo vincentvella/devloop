@@ -44,13 +44,16 @@ flowchart TD
   daemon["<b>daemon</b><br/>src/daemon.ts<br/><i>HTTP/SSE · one shared instance</i>"]
   cockpit["<b>cockpit</b><br/>cockpit/main.ts<br/><i>HTTP/SSE · Electron app</i>"]
 
-  stdio -->|"mcpServer.ts<br/>(stdio transport)"| core
-  daemon -->|"mcpServer.ts<br/>+ httpMcp.ts"| core
-  cockpit -->|"mcpServer.ts<br/>+ httpMcp.ts"| core
+  stdio --> mcp
+  daemon --> mcp
+  cockpit --> mcp
+  mcp(["<b>MCP Server</b> — src/mcpServer.ts<br/><i>stdio: StdioServerTransport · daemon + cockpit: httpMcp.ts</i>"])
+  mcp --> core
 
   core["<b>shared core — src/</b> · <i>transport- and substrate-agnostic</i><br/>toolLayer (TOOLS + handleTool · configureTools) · logBuffer (one timeline + network ring)<br/>devServer · registry · target · diagnose · sourcemap · har · bundle"]
 
-  core -->|"IBrowserController · IBrowserManager · ITargetController · capability-gated"| pup & elec & rn
+  core --> iface(["<b>IBrowserController · IBrowserManager · ITargetController</b><br/><i>capability-gated by the active target</i>"])
+  iface --> pup & elec & rn
 
   pup["<b>web</b> · Puppeteer / Chrome<br/>src/browser.ts<br/><i>stdio + daemon</i>"]
   elec["<b>web</b> · Electron CDP panes<br/>src/electronBrowser.ts<br/><i>cockpit · per-project partitions</i>"]
