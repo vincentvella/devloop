@@ -32,6 +32,8 @@
       section { padding: 28px 0; border-top: 1px solid var(--edge); }
       h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 2px; color: var(--dim); font-weight: 600; }
       pre { background: var(--bg2); border: 1px solid var(--edge); border-radius: 9px; padding: 14px 16px; overflow-x: auto; }
+      pre.mermaid { background: transparent; border: 0; padding: 0; text-align: center; color: transparent; }
+      pre.mermaid svg { max-width: 100%; height: auto; }
       code { color: #cae3ff; }
       .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
       .card { background: var(--bg2); border: 1px solid var(--edge); border-radius: 10px; padding: 16px 18px; }
@@ -91,9 +93,55 @@
         </div>
       </section>
 
+      <section>
+        <h2>Architecture</h2>
+        <p class="tag" style="font-size:14px;margin-bottom:14px">Three transports expose one shared, transport- &amp; substrate-agnostic core, which drives a browser — or a native device. Everything lands on one timeline.</p>
+        <pre class="mermaid">
+flowchart TD
+  clients["&lt;b&gt;MCP clients&lt;/b&gt;&lt;br/&gt;Claude Code · agents · mcporter"]
+
+  subgraph T["Transports"]
+    direction LR
+    stdio["&lt;b&gt;stdio&lt;/b&gt;&lt;br/&gt;src/index.ts&lt;br/&gt;&lt;i&gt;spawned per session&lt;/i&gt;"]
+    daemon["&lt;b&gt;daemon&lt;/b&gt;&lt;br/&gt;src/daemon.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · one shared instance&lt;/i&gt;"]
+    cockpit["&lt;b&gt;cockpit&lt;/b&gt;&lt;br/&gt;cockpit/main.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · Electron app&lt;/i&gt;"]
+  end
+
+  clients --&gt; stdio &amp; daemon &amp; cockpit
+  stdio &amp; daemon &amp; cockpit --&gt;|"mcpServer.ts · httpMcp.ts"| core
+
+  subgraph core["Shared core — src/ (transport- and substrate-agnostic)"]
+    direction LR
+    tl["&lt;b&gt;toolLayer&lt;/b&gt;&lt;br/&gt;TOOLS + handleTool&lt;br/&gt;configureTools()"]
+    lb["&lt;b&gt;logBuffer&lt;/b&gt;&lt;br/&gt;one timeline&lt;br/&gt;+ network ring"]
+    aux["devServer · registry · target&lt;br/&gt;diagnose · sourcemap · har · bundle"]
+  end
+
+  core --&gt;|"IBrowserController · IBrowserManager · ITargetController&lt;br/&gt;(capability-gated)"| S
+
+  subgraph S["Substrates"]
+    direction LR
+    pup["&lt;b&gt;web&lt;/b&gt; · Puppeteer / Chrome&lt;br/&gt;src/browser.ts&lt;br/&gt;&lt;i&gt;stdio + daemon&lt;/i&gt;"]
+    elec["&lt;b&gt;web&lt;/b&gt; · Electron CDP panes&lt;br/&gt;src/electronBrowser.ts&lt;br/&gt;&lt;i&gt;cockpit · per-project partitions&lt;/i&gt;"]
+    rn["&lt;b&gt;native&lt;/b&gt; · React Native (Hermes)&lt;br/&gt;src/reactNativeController.ts&lt;br/&gt;&lt;i&gt;JS + network over Metro CDP&lt;/i&gt;"]
+  end
+
+  rn --&gt;|"idb / adb"| nd["&lt;b&gt;NativeDriver&lt;/b&gt;&lt;br/&gt;iOS idb · Android adb&lt;br/&gt;taps · snapshot · screens · logs"]
+        </pre>
+      </section>
+
       <footer>
         MIT © Vincent Vella · <a href="https://github.com/vincentvella/devloop">vincentvella/devloop</a>
       </footer>
     </div>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        securityLevel: "loose", // our own content; allow the <b>/<i>/<br> labels
+        theme: "dark",
+        themeVariables: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", darkMode: true },
+      });
+    </script>
   </body>
 </html>
