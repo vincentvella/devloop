@@ -61,6 +61,41 @@ $M 'devloop.export_har()'                                     # full network as 
   `browser_*` tools drive the device (snapshot/tap/type via idb/adb); `native_build(platform: "ios")` to
   (re)build. Native tools require the Devloop **cockpit** (the desktop app), not the headless daemon.
 
+## All tools
+
+The complete tool set, so you don't need introspection. Optional args end in `?`. Call any of these as
+`$M 'devloop.<name>(arg: value, …)'`. (`npx mcporter list devloop --schema` is the live, authoritative
+list if this drifts from your installed version.)
+
+**Browser** — act on the active pane/target:
+- `browser_navigate(url)` — open a URL.
+- `browser_snapshot()` — accessibility tree: url, title, and interactive/landmark elements each with a CSS-selector `ref`. **Prefer this over a screenshot** to find/target elements.
+- `browser_click(selector)` · `browser_type(selector, text)` · `browser_hover(selector)` · `browser_scroll(selector?, x?, y?)` · `browser_select(selector, value)` · `browser_press(key, selector?)` — keys like `Enter`/`Tab`/`ArrowDown`.
+- `browser_screenshot(fullPage?)` → PNG.
+- `browser_eval(expression)` — run JS in page context (not CSP-blocked).
+- `browser_wait_for(selector?, text?, timeoutMs?)` — wait until a selector/text appears.
+- `browser_wait_for_idle(idleMs?, timeoutMs?)` — wait until the network settles.
+- `browser_emulate(device?, width?, height?, mobile?, deviceScaleFactor?, userAgent?, reset?)` — `device`: `iphone`/`ipad`/`pixel`; `reset:true` → desktop.
+- `browser_throttle(profile)` — `slow-3g`/`fast-3g`/`offline`/`none`.
+- `browser_clear_storage(allOrigins?)` — clear cookies/localStorage/IndexedDB/cache/SW.
+
+**Logs & correlation:**
+- `get_logs(source?, stream?, grep?, app?, sinceSeq?, limit?)` — unified tail. `source`: `server`/`browser`/`native`; `stream`: `stdout`/`stderr`/`console`/`network`/`pageerror`. `app` scopes to one project.
+- `get_logs_around(ts, windowMs?, source?, app?)` — everything within ±`windowMs` of a moment, time-ordered across sources (the correlation tool).
+- `get_network(grep?, app?, limit?)` — every request (full ring, independent of the log threshold).
+- `diagnose(windowMs?, app?)` — grouped/deduped errors + failed (4xx/5xx) requests + a one-line summary. **Start here.**
+- `export_har(app?)` — full network as HAR 1.2. `export_bundle(app?, windowMs?)` — shareable bug-report bundle (diagnose + timeline + screenshots + HAR + repro). `clear_logs()` — reset before reproducing.
+
+**Dev server:** `dev_start(project?, cmd?, cwd?)` (saved `project`, or `cmd`+`cwd`, or neither → cwd defaults + cmd auto-detected) · `dev_stop()` · `dev_status()`.
+
+**Project registry:** `project_list()` · `project_add(name, cwd, cmd?, url?)` · `project_remove(name)`.
+
+**Panes** (cockpit, multi-target): `pane_list()` · `pane_new(url?)` · `pane_select(id)` · `pane_close(id)` · `pane_pop(id)`.
+
+**Native** (cockpit only): `native_open(platform)` (`ios`/`android` — opens the sim/mirror + routes `browser_*` to it) · `native_close()` · `native_build(platform, cwd?)`.
+
+**repro** — `repro(actions?, action?, waitFor?, settleMs?, stepSettleMs?, idleMs?, timeoutMs?, continueOnError?, clear?)`: clears the timeline, runs one `action` or an `actions` sequence, waits, and returns everything that happened on both sides. `actions: [{kind, …}]` — kinds `navigate`/`click`/`type`/`hover`/`scroll`/`select`/`press`/`eval`/`wait`/`none`. `waitFor: "networkidle"` for slow/streaming responses.
+
 ## Notes
 
 - The daemon is **shared** — many agents/sessions hit one browser, one dev server, one timeline.
