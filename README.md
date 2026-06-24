@@ -44,7 +44,9 @@ flowchart TD
   daemon["<b>daemon</b><br/>src/daemon.ts<br/><i>HTTP/SSE · one shared instance</i>"]
   cockpit["<b>cockpit</b><br/>cockpit/main.ts<br/><i>HTTP/SSE · Electron app</i>"]
 
-  stdio & daemon & cockpit -->|"mcpServer.ts · httpMcp.ts"| core
+  stdio -->|"mcpServer.ts<br/>(stdio transport)"| core
+  daemon -->|"mcpServer.ts<br/>+ httpMcp.ts"| core
+  cockpit -->|"mcpServer.ts<br/>+ httpMcp.ts"| core
 
   core["<b>shared core — src/</b> · <i>transport- and substrate-agnostic</i><br/>toolLayer (TOOLS + handleTool · configureTools) · logBuffer (one timeline + network ring)<br/>devServer · registry · target · diagnose · sourcemap · har · bundle"]
 
@@ -63,7 +65,7 @@ stdout is reserved for the MCP protocol in stdio mode; all human-facing output g
 
 ### Module map (`src/` — the shared, Electron-free core)
 
-- **Transports & MCP** — `index.ts` (stdio entry + `daemon` subcommand dispatch) · `daemon.ts` (headless long-running HTTP/SSE server) · `httpMcp.ts` (Streamable-HTTP transport, one session per client, shared backend) · `mcpServer.ts` (the `Server` wiring) · `toolLayer.ts` (the 37 tools + `handleTool` + `configureTools`).
+- **Transports & MCP** — `index.ts` (stdio entry + `daemon` subcommand dispatch) · `daemon.ts` (headless long-running HTTP/SSE server) · `httpMcp.ts` (the Streamable-HTTP server behind **the daemon + cockpit only** — one session per connecting client, shared backend; stdio uses `StdioServerTransport`) · `mcpServer.ts` (the MCP `Server` factory, shared by **all three** transports) · `toolLayer.ts` (the 37 tools + `handleTool` + `configureTools`).
 - **Timeline & dev server** — `logBuffer.ts` (the bounded, monotonic timeline + the threshold-independent network ring) · `devServer.ts` (spawn a dev server in its own process group, tee its output, auto-detect the command).
 - **Browser substrates** — `browserController.ts` (the `IBrowserController` / `IBrowserManager` interfaces + `PaneInfo`) · `browser.ts` (Puppeteer/Chrome, used by stdio + daemon) · `electronBrowser.ts` (a cockpit pane's `WebContentsView` driven over CDP) · `pageActions.ts` (shared click/type/scroll/select/press/snapshot logic injected into the page) · `pageSnapshot.ts` (the a11y-tree snapshot shape) · `emulation.ts` (device-metrics + network-throttle presets).
 - **Native targets** — `target.ts` (target kinds + per-kind capability gating) · `reactNativeController.ts` (attach to Hermes over Metro CDP: JS console/errors + eval/screenshot, delegating taps/snapshot to a driver) · `reactNative.ts` (pure Hermes-inspector helpers: target selection, busy-debugger messaging) · `reactNativeNet.ts` (the injected `XMLHttpRequest` interceptor + marker parser for RN network capture) · `nativeDriver.ts` (the `NativeDriver` abstraction: `idbDriver` for iOS, `adbDriver` for Android) · `idb.ts` / `adb.ts` (pure arg-builders + `describe-all`/`uiautomator` snapshot parsers + `logcat` parsing) · `iosSimulator.ts` (simctl logs + screenshots) · `androidLog.ts` (adb logcat stream + screencap) · `androidMirror.ts` (the polled `screencap` frame stream) · `nativeObservability.ts` (wires a controller + log stream onto the timeline) · `nativeBuild.ts` / `nativeBuildRunner.ts` (`expo run:<platform>` + `@expo/fingerprint` staleness) · `nativeEnv.ts` (idb/adb readiness preflight) · `simulator.ts` (serve-sim launch + `/api` parsing).

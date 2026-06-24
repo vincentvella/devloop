@@ -105,7 +105,9 @@ flowchart TD
   daemon["&lt;b&gt;daemon&lt;/b&gt;&lt;br/&gt;src/daemon.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · one shared instance&lt;/i&gt;"]
   cockpit["&lt;b&gt;cockpit&lt;/b&gt;&lt;br/&gt;cockpit/main.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · Electron app&lt;/i&gt;"]
 
-  stdio &amp; daemon &amp; cockpit --&gt;|"mcpServer.ts · httpMcp.ts"| core
+  stdio --&gt;|"mcpServer.ts&lt;br/&gt;(stdio transport)"| core
+  daemon --&gt;|"mcpServer.ts&lt;br/&gt;+ httpMcp.ts"| core
+  cockpit --&gt;|"mcpServer.ts&lt;br/&gt;+ httpMcp.ts"| core
 
   core["&lt;b&gt;shared core — src/&lt;/b&gt; · &lt;i&gt;transport- and substrate-agnostic&lt;/i&gt;&lt;br/&gt;toolLayer (TOOLS + handleTool · configureTools) · logBuffer (one timeline + network ring)&lt;br/&gt;devServer · registry · target · diagnose · sourcemap · har · bundle"]
 
