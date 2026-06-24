@@ -97,36 +97,34 @@
         <h2>Architecture</h2>
         <p class="tag" style="font-size:14px;margin-bottom:14px">Three transports expose one shared, transport- &amp; substrate-agnostic core, which drives a browser — or a native device. Everything lands on one timeline.</p>
         <pre class="mermaid">
-flowchart TD
-  clients["&lt;b&gt;MCP clients&lt;/b&gt;&lt;br/&gt;Claude Code · agents · mcporter"]
+flowchart LR
+  clients["&lt;b&gt;MCP clients&lt;/b&gt;&lt;br/&gt;Claude Code&lt;br/&gt;agents · mcporter"]
 
   subgraph T["Transports"]
-    direction LR
-    stdio["&lt;b&gt;stdio&lt;/b&gt;&lt;br/&gt;src/index.ts&lt;br/&gt;&lt;i&gt;spawned per session&lt;/i&gt;"]
-    daemon["&lt;b&gt;daemon&lt;/b&gt;&lt;br/&gt;src/daemon.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · one shared instance&lt;/i&gt;"]
-    cockpit["&lt;b&gt;cockpit&lt;/b&gt;&lt;br/&gt;cockpit/main.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · Electron app&lt;/i&gt;"]
+    direction TB
+    stdio["&lt;b&gt;stdio&lt;/b&gt;&lt;br/&gt;src/index.ts&lt;br/&gt;&lt;i&gt;per session&lt;/i&gt;"]
+    daemon["&lt;b&gt;daemon&lt;/b&gt;&lt;br/&gt;src/daemon.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · shared&lt;/i&gt;"]
+    cockpit["&lt;b&gt;cockpit&lt;/b&gt;&lt;br/&gt;cockpit/main.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · Electron&lt;/i&gt;"]
   end
 
-  clients --&gt; stdio &amp; daemon &amp; cockpit
-  stdio &amp; daemon &amp; cockpit --&gt;|"mcpServer.ts · httpMcp.ts"| core
-
-  subgraph core["Shared core — src/ (transport- and substrate-agnostic)"]
-    direction LR
+  subgraph core["Shared core — src/"]
+    direction TB
     tl["&lt;b&gt;toolLayer&lt;/b&gt;&lt;br/&gt;TOOLS + handleTool&lt;br/&gt;configureTools()"]
-    lb["&lt;b&gt;logBuffer&lt;/b&gt;&lt;br/&gt;one timeline&lt;br/&gt;+ network ring"]
+    lb["&lt;b&gt;logBuffer&lt;/b&gt;&lt;br/&gt;one timeline + network ring"]
     aux["devServer · registry · target&lt;br/&gt;diagnose · sourcemap · har · bundle"]
   end
 
-  core --&gt;|"IBrowserController · IBrowserManager · ITargetController&lt;br/&gt;(capability-gated)"| S
-
   subgraph S["Substrates"]
-    direction LR
-    pup["&lt;b&gt;web&lt;/b&gt; · Puppeteer / Chrome&lt;br/&gt;src/browser.ts&lt;br/&gt;&lt;i&gt;stdio + daemon&lt;/i&gt;"]
-    elec["&lt;b&gt;web&lt;/b&gt; · Electron CDP panes&lt;br/&gt;src/electronBrowser.ts&lt;br/&gt;&lt;i&gt;cockpit · per-project partitions&lt;/i&gt;"]
-    rn["&lt;b&gt;native&lt;/b&gt; · React Native (Hermes)&lt;br/&gt;src/reactNativeController.ts&lt;br/&gt;&lt;i&gt;JS + network over Metro CDP&lt;/i&gt;"]
+    direction TB
+    pup["&lt;b&gt;web&lt;/b&gt; · Puppeteer / Chrome&lt;br/&gt;src/browser.ts &lt;i&gt;(stdio+daemon)&lt;/i&gt;"]
+    elec["&lt;b&gt;web&lt;/b&gt; · Electron CDP panes&lt;br/&gt;src/electronBrowser.ts &lt;i&gt;(cockpit)&lt;/i&gt;"]
+    rn["&lt;b&gt;native&lt;/b&gt; · React Native (Hermes)&lt;br/&gt;src/reactNativeController.ts"]
   end
 
-  rn --&gt;|"idb / adb"| nd["&lt;b&gt;NativeDriver&lt;/b&gt;&lt;br/&gt;iOS idb · Android adb&lt;br/&gt;taps · snapshot · screens · logs"]
+  clients --&gt; T
+  T --&gt;|"mcpServer.ts&lt;br/&gt;httpMcp.ts"| core
+  core --&gt;|"IBrowserController · IBrowserManager&lt;br/&gt;ITargetController (capability-gated)"| S
+  rn --&gt;|"idb / adb"| nd["&lt;b&gt;NativeDriver&lt;/b&gt;&lt;br/&gt;iOS idb · Android adb&lt;br/&gt;taps · snapshot · screens"]
         </pre>
       </section>
 
