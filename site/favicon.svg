@@ -1,0 +1,18 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- app-icon plate -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+
+  <!-- the loop: two streams circulating into one timeline (gaps at the sides for flow).
+       Sized to fill the plate (radius 84, stroke 28) so it stays legible at small sizes. -->
+  <!-- server stream (blue) — over the top, left → right -->
+  <path d="M 48 104 A 84 84 0 0 1 208 104" stroke="#79c0ff" stroke-width="28" stroke-linecap="round"/>
+  <!-- browser stream (purple) — under the bottom, right → left -->
+  <path d="M 208 152 A 84 84 0 0 1 48 152" stroke="#d2a8ff" stroke-width="28" stroke-linecap="round"/>
+
+  <!-- flow arrowheads at the leading ends -->
+  <path d="M 208 104 l 18 -9 l 1 26 z" fill="#79c0ff"/>
+  <path d="M 48 152 l -18 9 l -1 -26 z" fill="#d2a8ff"/>
+
+  <!-- correlated moment at the core -->
+  <circle cx="128" cy="128" r="21" fill="#3fb950"/>
+</svg>
