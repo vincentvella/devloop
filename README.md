@@ -36,6 +36,7 @@ serve-sim is **vendored into the cockpit** and run via Electron's own Node, so t
 Three **transports** expose one **shared core**, which drives one of several **substrates** (a real browser, or — in the cockpit — a native device). Everything pushes onto a single timestamped **timeline**.
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 460}}}%%
 flowchart TD
   clients["<b>MCP clients</b><br/>Claude Code · agents · mcporter"]
   clients --> stdio & daemon & cockpit
