@@ -217,6 +217,8 @@ Notes:
 
 (Exact ad-hoc flags can vary by mcporter version — `npx mcporter --help` is authoritative.)
 
+**Agent skill:** [`skills/devloop/SKILL.md`](skills/devloop/SKILL.md) packages this as an installable [Agent Skill](https://docs.claude.com/en/docs/claude-code/skills) — drop it in (`cp -r skills/devloop ~/.claude/skills/`, or into a project's `.claude/skills/`) and the agent knows to drive Devloop over mcporter when MCP is blocked, with the daemon setup + tool recipes built in.
+
 ## Cockpit mode (Electron)
 
 ```sh
