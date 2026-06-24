@@ -36,29 +36,29 @@ serve-sim is **vendored into the cockpit** and run via Electron's own Node, so t
 Three **transports** expose one **shared core**, which drives one of several **substrates** (a real browser, or — in the cockpit — a native device). Everything pushes onto a single timestamped **timeline**.
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 460}}}%%
+%%{init: {"flowchart": {"wrappingWidth": 700}}}%%
 flowchart TD
   clients["<b>MCP clients</b><br/>Claude Code · agents · mcporter"]
   clients --> stdio & daemon & cockpit
 
-  stdio["<b>stdio</b><br/>src/index.ts<br/><i>spawned per session</i>"]
-  daemon["<b>daemon</b><br/>src/daemon.ts<br/><i>HTTP/SSE · one shared instance</i>"]
-  cockpit["<b>cockpit</b><br/>cockpit/main.ts<br/><i>HTTP/SSE · Electron app</i>"]
+  stdio["<b>stdio</b><br/><i>spawned per session</i>"]
+  daemon["<b>daemon</b><br/><i>HTTP/SSE · one shared instance</i>"]
+  cockpit["<b>cockpit</b><br/><i>HTTP/SSE · Electron app</i>"]
 
   stdio --> mcp
   daemon --> mcp
   cockpit --> mcp
-  mcp(["<b>MCP Server</b> — src/mcpServer.ts<br/><i>stdio: StdioServerTransport · daemon + cockpit: httpMcp.ts</i>"])
+  mcp(["<b>MCP Server</b><br/><i>stdio transport, or HTTP/SSE for the daemon + cockpit</i>"])
   mcp --> core
 
-  core["<b>shared core — src/</b> · <i>transport- and substrate-agnostic</i><br/>toolLayer (TOOLS + handleTool · configureTools) · logBuffer (one timeline + network ring)<br/>devServer · registry · target · diagnose · sourcemap · har · bundle"]
+  core["<b>shared core</b> · <i>transport- and substrate-agnostic</i><br/>tool layer · unified timeline + network ring<br/>dev server · registry · diagnostics · source-maps · HAR · bundle"]
 
   core --> iface(["<b>IBrowserController · IBrowserManager · ITargetController</b><br/><i>capability-gated by the active target</i>"])
   iface --> pup & elec & rn
 
-  pup["<b>web</b> · Puppeteer / Chrome<br/>src/browser.ts<br/><i>stdio + daemon</i>"]
-  elec["<b>web</b> · Electron CDP panes<br/>src/electronBrowser.ts<br/><i>cockpit · per-project partitions</i>"]
-  rn["<b>native</b> · React Native (Hermes)<br/>src/reactNativeController.ts<br/><i>JS + network over Metro CDP</i>"]
+  pup["<b>web</b> · Puppeteer / Chrome<br/><i>stdio + daemon</i>"]
+  elec["<b>web</b> · Electron CDP panes<br/><i>cockpit · per-project partitions</i>"]
+  rn["<b>native</b> · React Native (Hermes)<br/><i>JS + network over Metro CDP</i>"]
 
   rn -->|"idb / adb"| nd["<b>NativeDriver</b><br/>iOS idb · Android adb<br/>taps · snapshot · screens · logs"]
 ```

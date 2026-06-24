@@ -97,29 +97,29 @@
         <h2>Architecture</h2>
         <p class="tag" style="font-size:14px;margin-bottom:14px">Three transports expose one shared, transport- &amp; substrate-agnostic core, which drives a browser — or a native device. Everything lands on one timeline.</p>
         <pre class="mermaid">
-%%{init: {"flowchart": {"wrappingWidth": 460}}}%%
+%%{init: {"flowchart": {"wrappingWidth": 700}}}%%
 flowchart TD
   clients["&lt;b&gt;MCP clients&lt;/b&gt;&lt;br/&gt;Claude Code · agents · mcporter"]
   clients --&gt; stdio &amp; daemon &amp; cockpit
 
-  stdio["&lt;b&gt;stdio&lt;/b&gt;&lt;br/&gt;src/index.ts&lt;br/&gt;&lt;i&gt;spawned per session&lt;/i&gt;"]
-  daemon["&lt;b&gt;daemon&lt;/b&gt;&lt;br/&gt;src/daemon.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · one shared instance&lt;/i&gt;"]
-  cockpit["&lt;b&gt;cockpit&lt;/b&gt;&lt;br/&gt;cockpit/main.ts&lt;br/&gt;&lt;i&gt;HTTP/SSE · Electron app&lt;/i&gt;"]
+  stdio["&lt;b&gt;stdio&lt;/b&gt;&lt;br/&gt;&lt;i&gt;spawned per session&lt;/i&gt;"]
+  daemon["&lt;b&gt;daemon&lt;/b&gt;&lt;br/&gt;&lt;i&gt;HTTP/SSE · one shared instance&lt;/i&gt;"]
+  cockpit["&lt;b&gt;cockpit&lt;/b&gt;&lt;br/&gt;&lt;i&gt;HTTP/SSE · Electron app&lt;/i&gt;"]
 
   stdio --&gt; mcp
   daemon --&gt; mcp
   cockpit --&gt; mcp
-  mcp(["&lt;b&gt;MCP Server&lt;/b&gt; — src/mcpServer.ts&lt;br/&gt;&lt;i&gt;stdio: StdioServerTransport · daemon + cockpit: httpMcp.ts&lt;/i&gt;"])
+  mcp(["&lt;b&gt;MCP Server&lt;/b&gt;&lt;br/&gt;&lt;i&gt;stdio transport, or HTTP/SSE for the daemon + cockpit&lt;/i&gt;"])
   mcp --&gt; core
 
-  core["&lt;b&gt;shared core — src/&lt;/b&gt; · &lt;i&gt;transport- and substrate-agnostic&lt;/i&gt;&lt;br/&gt;toolLayer (TOOLS + handleTool · configureTools) · logBuffer (one timeline + network ring)&lt;br/&gt;devServer · registry · target · diagnose · sourcemap · har · bundle"]
+  core["&lt;b&gt;shared core&lt;/b&gt; · &lt;i&gt;transport- and substrate-agnostic&lt;/i&gt;&lt;br/&gt;tool layer · unified timeline + network ring&lt;br/&gt;dev server · registry · diagnostics · source-maps · HAR · bundle"]
 
   core --&gt; iface(["&lt;b&gt;IBrowserController · IBrowserManager · ITargetController&lt;/b&gt;&lt;br/&gt;&lt;i&gt;capability-gated by the active target&lt;/i&gt;"])
   iface --&gt; pup &amp; elec &amp; rn
 
-  pup["&lt;b&gt;web&lt;/b&gt; · Puppeteer / Chrome&lt;br/&gt;src/browser.ts&lt;br/&gt;&lt;i&gt;stdio + daemon&lt;/i&gt;"]
-  elec["&lt;b&gt;web&lt;/b&gt; · Electron CDP panes&lt;br/&gt;src/electronBrowser.ts&lt;br/&gt;&lt;i&gt;cockpit · per-project partitions&lt;/i&gt;"]
-  rn["&lt;b&gt;native&lt;/b&gt; · React Native (Hermes)&lt;br/&gt;src/reactNativeController.ts&lt;br/&gt;&lt;i&gt;JS + network over Metro CDP&lt;/i&gt;"]
+  pup["&lt;b&gt;web&lt;/b&gt; · Puppeteer / Chrome&lt;br/&gt;&lt;i&gt;stdio + daemon&lt;/i&gt;"]
+  elec["&lt;b&gt;web&lt;/b&gt; · Electron CDP panes&lt;br/&gt;&lt;i&gt;cockpit · per-project partitions&lt;/i&gt;"]
+  rn["&lt;b&gt;native&lt;/b&gt; · React Native (Hermes)&lt;br/&gt;&lt;i&gt;JS + network over Metro CDP&lt;/i&gt;"]
 
   rn --&gt;|"idb / adb"| nd["&lt;b&gt;NativeDriver&lt;/b&gt;&lt;br/&gt;iOS idb · Android adb&lt;br/&gt;taps · snapshot · screens · logs"]
         </pre>
