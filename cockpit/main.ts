@@ -688,11 +688,12 @@ async function nativeInfo(cwd: string) {
 async function main() {
   if (SELFTEST) {
     app.dock?.hide();
-    // Watchdog: never let a headless run hang the harness.
+    // Watchdog: never let a headless run hang the harness. Generous — the suite grew
+    // (native readiness, web-store preload now actually runs per pane, etc.).
     setTimeout(() => {
       log("SELFTEST watchdog: timed out, exiting");
       app.exit(2);
-    }, 30_000);
+    }, 90_000);
   }
   app.setName("Devloop");
   importShellPath(); // before any spawn (dev servers, serve-sim) so bun/node/expo are found
@@ -1041,6 +1042,14 @@ async function runSelfTest() {
     console.log(`SELFTEST extension FAILED (path=${extPath}): ${e}`);
   }
 
+  // 9g2) the chrome-web-store preload must load cleanly in panes (it's a CJS bundle; the
+  // app is type:module, so without an out/dist type:commonjs marker it loads as ESM and
+  // spams "Dynamic require of electron is not supported" into every pane).
+  const preloadErr = buffer
+    .query({ limit: 5000 })
+    .some((e) => /Unable to load preload script|Dynamic require of "electron"/.test(e.line));
+  console.log(`SELFTEST web-store preload: clean=${!preloadErr}`);
+
   // 9h) native_* MCP tools are wired (nativeControl) in the cockpit. native_close is safe
   // to call with nothing open (idempotent); native_open/native_build need a real device, so
   // we just confirm the close path dispatches without error (the tool layer is unit-tested).
@@ -1121,6 +1130,7 @@ async function runSelfTest() {
     ["diagnose (group + network)", diagnoseOk],
     ["export bundle", bundleOk],
     ["chrome extension (unpacked)", extLoadedOk],
+    ["web-store preload loads cleanly (no ESM require error)", !preloadErr],
     ["native_* MCP tools wired (native_close)", nativeToolsOk],
   ];
   for (const [name, c] of checks) console.log(`  ${c ? "✓" : "✗"} ${name}`);

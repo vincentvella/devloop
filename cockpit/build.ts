@@ -3,7 +3,7 @@
  * Run via `bun run app:build`. Electron itself is left external (provided by the
  * runtime); everything else (MCP SDK, shared src/ core) is bundled in.
  */
-import { rmSync, mkdirSync, cpSync } from "node:fs";
+import { rmSync, mkdirSync, cpSync, writeFileSync } from "node:fs";
 
 rmSync("out", { recursive: true, force: true });
 mkdirSync("out/renderer", { recursive: true });
@@ -37,6 +37,11 @@ cpSync(
   "node_modules/electron-chrome-web-store/dist/chrome-web-store.preload.js",
   "out/dist/chrome-web-store.preload.js",
 );
+// That preload is a CommonJS bundle (a `require` shim, no import.meta). Our app
+// package.json is `"type": "module"`, so a bare `.js` would load as ESM — and the
+// shim then throws "Dynamic require of electron is not supported" in every pane.
+// A type:commonjs marker beside it forces CJS so its require() works.
+writeFileSync("out/dist/package.json", JSON.stringify({ type: "commonjs" }) + "\n");
 
 // Compile Tailwind → out/renderer/styles.css
 const tw = Bun.spawnSync([
