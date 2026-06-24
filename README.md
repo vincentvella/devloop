@@ -36,33 +36,24 @@ serve-sim is **vendored into the cockpit** and run via Electron's own Node, so t
 Three **transports** expose one **shared core**, which drives one of several **substrates** (a real browser, or — in the cockpit — a native device). Everything pushes onto a single timestamped **timeline**.
 
 ```mermaid
-flowchart LR
-  clients["<b>MCP clients</b><br/>Claude Code<br/>agents · mcporter"]
+flowchart TD
+  clients["<b>MCP clients</b><br/>Claude Code · agents · mcporter"]
+  clients --> stdio & daemon & cockpit
 
-  subgraph T["Transports"]
-    direction TB
-    stdio["<b>stdio</b><br/>src/index.ts<br/><i>spawned per session</i>"]
-    daemon["<b>daemon</b><br/>src/daemon.ts<br/><i>HTTP/SSE · one shared instance</i>"]
-    cockpit["<b>cockpit</b><br/>cockpit/main.ts<br/><i>HTTP/SSE · Electron app</i>"]
-  end
+  stdio["<b>stdio</b><br/>src/index.ts<br/><i>spawned per session</i>"]
+  daemon["<b>daemon</b><br/>src/daemon.ts<br/><i>HTTP/SSE · one shared instance</i>"]
+  cockpit["<b>cockpit</b><br/>cockpit/main.ts<br/><i>HTTP/SSE · Electron app</i>"]
 
-  subgraph core["Shared core — src/ (transport- and substrate-agnostic)"]
-    direction TB
-    tl["<b>toolLayer</b><br/>TOOLS + handleTool<br/>configureTools()"]
-    lb["<b>logBuffer</b><br/>one timeline + network ring"]
-    aux["devServer · registry · target<br/>diagnose · sourcemap · har · bundle"]
-  end
+  stdio & daemon & cockpit -->|"mcpServer.ts · httpMcp.ts"| core
 
-  subgraph S["Substrates"]
-    direction TB
-    pup["<b>web</b> · Puppeteer / Chrome<br/>src/browser.ts <i>(stdio + daemon)</i>"]
-    elec["<b>web</b> · Electron CDP panes<br/>src/electronBrowser.ts <i>(cockpit · per-project)</i>"]
-    rn["<b>native</b> · React Native (Hermes)<br/>src/reactNativeController.ts<br/><i>JS + network over Metro CDP</i>"]
-  end
+  core["<b>shared core — src/</b> · <i>transport- and substrate-agnostic</i><br/>toolLayer (TOOLS + handleTool · configureTools) · logBuffer (one timeline + network ring)<br/>devServer · registry · target · diagnose · sourcemap · har · bundle"]
 
-  clients --> T
-  T -->|"mcpServer.ts<br/>httpMcp.ts"| core
-  core -->|"IBrowserController · IBrowserManager<br/>ITargetController (capability-gated)"| S
+  core -->|"IBrowserController · IBrowserManager · ITargetController · capability-gated"| pup & elec & rn
+
+  pup["<b>web</b> · Puppeteer / Chrome<br/>src/browser.ts<br/><i>stdio + daemon</i>"]
+  elec["<b>web</b> · Electron CDP panes<br/>src/electronBrowser.ts<br/><i>cockpit · per-project partitions</i>"]
+  rn["<b>native</b> · React Native (Hermes)<br/>src/reactNativeController.ts<br/><i>JS + network over Metro CDP</i>"]
+
   rn -->|"idb / adb"| nd["<b>NativeDriver</b><br/>iOS idb · Android adb<br/>taps · snapshot · screens · logs"]
 ```
 
