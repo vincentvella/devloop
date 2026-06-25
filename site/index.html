@@ -96,6 +96,7 @@
       .dl { display: flex; gap: 10px; flex-wrap: wrap; }
       .dl a { border: 1px solid var(--edge); border-radius: 8px; padding: 8px 14px; background: #21262d; color: var(--fg); font-size: 14px; }
       .demo { width: 100%; height: auto; display: block; border: 1px solid var(--edge); border-radius: 12px; background: var(--bg2); }
+      .shot-hero { width: 100%; height: auto; border: 1px solid var(--edge); border-radius: 10px; display: block; margin-bottom: 14px; }
       .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
       .shots img { width: 100%; height: auto; border: 1px solid var(--edge); border-radius: 10px; display: block; }
       footer { text-align: center; color: var(--dim); padding: 40px 0 64px; font-size: 13px; border-top: 1px solid var(--edge); }
@@ -132,23 +133,14 @@
         </video>
       </section>
 
-      <!--
-        SCREENSHOTS GALLERY — uncomment once real cockpit captures land in site/shots/.
-        Shot list (1600px+ wide, dark theme, retina if possible):
-          1. shots/cockpit.png       — cockpit: tabbed browser panes beside the unified timeline
-          2. shots/picker.png        — element picker highlighting a DOM node
-          3. shots/repro.png         — a repro result (action sequence + correlated slice)
-          4. shots/native-ios.png    — the live iOS simulator pane with native logs on the timeline
-        <section>
-          <h2>Screenshots</h2>
-          <div class="shots">
-            <a href="shots/cockpit.png"><img src="shots/cockpit.png" alt="Devloop cockpit: browser panes beside a unified, filterable timeline" loading="lazy" /></a>
-            <a href="shots/picker.png"><img src="shots/picker.png" alt="Element picker highlighting a DOM node in a Devloop pane" loading="lazy" /></a>
-            <a href="shots/repro.png"><img src="shots/repro.png" alt="A Devloop repro result: action sequence with a correlated browser+server slice" loading="lazy" /></a>
-            <a href="shots/native-ios.png"><img src="shots/native-ios.png" alt="Devloop driving an Expo iOS simulator with native logs on the timeline" loading="lazy" /></a>
-          </div>
-        </section>
-      -->
+      <section>
+        <h2>Screenshots</h2>
+        <a href="shots/cockpit.png"><img class="shot-hero" src="shots/cockpit.png" alt="Devloop cockpit: a browser pane beside a unified, filterable timeline of correlated server and browser logs" loading="lazy" /></a>
+        <div class="shots">
+          <a href="shots/repro.png"><img src="shots/repro.png" alt="A Devloop repro result rendered inline on the timeline" loading="lazy" /></a>
+          <a href="shots/multipane.png"><img src="shots/multipane.png" alt="Devloop running multiple browser panes, each with its own dev server" loading="lazy" /></a>
+        </div>
+      </section>
 
       <section>
         <h2>Use it with Claude (MCP)</h2>

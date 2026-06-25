@@ -65,6 +65,7 @@
     "dist:linux": "bun run app:build && electron-builder --linux",
     "prepublishOnly": "bun run mcp:build",
     "app:gui": "bun run app:build && node test/gui/run.ts",
+    "app:shots": "bun run app:build && node test/gui/screenshots.ts",
     "rn:smoke": "bun run scripts/rn-harness.ts",
     "android:smoke": "bun run app:build && node test/gui/scenarios/androidLive.ts"
   },
