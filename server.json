@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vincentvella/devloop",
+  "title": "Devloop",
+  "description": "Drives a browser (or a native Expo/React Native app) and your dev server, putting both on one correlated timeline — for Claude Code and AI agents.",
+  "repository": {
+    "url": "https://github.com/vincentvella/devloop",
+    "source": "github"
+  },
+  "version": "0.5.2",
+  "websiteUrl": "https://devloop.build",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "devloop-mcp",
+      "version": "0.5.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

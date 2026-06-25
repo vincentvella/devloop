@@ -1,0 +1,8 @@
+# Devloop is a local-first MCP server: it drives the developer's own browser,
+# dev server, and iOS/Android simulators. It runs over stdio on the local
+# machine and is not meant for a hosted runtime.
+startCommand:
+  type: stdio
+  configSchema: {}
+  commandFunction: |-
+    () => ({ command: "npx", args: ["-y", "devloop-mcp"] })
