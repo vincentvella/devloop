@@ -6,6 +6,10 @@
   Browser control + dev-server logs on one correlated timeline — for AI agents and humans.
 </p>
 
+<p align="center">
+  <a href="https://devloop.build"><img src="https://raw.githubusercontent.com/vincentvella/devloop/main/site/shots/cockpit.png" alt="The Devloop cockpit: a browser pane beside a unified, filterable timeline of correlated server and browser logs" width="820" /></a>
+</p>
+
 ---
 
 A unified dev-loop tool: it drives a **browser** and your **dev server**, pushing both sides into one timestamped buffer so you can correlate a browser console error with the backend stack trace from the same moment. It runs two ways from a shared core:
