@@ -223,7 +223,7 @@ export const DevloopHero: React.FC = () => {
       <Sequence from={190} durationInFrames={100}>
         <SceneTimeline />
       </Sequence>
-      <Sequence from={285} durationInFrames={75}>
+      <Sequence from={285} durationInFrames={150}>
         <SceneOutro />
       </Sequence>
     </AbsoluteFill>
