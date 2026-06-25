@@ -82,15 +82,16 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      # Cache the EXTRACTED electron binary (see the selftest job) — a hit needs no download
+      # or extraction. Must mirror selftest's key/path so both jobs share the same cache.
       - name: Cache the Electron binary
         uses: actions/cache@v4
         with:
-          path: ~/Library/Caches/electron # @electron/get's default macOS download cache
-          key: ${{ runner.os }}-electron-v2-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-electron-v2-
-      # Install with bun FIRST, in a clean env — setup-node before this skips electron's
-      # binary postinstall (path.txt never gets written → electron.launch ENOENT).
-      - run: bun install --frozen-lockfile # electron postinstall via trustedDependencies
+          path: node_modules/electron
+          key: ${{ runner.os }}-electron-nm-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-electron-nm-
+      # --ignore-scripts: don't run electron's flaky postinstall; the guard below owns the binary.
+      - run: bun install --frozen-lockfile --ignore-scripts
       - name: Ensure the Electron binary is present
         run: |
           for i in 1 2 3; do
