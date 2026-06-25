@@ -1,0 +1,8 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- single-color "d" loop for menubar / template use. Tint via currentColor.
+       Counter is left open (no fill) so the mark reads in one color. -->
+  <g stroke="currentColor" fill="none" stroke-width="24" stroke-linecap="round">
+    <path d="M 174 56 L 174 196"/>
+    <circle cx="128" cy="150" r="46"/>
+  </g>
+</svg>

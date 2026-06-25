@@ -1,10 +1,19 @@
-<svg width="380" height="96" viewBox="0 0 380 96" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- mark (no plate) -->
-  <g transform="translate(12,12) scale(0.28)">
-    <path d="M 66 128 A 62 62 0 0 1 190 128" stroke="#79c0ff" stroke-width="22" stroke-linecap="round"/>
-    <path d="M 190 128 A 62 62 0 0 1 66 128" stroke="#d2a8ff" stroke-width="22" stroke-linecap="round"/>
-    <circle cx="128" cy="128" r="16" fill="#3fb950"/>
+<svg width="420" height="120" viewBox="0 0 420 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flow" x1="82" y1="80" x2="186" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#56d4dd"/>
+      <stop offset="1" stop-color="#588cff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- mark (no plate), the lowercase "d" loop -->
+  <g transform="translate(-21.6 6.88) scale(0.48)">
+    <path d="M 174 56 L 174 196" stroke="url(#flow)" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="128" cy="150" r="46" stroke="url(#flow)" stroke-width="24" fill="none"/>
+    <circle cx="128" cy="150" r="15" fill="#ffd33d"/>
   </g>
+
   <!-- wordmark -->
-  <text x="96" y="62" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="46" font-weight="600" fill="#c9d1d9">Devloop</text>
+  <text x="84" y="80" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="48" font-weight="600" letter-spacing="-1" fill="#c9d1d9">Devloop</text>
 </svg>
