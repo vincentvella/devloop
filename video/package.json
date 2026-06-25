@@ -1,0 +1,20 @@
+{
+  "name": "devloop-video",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Remotion source for the Devloop site hero loop",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render DevloopHero ../site/demo.mp4 --codec h264 && remotion render DevloopHero ../site/demo.webm --codec vp8 && remotion still DevloopHero ../site/demo-poster.png --frame 300"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "remotion": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.5.0"
+  }
+}
