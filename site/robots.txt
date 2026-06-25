@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://devloop.build/sitemap.xml

@@ -16,16 +16,24 @@
     "mcp",
     "model-context-protocol",
     "claude",
+    "claude-code",
+    "ai-agents",
     "devtools",
     "browser",
+    "browser-automation",
     "puppeteer",
     "electron",
     "logs",
-    "dev-server"
+    "dev-server",
+    "observability",
+    "expo",
+    "react-native",
+    "correlated-timeline",
+    "repro"
   ],
   "author": "Vincent Vella",
   "license": "MIT",
-  "homepage": "https://github.com/vincentvella/devloop#readme",
+  "homepage": "https://devloop.build",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vincentvella/devloop.git"

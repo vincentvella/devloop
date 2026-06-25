@@ -6,10 +6,47 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <title>Devloop — browser + dev-server logs on one timeline</title>
-    <meta name="description" content="Devloop drives a browser — or a native iOS/Android Expo app — and your dev server, putting both on one correlated timeline. An MCP server with a headless (stdio) mode, a shared HTTP/SSE daemon, and an Electron cockpit." />
-    <meta property="og:title" content="Devloop" />
-    <meta property="og:description" content="Browser + native (iOS/Android) control + dev-server logs on one correlated timeline — for AI agents and humans." />
+    <link rel="canonical" href="https://devloop.build/" />
+    <meta name="theme-color" content="#0d1117" />
+    <title>Devloop — browser + dev-server logs on one correlated timeline (MCP)</title>
+    <meta name="description" content="Devloop drives a browser — or a native iOS/Android Expo app — and your dev server, putting both on one correlated timeline so a browser console error and the backend stack trace from the same moment sit side by side. An MCP server with a headless (stdio) mode, a shared HTTP/SSE daemon, and an Electron cockpit, built for Claude Code and AI agents." />
+    <meta name="keywords" content="MCP server, model context protocol, browser automation, dev server logs, correlated timeline, Claude Code, AI agents, Puppeteer, Expo, React Native, observability, repro" />
+    <meta name="author" content="Vincent Vella" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Devloop" />
+    <meta property="og:url" content="https://devloop.build/" />
+    <meta property="og:title" content="Devloop — browser + dev-server logs on one timeline" />
+    <meta property="og:description" content="Browser + native (iOS/Android) control + dev-server logs on one correlated timeline — an MCP server for Claude Code, AI agents, and humans." />
+    <meta property="og:image" content="https://devloop.build/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Devloop — browser and dev-server logs on one correlated timeline" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Devloop — browser + dev-server logs on one timeline" />
+    <meta name="twitter:description" content="Browser + native control + dev-server logs on one correlated timeline — an MCP server for Claude Code, AI agents, and humans." />
+    <meta name="twitter:image" content="https://devloop.build/og.png" />
+
+    <!-- Structured data: software application -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Devloop",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS, Windows, Linux",
+      "description": "An MCP server that drives a browser (or a native iOS/Android Expo app) and your dev server, putting both on one correlated timeline. Headless stdio for Claude Code and AI agents, a shared HTTP/SSE daemon, and an Electron cockpit.",
+      "url": "https://devloop.build/",
+      "downloadUrl": "https://github.com/vincentvella/devloop/releases/latest",
+      "softwareHelp": "https://github.com/vincentvella/devloop#readme",
+      "license": "https://github.com/vincentvella/devloop/blob/main/LICENSE",
+      "author": { "@type": "Person", "name": "Vincent Vella" },
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    }
+    </script>
     <style>
       :root {
         --bg: #0d1117; --bg2: #161b22; --edge: #30363d; --fg: #c9d1d9; --dim: #8b949e;
@@ -51,10 +88,15 @@
   <body>
     <div class="wrap">
       <header>
-        <svg class="mark" width="96" height="96" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Devloop">
-          <path d="M 44 128 A 84 84 0 0 1 212 128" stroke="#79c0ff" stroke-width="28" stroke-linecap="round"/>
-          <path d="M 212 128 A 84 84 0 0 1 44 128" stroke="#d2a8ff" stroke-width="28" stroke-linecap="round"/>
-          <circle cx="128" cy="128" r="21" fill="#3fb950"/>
+        <svg class="mark" width="96" height="96" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Devloop">
+          <defs>
+            <linearGradient id="flow" x1="82" y1="80" x2="186" y2="196" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#56d4dd"/><stop offset="1" stop-color="#588cff"/>
+            </linearGradient>
+          </defs>
+          <path d="M 174 56 L 174 196" stroke="url(#flow)" stroke-width="24" stroke-linecap="round"/>
+          <circle cx="128" cy="150" r="46" stroke="url(#flow)" stroke-width="24" fill="none"/>
+          <circle cx="128" cy="150" r="15" fill="#ffd33d"/>
         </svg>
         <h1>Devloop</h1>
         <p class="tag">Browser control + dev-server logs on <strong>one correlated timeline</strong> — so a browser console error and the backend stack trace from the same moment sit side by side. For AI agents and humans.</p>
@@ -126,9 +168,36 @@ flowchart TD
         </pre>
       </section>
 
+      <section>
+        <h2>FAQ</h2>
+        <div class="grid">
+          <div class="card"><h3>How do I see browser console errors and backend logs together?</h3><p>Devloop timestamps your dev server's stdout/stderr and the browser's console, network, and page errors into one buffer, so a console error and the backend stack trace from the same moment line up on a single correlated timeline.</p></div>
+          <div class="card"><h3>Does it work with Claude Code and MCP?</h3><p>Yes. Devloop is an MCP server. Add it with <code>claude mcp add devloop --scope user -- npx -y devloop-mcp</code> and Claude Code can drive your browser and dev server and read both sides of the timeline.</p></div>
+          <div class="card"><h3>Can it drive a native iOS or Android app?</h3><p>Yes — it controls an Expo / React Native app on the iOS simulator or an Android emulator, with native logs and RN network on the same timeline and snapshot/tap via idb/adb.</p></div>
+          <div class="card"><h3>How is this different from Puppeteer or browser devtools?</h3><p>Those show only the browser side. Devloop correlates the browser with your dev-server logs (and native logs) on one clock, and exposes it to AI agents over MCP — so you debug cause and effect across the whole stack, not just the front end.</p></div>
+          <div class="card"><h3>What if MCP is blocked by an enterprise sandbox?</h3><p>Drive the same tools as plain shell commands via mcporter — see the <a href="https://github.com/vincentvella/devloop#when-mcp-is-blocked-enterprise-sandbox--drive-devloop-via-mcporter">mcporter guide</a>.</p></div>
+          <div class="card"><h3>Can multiple agents share one instance?</h3><p>Run <code>devloop-mcp daemon</code> and many agents or sessions share it over HTTP/SSE — one browser, one dev server, one timeline.</p></div>
+        </div>
+      </section>
+
       <footer>
         MIT © Vincent Vella · <a href="https://github.com/vincentvella/devloop">vincentvella/devloop</a>
       </footer>
+
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          { "@type": "Question", "name": "How do I see browser console errors and backend logs together?", "acceptedAnswer": { "@type": "Answer", "text": "Devloop timestamps your dev server's stdout/stderr and the browser's console, network, and page errors into one buffer, so a console error and the backend stack trace from the same moment line up on a single correlated timeline." } },
+          { "@type": "Question", "name": "Does it work with Claude Code and MCP?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Devloop is an MCP server. Add it with 'claude mcp add devloop --scope user -- npx -y devloop-mcp' and Claude Code can drive your browser and dev server and read both sides of the timeline." } },
+          { "@type": "Question", "name": "Can it drive a native iOS or Android app?", "acceptedAnswer": { "@type": "Answer", "text": "Yes — it controls an Expo / React Native app on the iOS simulator or an Android emulator, with native logs and RN network on the same timeline and snapshot/tap via idb/adb." } },
+          { "@type": "Question", "name": "How is this different from Puppeteer or browser devtools?", "acceptedAnswer": { "@type": "Answer", "text": "Those show only the browser side. Devloop correlates the browser with your dev-server logs (and native logs) on one clock, and exposes it to AI agents over MCP — so you debug cause and effect across the whole stack." } },
+          { "@type": "Question", "name": "What if MCP is blocked by an enterprise sandbox?", "acceptedAnswer": { "@type": "Answer", "text": "Drive the same tools as plain shell commands via mcporter — see the mcporter guide in the GitHub README." } },
+          { "@type": "Question", "name": "Can multiple agents share one instance?", "acceptedAnswer": { "@type": "Answer", "text": "Run 'devloop-mcp daemon' and many agents or sessions share it over HTTP/SSE — one browser, one dev server, one timeline." } }
+        ]
+      }
+      </script>
     </div>
     <script type="module">
       import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
