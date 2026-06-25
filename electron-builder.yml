@@ -19,34 +19,33 @@ files:
   - out/**/*
   - package.json
 
-# Vendor serve-sim (the iOS-simulator capture engine) so the embedded simulator
-# works offline with no bunx/npx/network. We run its ESM entry via Electron's own
-# Node (ELECTRON_RUN_AS_NODE) — no external runtime. The entry imports `ws` (and
-# `inspect-webkit`), so all three must ship in a real node_modules/ layout for ESM
-# resolution to find them. Lands unpacked (the arm64 Swift helper binary can't run
-# from inside asar) at Contents/Resources/node_modules/. Swift sources/READMEs dropped.
-extraResources:
-  - from: node_modules/serve-sim
-    to: node_modules/serve-sim
-    filter:
-      - "**/*"
-      - "!Sources/**"
-      - "!README.md"
-  - from: node_modules/ws
-    to: node_modules/ws
-    filter:
-      - "**/*"
-      - "!README.md"
-  - from: node_modules/inspect-webkit
-    to: node_modules/inspect-webkit
-    filter:
-      - "**/*"
-      - "!README.md"
-
 asar: true
 
 mac:
   icon: assets/icon.icns
+  # Vendor serve-sim (the iOS-simulator capture engine) so the embedded simulator works
+  # offline with no bunx/npx/network. macOS ONLY — iOS simulators need simctl/idb, so it's
+  # useless (and just bloat) on Windows/Linux. We run its ESM entry via Electron's own Node
+  # (ELECTRON_RUN_AS_NODE); the entry imports `ws` + `inspect-webkit`, so all three ship in a
+  # real node_modules/ layout for ESM resolution. Lands unpacked (the Swift helper binary
+  # can't run from inside asar) at Contents/Resources/node_modules/. Swift sources/READMEs dropped.
+  extraResources:
+    - from: node_modules/serve-sim
+      to: node_modules/serve-sim
+      filter:
+        - "**/*"
+        - "!Sources/**"
+        - "!README.md"
+    - from: node_modules/ws
+      to: node_modules/ws
+      filter:
+        - "**/*"
+        - "!README.md"
+    - from: node_modules/inspect-webkit
+      to: node_modules/inspect-webkit
+      filter:
+        - "**/*"
+        - "!README.md"
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false

@@ -680,8 +680,9 @@ async function nativeInfo(cwd: string) {
   const kind = detectTargetKind({ dependencies: deps, ...probe });
   if (kind !== "react-native") return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
   const webCapable = !!(deps["expo"] || deps["react-native-web"]); // Expo / RNW → has a Web target
+  const iosCapable = process.platform === "darwin"; // iOS simulator + idb are macOS-only
   const current = await computeFingerprint(cwd);
-  return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd), webCapable);
+  return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd), webCapable, iosCapable);
 }
 
 // --- boot ------------------------------------------------------------------

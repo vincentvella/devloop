@@ -48,8 +48,12 @@ test("resolveNativeInfo: managed RN project (no native dirs) still offers iOS", 
   expect(resolveNativeInfo("react-native", {}).platforms).toEqual(["ios"]);
 });
 
-test("resolveNativeInfo: view targets — web added only when webCapable, iOS + Android always", () => {
+test("resolveNativeInfo: view targets — web added only when webCapable, iOS gated to macOS", () => {
+  // webCapable + iosCapable (default true)
   expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, true).targets).toEqual(["web", "ios", "android"]);
   expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, false).targets).toEqual(["ios", "android"]);
+  // iosCapable=false (Windows/Linux) — no iOS target (simulator/idb are macOS-only)
+  expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, true, false).targets).toEqual(["web", "android"]);
+  expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, false, false).targets).toEqual(["android"]);
   expect(resolveNativeInfo("web", {}, null, null, true).targets).toEqual([]); // not native → no targets
 });

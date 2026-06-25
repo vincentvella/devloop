@@ -82,13 +82,15 @@ export function resolveNativeInfo(
   recordedFingerprint?: string | null,
   /** Whether the project can serve web (Expo / react-native-web) — adds the Web target. */
   webCapable = false,
+  /** Whether the host can drive iOS (simulator + idb are macOS-only) — adds the iOS target. */
+  iosCapable = true,
 ): NativeInfo {
   if (kind !== "react-native") return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
   const dirs = availablePlatforms(probe);
   const platforms: Platform[] = dirs.length ? dirs : ["ios"];
-  // Offer iOS + Android views; both prebuild on first `expo run:<platform>`. Readiness
-  // (idb / adb + a booted device) is surfaced separately so an unset SDK warns, not blocks.
-  const targets: ViewTarget[] = [...(webCapable ? (["web"] as ViewTarget[]) : []), "ios", "android"];
+  // Offer iOS (macOS only — simulator/idb) + Android views; both prebuild on first
+  // `expo run:<platform>`. Readiness (idb / adb + a booted device) is surfaced separately.
+  const targets: ViewTarget[] = [...(webCapable ? (["web"] as ViewTarget[]) : []), ...(iosCapable ? (["ios"] as ViewTarget[]) : []), "android"];
   const buildStatus = fingerprintStatus(currentFingerprint, recordedFingerprint);
   return { isNative: true, platforms, targets, buildStatus, badge: buildStatusLabel(buildStatus) };
 }
