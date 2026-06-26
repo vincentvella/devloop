@@ -17,7 +17,7 @@
 // and it just spams the timeline. (Set before any window/view is created.)
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
-import { app, BrowserWindow, ipcMain, dialog, nativeImage, session } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, nativeImage, session, shell } from "electron";
 import { execFileSync, execFile } from "node:child_process";
 import { mergePath, parseShellPath } from "../src/shellPath.ts";
 import { existsSync, writeFileSync, readFileSync, readdirSync, mkdtempSync } from "node:fs";
@@ -53,6 +53,7 @@ import { nativeEnvIssues, nativeEnvSummary, nativeEnvChecks, nativeEnvReady, typ
 import { adbBinary } from "../src/androidLog.ts";
 import { usableSerials, adbTapArgs, adbTextArgs, adbKeyeventArgs, androidKeycodeFor } from "../src/adb.ts";
 import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
+import { buildIssueUrl, blankIssueUrl, errorText } from "../src/crashReport.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
 const SELFTEST = process.env.DEVLOOP_SELFTEST === "1";
@@ -260,8 +261,16 @@ function createWindows(): void {
     log(`renderer: ${msg}`);
   });
   shellWin.webContents.on("preload-error", (_e, path, err) => log(`preload-error ${path}: ${err}`));
-  shellWin.webContents.on("render-process-gone", (_e, details) => log(`renderer gone: ${details.reason} (exitCode=${details.exitCode})`));
-  app.on("child-process-gone", (_e, details) => log(`child process gone: ${details.type}/${details.name ?? ""} ${details.reason} (exitCode=${details.exitCode})`));
+  shellWin.webContents.on("render-process-gone", (_e, details) => {
+    // A clean teardown on quit reports reason "clean-exit" — don't nag about that.
+    if (details.reason === "clean-exit") return log(`renderer exited cleanly`);
+    reportCrash("timeline renderer", `renderer gone: ${details.reason} (exitCode=${details.exitCode})`);
+  });
+  app.on("child-process-gone", (_e, details) => {
+    const who = `${details.type}/${details.name ?? ""}`.replace(/\/$/, "");
+    if (details.reason === "clean-exit") return log(`child process ${who} exited cleanly`);
+    reportCrash(`${who} process`, `child process gone: ${who} ${details.reason} (exitCode=${details.exitCode})`);
+  });
   // The timeline is the control surface — closing it tears the whole app down.
   shellWin.on("closed", () => quitHard());
   void shellWin.loadFile(join(BASE, "renderer/index.html"));
@@ -295,6 +304,16 @@ function wireIpc(): void {
   ipcMain.handle("devloop:updateDownload", () => updater?.download());
   ipcMain.handle("devloop:updateInstall", () => updater?.install());
   ipcMain.handle("devloop:openExtensions", () => openExtensionsWindow());
+  ipcMain.handle("devloop:reportBug", () =>
+    shell.openExternal(
+      blankIssueUrl({
+        appVersion: app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        electronVersion: process.versions.electron,
+      }),
+    ),
+  );
   ipcMain.handle("devloop:nativeInfo", (_e, cwd: string) => nativeInfo(cwd));
   ipcMain.handle("devloop:nativeBuild", (_e, cwd: string, platform: Platform) => doNativeBuild(platform, cwd));
   // Simulator: serve-sim's interactive MJPEG preview in a pane view (see doOpenSimulator).
@@ -1253,8 +1272,49 @@ function quitHard(): void {
   setTimeout(() => app.exit(0), 1200);
 }
 
-process.on("uncaughtException", (e) => log(`UNCAUGHT main exception: ${(e as Error).stack ?? e}`));
-process.on("unhandledRejection", (e) => log(`UNHANDLED main rejection: ${(e as Error)?.stack ?? e}`));
+// Crash → GitHub issue. No telemetry vendor: on a crash we offer to open a prefilled
+// issue (the user reviews + submits it, so nothing leaves the machine silently).
+// Debounced so a crash storm doesn't stack dialogs; quiet outside packaged builds
+// (dev/selftest just log the URL so CI never blocks on a modal).
+let crashPrompting = false;
+function reportCrash(kind: string, error: unknown): void {
+  log(`CRASH (${kind}): ${errorText(error)}`);
+  const url = buildIssueUrl({
+    kind,
+    error,
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    electronVersion: process.versions.electron,
+  });
+  if (!app.isPackaged || SELFTEST) {
+    log(`report this crash → ${url}`);
+    return;
+  }
+  if (crashPrompting) return;
+  crashPrompting = true;
+  void dialog
+    .showMessageBox(shellWin && !shellWin.isDestroyed() ? shellWin : undefined as never, {
+      type: "error",
+      title: "Devloop crashed",
+      message: `Devloop's ${kind} hit an unexpected error.`,
+      detail: "You can open a prefilled GitHub issue — review it (remove anything sensitive) and submit under your own account. Nothing is sent automatically.",
+      buttons: ["Report on GitHub…", "Ignore"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    })
+    .then((r) => {
+      if (r.response === 0) void shell.openExternal(url);
+    })
+    .catch((e) => log(`crash dialog failed: ${e}`))
+    .finally(() => {
+      crashPrompting = false;
+    });
+}
+
+process.on("uncaughtException", (e) => reportCrash("main process", e));
+process.on("unhandledRejection", (e) => reportCrash("main process (promise)", e));
 app.on("before-quit", cleanup);
 app.on("window-all-closed", quitHard);
 process.on("SIGTERM", () => {

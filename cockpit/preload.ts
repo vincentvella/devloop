@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("devloop", {
   updateDownload: () => ipcRenderer.invoke("devloop:updateDownload"),
   updateInstall: () => ipcRenderer.invoke("devloop:updateInstall"),
   openExtensions: () => ipcRenderer.invoke("devloop:openExtensions"),
+  reportBug: () => ipcRenderer.invoke("devloop:reportBug"),
   nativeInfo: (cwd: string) => ipcRenderer.invoke("devloop:nativeInfo", cwd),
   nativeBuild: (cwd: string, platform: string) => ipcRenderer.invoke("devloop:nativeBuild", cwd, platform),
   openSimulator: () => ipcRenderer.invoke("devloop:openSimulator"),

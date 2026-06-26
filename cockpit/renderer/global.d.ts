@@ -124,6 +124,7 @@ export interface DevloopApi {
   pick: () => Promise<string | null>;
   clearStorage: (opts?: { allOrigins?: boolean }) => Promise<void>;
   exportBundle: () => Promise<string | null>;
+  reportBug: () => Promise<void>;
   extList: () => Promise<Ext[]>;
   extInstall: (input: string) => Promise<Ext[]>;
   extLoadUnpacked: () => Promise<Ext[] | null>;

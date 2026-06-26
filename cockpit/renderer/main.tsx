@@ -26,6 +26,7 @@ import {
   ArrowRight,
   Crosshair,
   Eraser,
+  Bug,
 } from "lucide-react";
 import type { Entry, Pane, Project, Step } from "./global";
 import { useDevloopStore } from "./store";
@@ -1131,6 +1132,15 @@ function App() {
               <div className="modal-section">updates</div>
               <button className="labeled" title="check GitHub for a newer Devloop release" onClick={() => void dl().checkForUpdates()}>
                 <RefreshCw size={13} /> check for updates
+              </button>
+
+              <div className="modal-section">feedback</div>
+              <button
+                className="labeled"
+                title="open a prefilled bug report on GitHub (opens in your browser — review before submitting)"
+                onClick={() => void dl().reportBug()}
+              >
+                <Bug size={13} /> report a bug
               </button>
             </div>
           </Dialog.Content>
