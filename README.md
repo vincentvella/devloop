@@ -8,8 +8,11 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/devloop-mcp"><img alt="npm" src="https://img.shields.io/npm/v/devloop-mcp?color=cb3837&logo=npm" /></a>
+  <a href="https://github.com/vincentvella/devloop/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/vincentvella/devloop/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
   <a href="https://glama.ai/mcp/servers/vincentvella/devloop"><img alt="Glama score" src="https://glama.ai/mcp/servers/vincentvella/devloop/badges/score.svg" /></a>
   <a href="https://github.com/vincentvella/devloop/blob/main/LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue" /></a>
+  <a href="https://biomejs.dev"><img alt="Biome" src="https://img.shields.io/badge/code%20style-Biome-60a5fa?logo=biome&logoColor=white" /></a>
+  <a href="https://conventionalcommits.org"><img alt="Conventional Commits" src="https://img.shields.io/badge/commits-conventional-fe5196?logo=conventionalcommits&logoColor=white" /></a>
 </p>
 
 <p align="center">
@@ -311,11 +314,17 @@ cockpit/
   build.ts              Bun build for main/preload/renderer + Tailwind CLI step
 ```
 
-## Test
+## Test & checks
+
+CI gates every push and PR — **lint/format**, **types**, **unit**, **smoke**, **daemon**, **mcporter CLI**, the **cockpit selftest**, and the **GUI** end-to-end. Run the whole gate locally with `bun run test:all`, or piece by piece:
 
 ```sh
-bun run typecheck
+bun run check           # Biome lint + format check (the CI gate; `bun run format` to auto-fix)
+bun run typecheck       # tsc across core + renderer + gui
+bun test                # unit tests (pure logic)
 bun run test-smoke.ts   # headless Puppeteer: structured args, networkidle, repro sequence, abort
+bun run test:daemon     # HTTP/SSE daemon: two clients sharing one backend
+bun run test:mcporter   # the mcporter CLI path: `mcporter call devloop.<tool>` over HTTP
 bun run app:selftest    # headless Electron: substrate→buffer, tool layer, MCP-over-HTTP,
                         # renderer IPC, registry, multi-target panes + pop-out, auto-navigate,
                         # derived project name, per-pane dev (server-log tagging), app-scoped
@@ -324,6 +333,8 @@ bun run mcp-drive.ts    # live smoke test: drives a RUNNING cockpit over its MCP
                         # endpoint (start dev server → auto-navigate → verify the live app via
                         # browser_eval → app-scoped get_logs → screenshot). Cockpit must be up.
 ```
+
+New features are built **test-first** against this harness. Code is linted + formatted with [Biome](https://biomejs.dev) (`bun run check` / `bun run format`), and commits follow [Conventional Commits](https://www.conventionalcommits.org). See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full workflow, and **[SECURITY.md](SECURITY.md)** to report a vulnerability. Release history lives in **[CHANGELOG.md](CHANGELOG.md)**.
 
 ## Gotchas learned in the field
 
