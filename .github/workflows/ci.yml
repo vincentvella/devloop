@@ -56,7 +56,7 @@ jobs:
       # not just the download zip — extracting from the zip cache proved ~50% flaky. On a
       # hit there's no download AND no extraction. restore-keys reuses it across lockfile bumps.
       - name: Cache the Electron binary
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules/electron
           key: ${{ runner.os }}-electron-nm-${{ hashFiles('bun.lock') }}
@@ -87,7 +87,7 @@ jobs:
       # Cache the EXTRACTED electron binary (see the selftest job) — a hit needs no download
       # or extraction. Must mirror selftest's key/path so both jobs share the same cache.
       - name: Cache the Electron binary
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules/electron
           key: ${{ runner.os }}-electron-nm-${{ hashFiles('bun.lock') }}
