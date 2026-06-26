@@ -7,6 +7,12 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/devloop-mcp"><img alt="npm" src="https://img.shields.io/npm/v/devloop-mcp?color=cb3837&logo=npm" /></a>
+  <a href="https://glama.ai/mcp/servers/vincentvella/devloop"><img alt="Glama score" src="https://glama.ai/mcp/servers/vincentvella/devloop/badges/score.svg" /></a>
+  <a href="https://github.com/vincentvella/devloop/blob/main/LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue" /></a>
+</p>
+
+<p align="center">
   <a href="https://devloop.build"><img src="https://raw.githubusercontent.com/vincentvella/devloop/main/site/shots/cockpit.png" alt="The Devloop cockpit: a browser pane beside a unified, filterable timeline of correlated server and browser logs" width="820" /></a>
 </p>
 
