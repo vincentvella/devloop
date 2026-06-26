@@ -105,6 +105,6 @@ jobs:
           test -f node_modules/electron/path.txt
       - uses: actions/setup-node@v6
         with:
-          node-version: 24 # the driver runs under node (TS type-stripping needs >= 22.18)
+          node-version: 24.18.0 # the driver runs under node (TS type-stripping needs >= 22.18)
       - name: GUI end-to-end (Playwright + Electron)
         run: bun run app:gui
