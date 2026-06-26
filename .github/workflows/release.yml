@@ -12,7 +12,7 @@ jobs:
   verify-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: |
           TAG="${GITHUB_REF_NAME#v}"
           PKG="$(grep -m1 '"version"' package.json | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
@@ -32,7 +32,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: verify-version
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -70,7 +70,7 @@ jobs:
       id-token: write # mint the OIDC token npm verifies
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -100,7 +100,7 @@ jobs:
       id-token: write # mint the OIDC token the registry verifies
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install mcp-publisher
         run: |
           url=$(gh api repos/modelcontextprotocol/registry/releases/latest \
@@ -127,7 +127,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Promote the draft release to Latest
         run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest
         env:
