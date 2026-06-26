@@ -5,7 +5,7 @@
 # the MCP server starts and answers introspection (initialize + tools/list)
 # over stdio without launching Chrome, so this image needs only Node — no
 # Chromium download required.
-FROM node:22-slim
+FROM node:24-slim
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

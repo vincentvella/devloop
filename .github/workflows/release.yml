@@ -76,7 +76,7 @@ jobs:
           bun-version: latest
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
       - run: npm install -g npm@latest # Trusted Publishing needs npm >= 11.5.1
       - run: bun install --frozen-lockfile
       - run: bun run mcp:build
