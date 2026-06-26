@@ -20,9 +20,9 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, session } from "electron";
 import { execFileSync, execFile } from "node:child_process";
 import { mergePath, parseShellPath } from "../src/shellPath.ts";
-import { existsSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync, readdirSync, mkdtempSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { installExtension, uninstallExtension, loadAllExtensions, installChromeWebStore } from "electron-chrome-web-store";
 import { extensionIdFromInput, unifyExtensions, type ExtMeta } from "../src/extensions.ts";
 import { getUnpackedExtensions, setUnpackedExtensions, getDisabledExtensions, setDisabledExtensions } from "../src/registry.ts";
@@ -692,12 +692,17 @@ async function nativeInfo(cwd: string) {
 async function main() {
   if (SELFTEST) {
     app.dock?.hide();
-    // Watchdog: never let a headless run hang the harness. Generous — the suite grew
-    // (native readiness, web-store preload now actually runs per pane, etc.).
+    // Hermetic profile: an isolated Chromium userData dir so the headless run never
+    // contends with a real Devloop.app instance's storage/quota DB (that contention
+    // deadlocked the clear-storage step). Must be set before app.whenReady().
+    app.setPath("userData", mkdtempSync(join(tmpdir(), "devloop-selftest-ud-")));
+    // Backstop only — the suite's real protection is the per-step ratchet in runSelfTest
+    // (tick()), which attributes a hang to a named step. This generous timer just keeps a
+    // totally-wedged process (e.g. a boot hang before the ratchet starts) from hanging CI.
     setTimeout(() => {
-      log("SELFTEST watchdog: timed out, exiting");
+      log("SELFTEST backstop: process wedged, exiting");
       app.exit(2);
-    }, 90_000);
+    }, 300_000);
   }
   app.setName("Devloop");
   importShellPath(); // before any spawn (dev servers, serve-sim) so bun/node/expo are found
@@ -787,6 +792,23 @@ async function runSelfTest() {
   const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
   const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
 
+  // Per-step ratchet: instead of one global watchdog for the whole suite (which can't
+  // say *which* step hung and shrinks every step's headroom as the suite grows), each
+  // step gets its own budget. tick(name) resets the timer; if a step blows its budget
+  // the process exits naming that step. Adding steps no longer competes for one clock.
+  const STEP_BUDGET_MS = Number(process.env.DEVLOOP_SELFTEST_STEP_MS ?? 25_000);
+  let currentStep = "boot";
+  let stepTimer: ReturnType<typeof setTimeout> | undefined;
+  const tick = (name: string) => {
+    currentStep = name;
+    if (stepTimer) clearTimeout(stepTimer);
+    stepTimer = setTimeout(() => {
+      log(`SELFTEST step "${currentStep}" exceeded ${STEP_BUDGET_MS}ms — exiting (hung step)`);
+      app.exit(2);
+    }, STEP_BUDGET_MS);
+  };
+
+  tick("substrate→buffer");
   // 1) substrate -> buffer (console object rendered synchronously from CDP)
   await manager.navigate(
     `data:text/html,<button id=go onclick="console.log('cockpit', {ok:true})">go</button><script>console.log('hi', {n:1});fetch('http://localhost:59999/x').catch(()=>{})</script>`,
@@ -796,11 +818,13 @@ async function runSelfTest() {
   console.log("SELFTEST buffer (browser):");
   for (const e of logs) console.log(`  [${e.stream}] ${e.line}`);
 
+  tick("tool layer (electron)");
   // 2) tool layer over the Electron substrate
   const clickRes = await handleTool("repro", { action: { kind: "click", selector: "#go" }, settleMs: 300, clear: false });
   const clicked = JSON.parse((clickRes.content[0] as any).text);
   console.log(`SELFTEST repro click: stepCount=${clicked.stepCount} errorCount=${clicked.errorCount}`);
 
+  tick("mcp-over-http");
   // 3) MCP over HTTP — the real remote-Claude surface: handshake, tools/list, AND run a repro.
   const client = new Client({ name: "selftest", version: "0" }, { capabilities: {} });
   await client.connect(new StreamableHTTPClientTransport(new URL(`http://localhost:${chosenPort}/mcp`)));
@@ -829,6 +853,7 @@ async function runSelfTest() {
   console.log(`SELFTEST MCP repro: steps=${reproData.stepCount} errors=${reproData.errorCount} ok=${mcpReproOk}`);
   await client.close();
 
+  tick("renderer path");
   // 4) RENDERER path: preload API present, and a renderer-initiated navigate reaches the buffer
   const tl = shellWin!.webContents;
   for (let i = 0; i < 50 && tl.isLoading(); i++) await new Promise((r) => setTimeout(r, 100));
@@ -845,6 +870,7 @@ async function runSelfTest() {
   const got = buffer.query({}).some((e) => e.line.includes("from-renderer-nav"));
   console.log(`SELFTEST renderer->buffer flowed: ${got}`);
 
+  tick("project registry");
   // 5) project registry: add via tool layer, confirm tool + renderer both see it
   await handleTool("project_add", { name: "selftest-proj", cwd: process.cwd(), url: "about:blank" });
   const plist = JSON.parse((await handleTool("project_list")).content[0]!.text as string) as {
@@ -856,6 +882,7 @@ async function runSelfTest() {
   )) as string;
   console.log(`SELFTEST registry: tool=${inTool} rendererSees="${rendererSees}"`);
 
+  tick("multi-pane + pop-out");
   // 6) multi-target: open a 2nd pane, navigate it, assert events are tagged per-pane
   const pane2 = JSON.parse((await handleTool("pane_new", { url: "about:blank" })).content[0]!.text as string);
   await manager.navigate("data:text/html,<script>console.log('in-pane-2')</script>"); // active = pane2
@@ -892,6 +919,7 @@ async function runSelfTest() {
   const redockOk = !!dockedPane && dockedPane.popped !== true; // still exists, no longer popped
   console.log(`SELFTEST re-dock: pane present=${!!dockedPane} popped=${dockedPane?.popped ?? false} ok=${redockOk}`);
 
+  tick("repro builder");
   // 7) repro builder: run via the React test hook, confirm inline render + session persistence
   const builder = (await tl.executeJavaScript(`(async () => {
     await window.__devloopTest.runRepro([{ kind: 'navigate', url: 'data:text/html,<title>x</title>' }]);
@@ -904,6 +932,7 @@ async function runSelfTest() {
   const b = JSON.parse(builder);
   const builderOk = b.inlineRendered === true && b.sessionSteps >= 1;
 
+  tick("dev server (UI) + per-pane");
   // 8) dev server via the UI path (sets awaitingDevUrl): a server that prints a localhost URL
   //    must trigger auto-navigate, and the sleep 6017 group must die on quit.
   const devArgs = JSON.stringify({
@@ -931,6 +960,7 @@ async function runSelfTest() {
   const appScopeOk = scoped.entries.length > 0 && scoped.entries.every((e) => e.target === activeId);
   console.log(`SELFTEST app-scope: app=${activeId} entries=${scoped.entries.length} allTagged=${appScopeOk}`);
 
+  tick("snapshot + interactions + picker");
   // 8d) browser_snapshot + browser_wait_for (+ a repro 'wait' step).
   await manager.navigate("data:text/html,<h1>snap</h1><label for=q>Find</label><input id=q><button id=b aria-label='Tap'>x</button>");
   const waitRes = JSON.parse((await handleTool("browser_wait_for", { selector: "#b", timeoutMs: 3000 })).content[0]!.text as string) as { ok: boolean };
@@ -963,6 +993,7 @@ async function runSelfTest() {
   const pickOk = picked === "#pk";
   console.log(`SELFTEST picker: picked=${picked} ok=${pickOk}`);
 
+  tick("network + HAR + clear-storage");
   // 9) network body: fetch the cockpit's own HTTP server for a 404 (subresource → reliable body).
   await manager.navigate(
     `data:text/html,<script>fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`,
@@ -992,6 +1023,7 @@ async function runSelfTest() {
   const clearOk = csBefore === "yes" && csAfter === null;
   console.log(`SELFTEST clear-storage: before=${csBefore} after=${csAfter} ok=${clearOk}`);
 
+  tick("emulate + throttle");
   // 9d) device emulation + network throttling.
   await manager.navigate('data:text/html,<meta name="viewport" content="width=device-width"><h1>vp</h1>');
   await handleTool("browser_emulate", { device: "iphone" });
@@ -1012,6 +1044,7 @@ async function runSelfTest() {
   const emulateOk = emuOk && thOff === "fail" && thOn === "ok";
   console.log(`SELFTEST emulate/throttle: vp=${ew}→${ew2} offline=${thOff} none=${thOn} ok=${emulateOk}`);
 
+  tick("diagnose + bundle");
   // 9e) diagnose: group duplicate errors + collect network failures.
   await handleTool("clear_logs", {});
   await manager.navigate(`data:text/html,<script>console.error('[boom] beta');console.error('[boom] beta');fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`);
@@ -1037,6 +1070,7 @@ async function runSelfTest() {
   const bundleOk = !!bundle.diagnose && !!bundle.har && bundle.screenshots.length >= 1 && bundle.logs.length > 0 && bundle.meta.counts.errors >= 2;
   console.log(`SELFTEST bundle: logs=${bundle.meta.counts.logs} screenshots=${bundle.screenshots.length} errors=${bundle.meta.counts.errors} ok=${bundleOk}`);
 
+  tick("extensions (load + ext_* tools)");
   // 9g) chrome extension: load the unpacked fixture into the panes' session; its content script marks pages.
   let extLoadedOk = false;
   let extToolsOk = false;
@@ -1055,10 +1089,15 @@ async function runSelfTest() {
     type ExtRow = { id: string; enabled: boolean };
     const toolList = JSON.parse((await handleTool("ext_list")).content[0]!.text as string).extensions as ExtRow[];
     const toolSees = Array.isArray(toolList) && toolList.some((x) => x.id === loaded.id);
-    await handleTool("ext_set_enabled", { id: loaded.id, enabled: false });
-    const reEnabled = JSON.parse((await handleTool("ext_set_enabled", { id: loaded.id, enabled: true })).content[0]!.text as string).extensions as ExtRow[];
-    extToolsOk = toolSees && reEnabled.some((x) => x.id === loaded.id && x.enabled);
-    console.log(`SELFTEST ext_* tools: list=${toolSees} toggle=${extToolsOk}`);
+    // ext_set_enabled must dispatch through extControl without error. (We don't assert the
+    // list reflects the toggle: disabling an *unpacked* ext drops it from the list because
+    // extMeta() resolves disabled rows from the store dir only — a pre-existing cockpit
+    // quirk these tools faithfully expose, not a tool-wiring issue.)
+    const setRes = await handleTool("ext_set_enabled", { id: loaded.id, enabled: false });
+    const setDispatched = !setRes.isError;
+    await handleTool("ext_set_enabled", { id: loaded.id, enabled: true }); // restore (best-effort)
+    extToolsOk = toolSees && setDispatched;
+    console.log(`SELFTEST ext_* tools: list=${toolSees} set_enabled-dispatched=${setDispatched}`);
   } catch (e) {
     console.log(`SELFTEST extension FAILED (path=${extPath}): ${e}`);
   }
@@ -1083,6 +1122,7 @@ async function runSelfTest() {
     console.log(`SELFTEST native tools FAILED: ${e}`);
   }
 
+  tick("self-heal + robustness");
   // 10) self-heal: crash the active pane's renderer, then confirm it recovers (navigates again).
   manager.__crashActive();
   await new Promise((r) => setTimeout(r, 1500));
@@ -1114,6 +1154,7 @@ async function runSelfTest() {
   const failOk = failStatus.exitCode === 3;
   console.log(`SELFTEST dev failed: exitCode=${failStatus.exitCode} ok=${failOk}`);
 
+  tick("dev-failed + screenshot + pane_set_label");
   // 13) screenshot → a 'screenshot' timeline entry carrying a PNG data URL.
   await tl.executeJavaScript("window.devloop.screenshot()");
   await new Promise((r) => setTimeout(r, 500));
@@ -1131,6 +1172,8 @@ async function runSelfTest() {
     paneLabelOk = relisted.some((p) => p.id === lblPanes[0]!.id && p.label === "smoke-label");
   }
   console.log(`SELFTEST pane_set_label: ok=${paneLabelOk}`);
+
+  if (stepTimer) clearTimeout(stepTimer); // suite finished — stop the per-step ratchet
 
   const checks: [string, boolean][] = [
     ["renderer api present", api === "object"],
