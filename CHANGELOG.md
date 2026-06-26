@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.7.0] - 2026-06-26
+
+### Added
+
+- **In-app crash reporting (cockpit)** — uncaught errors (main process, renderer, or child-process crashes) offer to open a **prefilled GitHub issue** you review and submit under your own account. No telemetry vendor, nothing sent automatically. Plus a **Settings → report a bug** entry for filing one any time.
+
+### Changed
+
+- Adopted **[Biome](https://biomejs.dev)** as the single lint + format gate (`bun run check` / `bun run format`), wired into CI; Tailwind v4 CSS is linted too.
+- Dependency bumps: **Electron 42.5**, **Puppeteer 25.2**, **TypeScript 6**, **@modelcontextprotocol/sdk 1.29**, **Remotion 4.0.483**, **playwright-core 1.61.1**, **electron-builder 26.15.3**, cockpit UI (React / Radix / Tailwind / lucide-react), and **serve-sim 0.1.44**. Node engine is now **>=18.20.8**.
+
+### Tooling
+
+- **mcporter toolcall smoke** in CI — exercises the `mcporter call devloop.<tool>` CLI path that sandboxed / enterprise agents use, end-to-end over HTTP.
+- Dependency & intake tooling: scoped **Renovate**, a `bun audit` runtime gate, GitHub issue forms, and **MCP Registry auto-publish on release** (GitHub OIDC).
+
+### Docs
+
+- Added **SECURITY**, **CONTRIBUTING**, **CHANGELOG**, **CODE_OF_CONDUCT**, a **pull-request template**, and **CODEOWNERS**; README gains CI / Biome / Conventional-Commits badges and expanded dev docs.
+
 ## [0.6.2] - 2026-06-26
 
 ### Added
@@ -213,7 +233,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/vincentvella/devloop/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/vincentvella/devloop/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/vincentvella/devloop/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/vincentvella/devloop/compare/v0.5.2...v0.6.0

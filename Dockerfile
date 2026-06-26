@@ -11,7 +11,7 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Pinned to match server.json; bump alongside releases.
-RUN npm install -g devloop-mcp@0.6.2
+RUN npm install -g devloop-mcp@0.7.0
 
 # No args => stdio MCP server (the same command `claude mcp add` runs).
 ENTRYPOINT ["devloop-mcp"]
