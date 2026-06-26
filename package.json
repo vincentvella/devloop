@@ -73,7 +73,7 @@
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
-    "puppeteer": "^25.1.0"
+    "puppeteer": "^25.2.1"
   },
   "devDependencies": {
     "@jridgewell/gen-mapping": "^0.3.13",
