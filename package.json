@@ -77,7 +77,7 @@
   },
   "devDependencies": {
     "@jridgewell/gen-mapping": "^0.3.13",
-    "@modelcontextprotocol/sdk": "^1.18.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-dialog": "^1.1.17",
     "@radix-ui/react-dropdown-menu": "^2.1.18",
     "@radix-ui/react-tooltip": "^1.2.10",
