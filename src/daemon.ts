@@ -10,13 +10,14 @@
  * Same backend as the stdio entry (headless Puppeteer + a dev server), same env vars;
  * stderr is human-facing (no stdio MCP framing to protect here).
  */
-import { LogBuffer } from "./logBuffer.ts";
-import { DevServer } from "./devServer.ts";
+
 import { PuppeteerBrowserController } from "./browser.ts";
-import { configureTools } from "./toolLayer.ts";
-import { buildMcpServer } from "./mcpServer.ts";
+import { clearDaemonState, httpReachable, pidAlive, readDaemonState, writeDaemonState } from "./daemonState.ts";
+import { DevServer } from "./devServer.ts";
 import { startHttpMcp } from "./httpMcp.ts";
-import { writeDaemonState, clearDaemonState, readDaemonState, pidAlive, httpReachable } from "./daemonState.ts";
+import { LogBuffer } from "./logBuffer.ts";
+import { buildMcpServer } from "./mcpServer.ts";
+import { configureTools } from "./toolLayer.ts";
 
 const log = (m: string) => process.stderr.write(`[devloop-daemon] ${m}\n`);
 
@@ -68,7 +69,12 @@ export async function runDaemon(): Promise<void> {
   });
 
   // Advertise ourselves so stdio clients (and --status/--stop) can find us.
-  writeDaemonState({ pid: process.pid, port: bound, url: `http://localhost:${bound}/mcp`, startedAt: new Date().toISOString() });
+  writeDaemonState({
+    pid: process.pid,
+    port: bound,
+    url: `http://localhost:${bound}/mcp`,
+    startedAt: new Date().toISOString(),
+  });
   log("daemon ready — connect MCP clients via HTTP/SSE at /mcp");
 
   const shutdown = async () => {

@@ -105,7 +105,9 @@ function dismissSwitchNag(): void {
   }
   // The "Switch to Chrome to install extensions and themes" banner bar: from the
   // text leaf, walk up to the wide-but-short row that is the banner, and hide it.
-  const hit = [...document.querySelectorAll("*")].find((e) => e.children.length === 0 && /switch to chrome to install/i.test(e.textContent || ""));
+  const hit = [...document.querySelectorAll("*")].find(
+    (e) => e.children.length === 0 && /switch to chrome to install/i.test(e.textContent || ""),
+  );
   if (hit) {
     const minW = document.documentElement.clientWidth * 0.6;
     let bar: HTMLElement | null = hit as HTMLElement;

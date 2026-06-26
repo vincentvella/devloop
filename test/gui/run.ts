@@ -35,7 +35,8 @@ if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
 const { check, launchReady, results, run } = await import("./harness.ts");
 const { shellAndPanes, multiPane, popOut } = await import("./scenarios/panes.ts");
 const { devServerAndLogs, devServerStop } = await import("./scenarios/devServer.ts");
-const { logsFilter, screenshot, repro, manualNavigation, emulateThrottle, projectStorageIsolation, exports } = await import("./scenarios/timeline.ts");
+const { logsFilter, screenshot, repro, manualNavigation, emulateThrottle, projectStorageIsolation, exports } =
+  await import("./scenarios/timeline.ts");
 const { projectRegistry, settingsAndExtensions, storeInjectedButton } = await import("./scenarios/settings.ts");
 const { updateFeedback } = await import("./scenarios/updates.ts");
 const { persistence } = await import("./scenarios/persistence.ts");

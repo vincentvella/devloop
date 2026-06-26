@@ -4,7 +4,9 @@ import { LogBuffer } from "../src/logBuffer.ts";
 
 test("adbBinary prefers a real SDK platform-tools path, else falls back to PATH", () => {
   // No SDK roots set + bogus home → falls back to bare "adb".
-  expect(adbBinary({ ANDROID_HOME: "/nope", ANDROID_SDK_ROOT: "/nope2", HOME: "/nonexistent-home" } as any)).toBe("adb");
+  expect(adbBinary({ ANDROID_HOME: "/nope", ANDROID_SDK_ROOT: "/nope2", HOME: "/nonexistent-home" } as any)).toBe(
+    "adb",
+  );
 });
 
 test("AndroidLogStream parses spawned logcat into native buffer entries", () => {

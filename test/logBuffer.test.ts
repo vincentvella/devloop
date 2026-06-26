@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { LogBuffer } from "../src/logBuffer.ts";
 
 test("push assigns increasing seq and tracks latestSeq", () => {

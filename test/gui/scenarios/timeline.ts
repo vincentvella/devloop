@@ -1,8 +1,8 @@
-import type { ElectronApplication, Page } from "playwright-core";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { check, ctx, waitForActive, activePane } from "../harness.ts";
+import type { ElectronApplication, Page } from "playwright-core";
+import { activePane, check, ctx, waitForActive } from "../harness.ts";
 
 export async function logsFilter(_app: ElectronApplication, win: Page): Promise<void> {
   const filter = win.getByPlaceholder("filter (substring)…");
@@ -17,7 +17,9 @@ export async function logsFilter(_app: ElectronApplication, win: Page): Promise<
   await win.locator(".chips .fchip", { hasText: "network" }).click();
   await win.waitForTimeout(250);
   const rows = await win.locator("#list .logrow").count();
-  const allNetwork = await win.locator("#list .logrow .tag").evaluateAll((els) => els.length > 0 && els.every((e) => (e.textContent || "").includes("network")));
+  const allNetwork = await win
+    .locator("#list .logrow .tag")
+    .evaluateAll((els) => els.length > 0 && els.every((e) => (e.textContent || "").includes("network")));
   check("network chip shows only network rows", rows >= 1 && allNetwork, `rows=${rows}`);
   await win.locator(".chips .fchip", { hasText: "network" }).click();
 }
@@ -25,12 +27,18 @@ export async function logsFilter(_app: ElectronApplication, win: Page): Promise<
 export async function screenshot(_app: ElectronApplication, win: Page): Promise<void> {
   const before = await win.locator("#list .logrow .shot").count();
   await win.getByLabel("screenshot → timeline").click();
-  await win.waitForFunction((n) => document.querySelectorAll("#list .logrow .shot").length > n, before, { timeout: 15_000 });
+  await win.waitForFunction((n) => document.querySelectorAll("#list .logrow .shot").length > n, before, {
+    timeout: 15_000,
+  });
   check("screenshot lands as a thumbnail on the timeline", (await win.locator("#list .logrow .shot").count()) > before);
 }
 
 export async function repro(_app: ElectronApplication, win: Page): Promise<void> {
-  await win.locator(".chips, .filterbar").first().waitFor().catch(() => {});
+  await win
+    .locator(".chips, .filterbar")
+    .first()
+    .waitFor()
+    .catch(() => {});
   await win.locator("button.seg", { hasText: "repro" }).click(); // switch to the repro builder
   await win.locator("button.labeled", { hasText: "step" }).click(); // add a (navigate) step
   await win.locator(".steps input").first().fill(ctx.fixtureOrigin); // navigate target
@@ -76,7 +84,11 @@ export async function emulateThrottle(app: ElectronApplication, win: Page): Prom
   await selects.first().selectOption("iphone");
   await win.waitForTimeout(600);
   const narrow = (await inPane("window.innerWidth")) as number | null;
-  check("device picker → iPhone narrows the pane viewport", !!narrow && narrow > 0 && narrow <= 430, `innerWidth=${narrow}`);
+  check(
+    "device picker → iPhone narrows the pane viewport",
+    !!narrow && narrow > 0 && narrow <= 430,
+    `innerWidth=${narrow}`,
+  );
   await selects.first().selectOption("responsive");
   await win.waitForTimeout(600);
   const wide = (await inPane("window.innerWidth")) as number | null;
@@ -114,7 +126,13 @@ export async function projectStorageIsolation(app: ElectronApplication, win: Pag
     await win.waitForTimeout(400);
   };
   const setCwd = async (cwd: string) => {
-    await win.evaluate((c) => (window as unknown as { devloop: { setDevConfig(o: { cwd: string }): Promise<unknown> } }).devloop.setDevConfig({ cwd: c }), cwd);
+    await win.evaluate(
+      (c) =>
+        (window as unknown as { devloop: { setDevConfig(o: { cwd: string }): Promise<unknown> } }).devloop.setDevConfig(
+          { cwd: c },
+        ),
+      cwd,
+    );
     await win.waitForTimeout(900); // pane view is recreated on the new project's partition
   };
 
@@ -148,10 +166,16 @@ export async function exports(app: ElectronApplication, win: Page): Promise<void
   rmSync(harPath, { force: true });
   rmSync(htmlPath, { force: true });
   // Stub the native save dialog (Playwright can't drive native dialogs) to return known paths.
-  await app.evaluate(({ dialog }, paths) => {
-    let i = 0;
-    (dialog as unknown as { showSaveDialog: unknown }).showSaveDialog = async () => ({ canceled: false, filePath: paths[i++] });
-  }, [harPath, htmlPath]);
+  await app.evaluate(
+    ({ dialog }, paths) => {
+      let i = 0;
+      (dialog as unknown as { showSaveDialog: unknown }).showSaveDialog = async () => ({
+        canceled: false,
+        filePath: paths[i++],
+      });
+    },
+    [harPath, htmlPath],
+  );
   await win.getByTitle("export captured network as a HAR file").click();
   await win.waitForTimeout(800);
   check("HAR export writes a file", existsSync(harPath));

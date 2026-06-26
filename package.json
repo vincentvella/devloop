@@ -56,7 +56,11 @@
     "test:autoconnect": "bun run mcp:build && bun run scripts/test-daemon-autoconnect.ts",
     "test:mcporter": "bun run mcp:build && bun run scripts/test-mcporter.ts",
     "tools:audit": "bun run scripts/audit-tools.ts",
-    "test:all": "bun run typecheck && bun test && bun run test-smoke.ts && bun run app:selftest",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "test:all": "bun run check && bun run typecheck && bun test && bun run test-smoke.ts && bun run app:selftest",
     "typecheck": "tsc --noEmit && tsc -p cockpit/renderer/tsconfig.json && tsc -p test/gui/tsconfig.json",
     "mcp:build": "bun run scripts/build-mcp.ts",
     "app:build": "bun run cockpit/build.ts",
@@ -77,6 +81,7 @@
     "puppeteer": "^25.2.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@jridgewell/gen-mapping": "^0.3.13",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-dialog": "^1.1.17",

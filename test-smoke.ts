@@ -1,7 +1,8 @@
 /** Behavioral smoke test: drives the stdio (Puppeteer) server as a real MCP client. */
+
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { join } from "node:path";
 
 const transport = new StdioClientTransport({
   command: "bun",
@@ -34,13 +35,22 @@ await callText("browser_navigate", {
 });
 await sleep(400);
 const logs = await J("get_logs", { source: "browser" });
-check("structured console args resolved", logs.entries.some((e: any) => e.stream === "console" && e.line.includes("user") && e.line.includes('"id":7')));
-check("uncaught page error captured", logs.entries.some((e: any) => e.stream === "pageerror" && e.line.includes("kaboom")));
+check(
+  "structured console args resolved",
+  logs.entries.some((e: any) => e.stream === "console" && e.line.includes("user") && e.line.includes('"id":7')),
+);
+check(
+  "uncaught page error captured",
+  logs.entries.some((e: any) => e.stream === "pageerror" && e.line.includes("kaboom")),
+);
 
 // --- repro (networkidle) ---
 console.log("\n# repro + networkidle");
 const repro = await J("repro", {
-  action: { kind: "navigate", url: "data:text/html,<script>console.error('repro fail');fetch('https://127.0.0.1:1/nope').catch(()=>{})</script>" },
+  action: {
+    kind: "navigate",
+    url: "data:text/html,<script>console.error('repro fail');fetch('https://127.0.0.1:1/nope').catch(()=>{})</script>",
+  },
   waitFor: "networkidle",
   idleMs: 400,
   timeoutMs: 5000,
@@ -55,28 +65,50 @@ check("network entry has detail + request headers", !!nsample && !!nsample.detai
 const har = await J("export_har");
 // The full ring (#26) can include header-less responses (e.g. data: navigations), so assert
 // that SOME entry carries request headers rather than assuming the first one does.
-check("HAR has an entry with request headers", har.log.entries.length >= 1 && har.log.entries.some((e: any) => (e.request?.headers?.length ?? 0) > 0));
+check(
+  "HAR has an entry with request headers",
+  har.log.entries.length >= 1 && har.log.entries.some((e: any) => (e.request?.headers?.length ?? 0) > 0),
+);
 
 // --- snapshot + wait_for ---
 console.log("\n# snapshot + wait_for");
-await callText("browser_navigate", { url: `data:text/html,<h1>Title</h1><label for=q>Search</label><input id=q><button id=go aria-label="Go now">Go</button>` });
+await callText("browser_navigate", {
+  url: `data:text/html,<h1>Title</h1><label for=q>Search</label><input id=q><button id=go aria-label="Go now">Go</button>`,
+});
 const waitHit = await J("browser_wait_for", { selector: "#go" });
 const snap = await J("browser_snapshot");
 const byRole = (r: string) => snap.nodes.filter((n: any) => n.role === r);
 check("wait_for(hit) ok", waitHit.ok === true);
 check("snapshot has heading", byRole("heading").length > 0);
-check("snapshot resolves <label> name", byRole("textbox").some((n: any) => n.name === "Search"));
-check("snapshot resolves aria-label + #id ref", byRole("button").some((n: any) => n.name === "Go now" && n.ref === "#go"));
-check("wait_for(miss) returns ok:false", (await J("browser_wait_for", { selector: "#nope", timeoutMs: 600 })).ok === false);
+check(
+  "snapshot resolves <label> name",
+  byRole("textbox").some((n: any) => n.name === "Search"),
+);
+check(
+  "snapshot resolves aria-label + #id ref",
+  byRole("button").some((n: any) => n.name === "Go now" && n.ref === "#go"),
+);
+check(
+  "wait_for(miss) returns ok:false",
+  (await J("browser_wait_for", { selector: "#nope", timeoutMs: 600 })).ok === false,
+);
 
 // --- richer interactions ---
 console.log("\n# interactions");
-await callText("browser_navigate", { url: `data:text/html,<select id=s><option value=a>A</option><option value=b>B</option></select><input id=t onkeydown="if(event.key==='Enter')window.__p=1"><button id=h onmouseover="window.__h=1">h</button>` });
+await callText("browser_navigate", {
+  url: `data:text/html,<select id=s><option value=a>A</option><option value=b>B</option></select><input id=t onkeydown="if(event.key==='Enter')window.__p=1"><button id=h onmouseover="window.__h=1">h</button>`,
+});
 await callText("browser_select", { selector: "#s", value: "b" });
 await callText("browser_press", { key: "Enter", selector: "#t" });
 await callText("browser_hover", { selector: "#h" });
 await callText("browser_scroll", { y: 40 });
-const ixv = JSON.parse((await J("browser_eval", { expression: "JSON.stringify({sel:document.getElementById('s').value,pressed:!!window.__p,hovered:!!window.__h})" })).value);
+const ixv = JSON.parse(
+  (
+    await J("browser_eval", {
+      expression: "JSON.stringify({sel:document.getElementById('s').value,pressed:!!window.__p,hovered:!!window.__h})",
+    })
+  ).value,
+);
 check("select sets value", ixv.sel === "b");
 check("press fires keydown", ixv.pressed === true);
 check("hover fires mouseover", ixv.hovered === true);
@@ -87,7 +119,9 @@ check("clear_storage ok", (await J("browser_clear_storage")).ok === true);
 
 // --- device emulation ---
 console.log("\n# emulation");
-await callText("browser_navigate", { url: 'data:text/html,<meta name="viewport" content="width=device-width"><h1>vp</h1>' });
+await callText("browser_navigate", {
+  url: 'data:text/html,<meta name="viewport" content="width=device-width"><h1>vp</h1>',
+});
 await callText("browser_emulate", { device: "iphone" });
 const vp = JSON.parse((await J("browser_eval", { expression: "JSON.stringify({w:innerWidth})" })).value);
 check("emulate iphone → 390px viewport", vp.w === 390);
@@ -101,35 +135,69 @@ await callText("browser_navigate", { url: "data:text/html,<title>p1</title><h1>p
 await callText("browser_navigate", { url: "data:text/html,<title>p2</title><h1>p2</h1>" });
 await callText("browser_back");
 await sleep(200);
-check("browser_back returns to the previous page", (await J("browser_eval", { expression: "document.title" })).value === "p1");
+check(
+  "browser_back returns to the previous page",
+  (await J("browser_eval", { expression: "document.title" })).value === "p1",
+);
 await callText("browser_forward");
 await sleep(200);
-check("browser_forward advances to the next page", (await J("browser_eval", { expression: "document.title" })).value === "p2");
+check(
+  "browser_forward advances to the next page",
+  (await J("browser_eval", { expression: "document.title" })).value === "p2",
+);
 check("browser_reload ok", (await J("browser_reload")).ok === true);
 
 // --- diagnose (group/dedupe errors) ---
 console.log("\n# diagnose");
 await callText("clear_logs");
-await callText("browser_navigate", { url: "data:text/html,<script>console.error('[boom] alpha');console.error('[boom] alpha');setTimeout(()=>{throw new Error('DiagErr')},5)</script>" });
+await callText("browser_navigate", {
+  url: "data:text/html,<script>console.error('[boom] alpha');console.error('[boom] alpha');setTimeout(()=>{throw new Error('DiagErr')},5)</script>",
+});
 await sleep(300);
 const diag = await J("diagnose", {});
 check("diagnose counts errors", diag.errorCount >= 2);
-check("diagnose groups duplicates", diag.groups.some((g: any) => g.count >= 2));
+check(
+  "diagnose groups duplicates",
+  diag.groups.some((g: any) => g.count >= 2),
+);
 check("diagnose summary mentions errors", /error/i.test(diag.summary));
 
 // --- export_bundle ---
 console.log("\n# export_bundle");
 const bundle = await J("export_bundle", {});
-check("bundle has meta + diagnose + har + logs", !!bundle.meta && !!bundle.diagnose && !!bundle.har && bundle.logs.length > 0);
+check(
+  "bundle has meta + diagnose + har + logs",
+  !!bundle.meta && !!bundle.diagnose && !!bundle.har && bundle.logs.length > 0,
+);
 check("bundle counts the grouped errors", bundle.meta.counts.errors >= 2);
 
 // --- repro sequence + abort ---
 console.log("\n# repro sequence + abort");
 const formPage = `data:text/html,<input id=name><button id=go onclick="console.log('typed:'+document.getElementById('name').value)">go</button>`;
-const seq = await J("repro", { actions: [{ kind: "navigate", url: formPage }, { kind: "type", selector: "#name", text: "hello" }, { kind: "click", selector: "#go" }], settleMs: 400, stepSettleMs: 200 });
+const seq = await J("repro", {
+  actions: [
+    { kind: "navigate", url: formPage },
+    { kind: "type", selector: "#name", text: "hello" },
+    { kind: "click", selector: "#go" },
+  ],
+  settleMs: 400,
+  stepSettleMs: 200,
+});
 check("sequence ran all steps", seq.stepCount === 3 && seq.stoppedAtStep === null);
-check("sequence typed value reached the page", seq.entries.some((e: any) => e.stream === "console" && e.line.includes("typed:hello")));
-const abort = await J("repro", { actions: [{ kind: "navigate", url: formPage }, { kind: "click", selector: "#does-not-exist" }, { kind: "eval", expression: "999" }], settleMs: 300, stepSettleMs: 150, timeoutMs: 2000 });
+check(
+  "sequence typed value reached the page",
+  seq.entries.some((e: any) => e.stream === "console" && e.line.includes("typed:hello")),
+);
+const abort = await J("repro", {
+  actions: [
+    { kind: "navigate", url: formPage },
+    { kind: "click", selector: "#does-not-exist" },
+    { kind: "eval", expression: "999" },
+  ],
+  settleMs: 300,
+  stepSettleMs: 150,
+  timeoutMs: 2000,
+});
 check("sequence aborts at the failing step (eval skipped)", abort.stoppedAtStep === 1 && abort.stepCount === 2);
 
 // --- real dev-server lifecycle against the fixture ---
@@ -147,11 +215,17 @@ if (fxUrl) {
   await callText("browser_navigate", { url: fxUrl });
   await callText("browser_wait_for", { selector: "#go" });
   const fsnap = await J("browser_snapshot");
-  check("fixture page snapshot has the Submit button", fsnap.nodes.some((n: any) => n.ref === "#go" && n.name === "Submit form"));
+  check(
+    "fixture page snapshot has the Submit button",
+    fsnap.nodes.some((n: any) => n.ref === "#go" && n.name === "Submit form"),
+  );
   await callText("browser_eval", { expression: "fetch('/api/boom').catch(()=>{})" });
   await sleep(600);
   const fnet = await J("get_logs", { stream: "network", limit: 30 });
-  check("fixture /api/boom captured as 500 with body", fnet.entries.some((e: any) => (e.detail?.url ?? "").includes("/api/boom") && e.detail?.status === 500));
+  check(
+    "fixture /api/boom captured as 500 with body",
+    fnet.entries.some((e: any) => (e.detail?.url ?? "").includes("/api/boom") && e.detail?.status === 500),
+  );
 
   // #26 full network ring: a healthy 200 stays OFF the curated timeline (status < threshold)
   // but IS captured in the ring (get_network / HAR), independent of DEVLOOP_NET_THRESHOLD.
@@ -159,10 +233,19 @@ if (fxUrl) {
   await sleep(600);
   const timelineNet = await J("get_logs", { stream: "network", limit: 50 });
   const ringNet = await J("get_network", { grep: "/api/slow", limit: 50 });
-  check("healthy 200 absent from the curated timeline", !timelineNet.entries.some((e: any) => (e.detail?.url ?? "").includes("/api/slow")));
-  check("healthy 200 present in the full network ring (#26)", ringNet.some((e: any) => (e.url ?? "").includes("/api/slow") && e.status === 200));
+  check(
+    "healthy 200 absent from the curated timeline",
+    !timelineNet.entries.some((e: any) => (e.detail?.url ?? "").includes("/api/slow")),
+  );
+  check(
+    "healthy 200 present in the full network ring (#26)",
+    ringNet.some((e: any) => (e.url ?? "").includes("/api/slow") && e.status === 200),
+  );
   const har2 = await J("export_har");
-  check("HAR includes the sub-threshold request", har2.log.entries.some((e: any) => (e.request?.url ?? "").includes("/api/slow")));
+  check(
+    "HAR includes the sub-threshold request",
+    har2.log.entries.some((e: any) => (e.request?.url ?? "").includes("/api/slow")),
+  );
 
   // throttle: offline blocks a (local) fetch; none restores it
   await callText("browser_throttle", { profile: "offline" });
@@ -176,8 +259,13 @@ if (fxUrl) {
   await callText("clear_logs");
   await callText("browser_navigate", { url: fxUrl.replace(/\/$/, "") + "/sm" });
   await sleep(1200); // page error + async source-map fetch/resolve
-  const perr = (await J("get_logs", { stream: "pageerror", limit: 10 })).entries.find((e: any) => e.detail?.resolvedStack);
-  check("pageerror stack resolved to original source", !!perr && perr.detail.resolvedStack.some((f: any) => /sm-src/.test(f.source)));
+  const perr = (await J("get_logs", { stream: "pageerror", limit: 10 })).entries.find(
+    (e: any) => e.detail?.resolvedStack,
+  );
+  check(
+    "pageerror stack resolved to original source",
+    !!perr && perr.detail.resolvedStack.some((f: any) => /sm-src/.test(f.source)),
+  );
 }
 await callText("dev_stop");
 

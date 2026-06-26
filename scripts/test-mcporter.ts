@@ -13,7 +13,7 @@
  *   bun run scripts/test-mcporter.ts
  */
 import { spawn, spawnSync } from "node:child_process";
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -124,14 +124,13 @@ try {
 
   // 5. Cockpit-only gating is surfaced over the CLI (daemon has no panes).
   const gated = mcporter(["call", "devloop.pane_set_label", "id=x", "label=y", "--output", "json"]);
-  check(
-    "a cockpit-only tool reports cockpit-required over the CLI",
-    gated.isError && /cockpit/i.test(gated.stdout),
-  );
+  check("a cockpit-only tool reports cockpit-required over the CLI", gated.isError && /cockpit/i.test(gated.stdout));
 } finally {
   daemon.kill();
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log(fails.length ? `\nMCPORTER FAIL (${fails.length}): ${fails.join(", ")}` : "\nMCPORTER OK (all checks passed)");
+console.log(
+  fails.length ? `\nMCPORTER FAIL (${fails.length}): ${fails.join(", ")}` : "\nMCPORTER OK (all checks passed)",
+);
 process.exit(fails.length ? 1 : 0);

@@ -15,17 +15,25 @@ export async function updateFeedback(app: ElectronApplication, win: Page): Promi
 
   await send({ state: "available", version: "9.9.9" });
   await win.locator(".update-banner", { hasText: "Devloop 9.9.9 available" }).waitFor({ timeout: 8_000 });
-  check("update banner offers Download when an update is available", (await win.locator(".update-btn.primary", { hasText: "Download" }).count()) > 0);
+  check(
+    "update banner offers Download when an update is available",
+    (await win.locator(".update-btn.primary", { hasText: "Download" }).count()) > 0,
+  );
 
   await send({ state: "downloading", version: "9.9.9", percent: 42 });
   await win.locator(".update-banner", { hasText: "Downloading 9.9.9… 42%" }).waitFor({ timeout: 8_000 });
-  check("update banner shows a spinner + progress while downloading", (await win.locator(".update-spinner").count()) > 0 && (await win.locator(".update-progress-fill").count()) > 0);
+  check(
+    "update banner shows a spinner + progress while downloading",
+    (await win.locator(".update-spinner").count()) > 0 && (await win.locator(".update-progress-fill").count()) > 0,
+  );
 
   await send({ state: "downloaded", version: "9.9.9" });
   await win.locator(".update-btn.primary", { hasText: "Restart to install" }).waitFor({ timeout: 8_000 });
   check("update banner offers Restart when the update is ready", true);
 
   await send({ state: "idle" });
-  await win.waitForFunction(() => document.querySelectorAll(".update-banner").length === 0, undefined, { timeout: 8_000 });
+  await win.waitForFunction(() => document.querySelectorAll(".update-banner").length === 0, undefined, {
+    timeout: 8_000,
+  });
   check("update banner clears on idle", (await win.locator(".update-banner").count()) === 0);
 }

@@ -4,9 +4,9 @@
  * (default ~/.devloop/projects.json; override with DEVLOOP_HOME). Pure Node, no
  * Electron — shared by the stdio server and the cockpit.
  */
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 
 export interface ReproStep {
   kind: string;
@@ -110,7 +110,6 @@ export function setPanes(state: PanesState): void {
   writeFileSync(file("panes.json"), JSON.stringify(state, null, 2));
 }
 
-
 /** Native build fingerprint (from @expo/fingerprint) recorded per project dir at
  * last Devloop build, so we can detect when the installed binary is stale. */
 export function getProjectFingerprint(cwd: string): string | undefined {
@@ -134,7 +133,6 @@ export function setProjectFingerprint(cwd: string, hash: string): void {
   writeFileSync(file("fingerprints.json"), JSON.stringify(map, null, 2));
 }
 
-
 /** Paths of unpacked extensions to reload on launch (store extensions persist themselves). */
 export function getUnpackedExtensions(): string[] {
   try {
@@ -149,7 +147,6 @@ export function setUnpackedExtensions(paths: string[]): void {
   mkdirSync(dir(), { recursive: true });
   writeFileSync(file("unpacked-extensions.json"), JSON.stringify([...new Set(paths)], null, 2));
 }
-
 
 /** Extension ids the user toggled off — kept installed but not loaded. */
 export function getDisabledExtensions(): string[] {

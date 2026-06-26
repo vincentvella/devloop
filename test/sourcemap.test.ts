@@ -1,6 +1,6 @@
-import { test, expect } from "bun:test";
-import { parseStackFrames, createResolver, resolveStackString } from "../src/sourcemap.ts";
-import { GenMapping, addMapping, toEncodedMap } from "@jridgewell/gen-mapping";
+import { expect, test } from "bun:test";
+import { addMapping, GenMapping, toEncodedMap } from "@jridgewell/gen-mapping";
+import { createResolver, parseStackFrames, resolveStackString } from "../src/sourcemap.ts";
 
 test("parseStackFrames handles named and anonymous frames", () => {
   const stack = `Error: boom
@@ -18,7 +18,12 @@ test("parseStackFrames handles named and anonymous frames", () => {
 function jsWithInlineMap(): string {
   const gen = new GenMapping({ file: "app.js" });
   // generated (line 1, col 10) maps to original src/app.ts (line 5, col 2), name "boom"
-  addMapping(gen, { generated: { line: 1, column: 10 }, source: "src/app.ts", original: { line: 5, column: 2 }, name: "boom" });
+  addMapping(gen, {
+    generated: { line: 1, column: 10 },
+    source: "src/app.ts",
+    original: { line: 5, column: 2 },
+    name: "boom",
+  });
   const map = JSON.stringify(toEncodedMap(gen));
   const b64 = Buffer.from(map, "utf8").toString("base64");
   return `console.log(1);\n//# sourceMappingURL=data:application/json;base64,${b64}`;

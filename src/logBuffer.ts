@@ -78,15 +78,17 @@ export class LogBuffer {
     return out;
   }
 
-  query(opts: {
-    sinceSeq?: number;
-    grep?: string;
-    source?: LogSource;
-    stream?: string;
-    limit?: number;
-    /** Restrict to these pane targets (server + browser logs are both tagged per pane). */
-    targets?: string[];
-  } = {}): LogEntry[] {
+  query(
+    opts: {
+      sinceSeq?: number;
+      grep?: string;
+      source?: LogSource;
+      stream?: string;
+      limit?: number;
+      /** Restrict to these pane targets (server + browser logs are both tagged per pane). */
+      targets?: string[];
+    } = {},
+  ): LogEntry[] {
     const { sinceSeq, grep, source, stream, limit = 200, targets } = opts;
     let re: RegExp | undefined;
     if (grep) {

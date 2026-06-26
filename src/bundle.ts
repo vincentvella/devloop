@@ -3,12 +3,18 @@
  * captured screenshots, a HAR of network, and optional repro steps — as one JSON
  * object, or rendered to a self-contained HTML report. Pure over LogEntry[].
  */
-import type { LogEntry } from "./logBuffer.ts";
-import { diagnose, type DiagnoseResult } from "./diagnose.ts";
+
+import { type DiagnoseResult, diagnose } from "./diagnose.ts";
 import { toHar } from "./har.ts";
+import type { LogEntry } from "./logBuffer.ts";
 
 export interface Bundle {
-  meta: { createdAt: number; app?: string; windowMs: number | null; counts: { logs: number; errors: number; network: number; screenshots: number } };
+  meta: {
+    createdAt: number;
+    app?: string;
+    windowMs: number | null;
+    counts: { logs: number; errors: number; network: number; screenshots: number };
+  };
   diagnose: DiagnoseResult;
   logs: LogEntry[];
   har: unknown;
@@ -30,14 +36,26 @@ export function buildBundle(
     .filter((e) => e.stream === "screenshot" && (e.detail as { image?: string } | undefined)?.image)
     .map((e) => ({ ts: e.ts, target: e.target, image: (e.detail as { image: string }).image }));
   // Keep the logs copy light: pull screenshot image data out into `screenshots`.
-  const logs = considered.slice(-2000).map((e) =>
-    e.stream === "screenshot" && (e.detail as { image?: string } | undefined)?.image
-      ? { ...e, detail: { screenshot: true } }
-      : e,
-  );
+  const logs = considered
+    .slice(-2000)
+    .map((e) =>
+      e.stream === "screenshot" && (e.detail as { image?: string } | undefined)?.image
+        ? { ...e, detail: { screenshot: true } }
+        : e,
+    );
 
   return {
-    meta: { createdAt: now, app: opts.app, windowMs, counts: { logs: considered.length, errors: diag.errorCount, network: diag.network.length, screenshots: screenshots.length } },
+    meta: {
+      createdAt: now,
+      app: opts.app,
+      windowMs,
+      counts: {
+        logs: considered.length,
+        errors: diag.errorCount,
+        network: diag.network.length,
+        screenshots: screenshots.length,
+      },
+    },
     diagnose: diag,
     logs,
     har,
@@ -51,11 +69,26 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 /** Render a bundle to a single self-contained HTML report (inline CSS + base64 images). */
 export function bundleToHtml(b: Bundle): string {
   const d = b.diagnose;
-  const errorRows = d.groups.map((g) => `<tr><td>${g.count}×</td><td>${g.source}:${g.stream}</td><td>${esc(g.sample)}</td></tr>`).join("");
-  const netRows = d.network.map((n) => `<tr><td>${n.count}×</td><td>${n.status ?? esc(n.failure ?? "")}</td><td>${esc(n.method ?? "")}</td><td>${esc(n.url)}</td></tr>`).join("");
-  const shots = b.screenshots.map((s) => `<figure><figcaption>${new Date(s.ts).toISOString()}${s.target ? " · " + esc(s.target) : ""}</figcaption><img src="${s.image}"></figure>`).join("");
+  const errorRows = d.groups
+    .map((g) => `<tr><td>${g.count}×</td><td>${g.source}:${g.stream}</td><td>${esc(g.sample)}</td></tr>`)
+    .join("");
+  const netRows = d.network
+    .map(
+      (n) =>
+        `<tr><td>${n.count}×</td><td>${n.status ?? esc(n.failure ?? "")}</td><td>${esc(n.method ?? "")}</td><td>${esc(n.url)}</td></tr>`,
+    )
+    .join("");
+  const shots = b.screenshots
+    .map(
+      (s) =>
+        `<figure><figcaption>${new Date(s.ts).toISOString()}${s.target ? " · " + esc(s.target) : ""}</figcaption><img src="${s.image}"></figure>`,
+    )
+    .join("");
   const rows = b.logs
-    .map((e) => `<div class="row ${e.source}"><span class="ts">${new Date(e.ts).toISOString().slice(11, 23)}</span><span class="tag">${e.source}:${e.stream}</span> ${esc(e.line)}</div>`)
+    .map(
+      (e) =>
+        `<div class="row ${e.source}"><span class="ts">${new Date(e.ts).toISOString().slice(11, 23)}</span><span class="tag">${e.source}:${e.stream}</span> ${esc(e.line)}</div>`,
+    )
     .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>Devloop bug report</title>
 <style>

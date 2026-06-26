@@ -42,7 +42,15 @@ export function auditTool(tool: Tool): ToolAudit {
   for (const n of names) if (!documented.includes(n)) issues.push(`param "${n}" is missing a description`);
   if (!hasAnnotations) issues.push("no MCP annotations (set a readOnly/destructive/idempotent/openWorld hint)");
   if (desc.trim().length < MIN_TOOL_DESC) issues.push(`description is too short (<${MIN_TOOL_DESC} chars)`);
-  return { name: tool.name, paramCount: names.length, documentedParams: documented.length, coverage, hasAnnotations, descriptionLength: desc.length, issues };
+  return {
+    name: tool.name,
+    paramCount: names.length,
+    documentedParams: documented.length,
+    coverage,
+    hasAnnotations,
+    descriptionLength: desc.length,
+    issues,
+  };
 }
 
 export const auditTools = (tools: Tool[]): ToolAudit[] => tools.map(auditTool);

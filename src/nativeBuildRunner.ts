@@ -8,7 +8,7 @@
  * than in CI. The pure command derivation is in nativeBuild.ts (unit-tested);
  * the only pure bit here is the fingerprint eval args.
  */
-import { spawn, execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import type { LogBuffer } from "./logBuffer.ts";
 import { buildCommand, type Platform } from "./nativeBuild.ts";
 import { setProjectFingerprint } from "./registry.ts";

@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
-import { TOOLS, handleTool, configureTools, type ToolDeps } from "../src/toolLayer.ts";
 import { LogBuffer } from "../src/logBuffer.ts";
+import { configureTools, handleTool, TOOLS, type ToolDeps } from "../src/toolLayer.ts";
 
-const base = { buffer: new LogBuffer(10), browser: { kind: "web" } as never, devServer: {} as never } as unknown as ToolDeps;
+const base = {
+  buffer: new LogBuffer(10),
+  browser: { kind: "web" } as never,
+  devServer: {} as never,
+} as unknown as ToolDeps;
 const text = (r: { content: { text?: string }[] }) => r.content[0]!.text ?? "";
 
 test("native_open / native_close / native_build are listed as MCP tools", () => {

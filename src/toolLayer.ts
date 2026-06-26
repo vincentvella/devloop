@@ -7,16 +7,16 @@
  * touches the transport or knows which browser substrate is behind it.
  */
 
-import { type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { type LogBuffer, type LogSource } from "./logBuffer.ts";
-import { detectDevCommand, type DevServerLike } from "./devServer.ts";
-import { listProjects, addProject, removeProject, getProject } from "./registry.ts";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
-import type { ExtListItem } from "./extensions.ts";
-import { isToolSupported, unsupportedToolMessage, supports, type Capability } from "./target.ts";
-import { toHar } from "./har.ts";
-import { diagnose } from "./diagnose.ts";
 import { buildBundle } from "./bundle.ts";
+import { type DevServerLike, detectDevCommand } from "./devServer.ts";
+import { diagnose } from "./diagnose.ts";
+import type { ExtListItem } from "./extensions.ts";
+import { toHar } from "./har.ts";
+import type { LogBuffer, LogSource } from "./logBuffer.ts";
+import { addProject, getProject, listProjects, removeProject } from "./registry.ts";
+import { type Capability, isToolSupported, supports, unsupportedToolMessage } from "./target.ts";
 
 export interface ToolDeps {
   buffer: LogBuffer;
@@ -98,7 +98,8 @@ const ACTION_CAPABILITY: Record<ReproAction["kind"], Capability | null> = {
 async function performAction(a: ReproAction): Promise<unknown> {
   const { browser } = deps;
   const cap = ACTION_CAPABILITY[a.kind];
-  if (cap && !supports(browser.kind, cap)) throw new Error(`repro step "${a.kind}" is not supported on ${browser.kind} targets`);
+  if (cap && !supports(browser.kind, cap))
+    throw new Error(`repro step "${a.kind}" is not supported on ${browser.kind} targets`);
   switch (a.kind) {
     case "navigate":
       return browser.navigate(a.url!);
@@ -189,7 +190,9 @@ function resolveTargets(app: string | undefined): string[] | undefined {
   const panes = (b as IBrowserManager).listPanes();
   const q = app.toLowerCase();
   const exact = panes.filter((p) => p.label?.toLowerCase() === q || p.id.toLowerCase() === q);
-  const matched = exact.length ? exact : panes.filter((p) => p.label?.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+  const matched = exact.length
+    ? exact
+    : panes.filter((p) => p.label?.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
   if (!matched.length) throw new Error(`no pane/app matching "${app}" (see pane_list for labels)`);
   return matched.map((p) => p.id);
 }
@@ -230,7 +233,11 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       await browser.hover(args.selector as string);
       return json({ hovered: args.selector });
     case "browser_scroll":
-      await browser.scroll({ selector: args.selector as string | undefined, x: args.x as number | undefined, y: args.y as number | undefined });
+      await browser.scroll({
+        selector: args.selector as string | undefined,
+        x: args.x as number | undefined,
+        y: args.y as number | undefined,
+      });
       return json({ ok: true });
     case "browser_select":
       await browser.select(args.selector as string, args.value as string);
@@ -326,7 +333,9 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
     case "export_bundle": {
       const targets = resolveTargets(args.app as string | undefined);
       const entries = buffer.query({ targets, limit: 5000 });
-      return json(buildBundle(entries, { app: args.app as string | undefined, windowMs: args.windowMs as number | undefined }));
+      return json(
+        buildBundle(entries, { app: args.app as string | undefined, windowMs: args.windowMs as number | undefined }),
+      );
     }
     case "dev_start": {
       const proj = args.project ? getProject(args.project as string) : undefined;
@@ -340,16 +349,25 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
     case "dev_status":
       return json(devServer.status());
     case "native_open": {
-      if (!deps.nativeControl) throw new Error("native targets require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      if (!deps.nativeControl)
+        throw new Error(
+          "native targets require the Devloop cockpit (run the Electron app); the headless server is web-only",
+        );
       return json(await deps.nativeControl.open(args.platform as "ios" | "android"));
     }
     case "native_close": {
-      if (!deps.nativeControl) throw new Error("native targets require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      if (!deps.nativeControl)
+        throw new Error(
+          "native targets require the Devloop cockpit (run the Electron app); the headless server is web-only",
+        );
       await deps.nativeControl.close();
       return json({ ok: true });
     }
     case "native_build": {
-      if (!deps.nativeControl) throw new Error("native builds require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      if (!deps.nativeControl)
+        throw new Error(
+          "native builds require the Devloop cockpit (run the Electron app); the headless server is web-only",
+        );
       return json(await deps.nativeControl.build(args.platform as "ios" | "android", args.cwd as string | undefined));
     }
     case "project_list":
@@ -380,19 +398,31 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       asManager().setLabel(args.id as string, args.label as string);
       return json({ ok: true });
     case "ext_list": {
-      if (!deps.extControl) throw new Error("extensions require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      if (!deps.extControl)
+        throw new Error(
+          "extensions require the Devloop cockpit (run the Electron app); the headless server is web-only",
+        );
       return json({ extensions: await deps.extControl.list() });
     }
     case "ext_install": {
-      if (!deps.extControl) throw new Error("extensions require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      if (!deps.extControl)
+        throw new Error(
+          "extensions require the Devloop cockpit (run the Electron app); the headless server is web-only",
+        );
       return json({ extensions: await deps.extControl.install(args.input as string) });
     }
     case "ext_remove": {
-      if (!deps.extControl) throw new Error("extensions require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      if (!deps.extControl)
+        throw new Error(
+          "extensions require the Devloop cockpit (run the Electron app); the headless server is web-only",
+        );
       return json({ extensions: await deps.extControl.remove(args.id as string) });
     }
     case "ext_set_enabled": {
-      if (!deps.extControl) throw new Error("extensions require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      if (!deps.extControl)
+        throw new Error(
+          "extensions require the Devloop cockpit (run the Electron app); the headless server is web-only",
+        );
       return json({ extensions: await deps.extControl.setEnabled(args.id as string, args.enabled as boolean) });
     }
     case "repro": {

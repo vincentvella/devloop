@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import {
-  detectTargetKind,
   capabilitiesFor,
+  detectTargetKind,
+  isToolSupported,
   supports,
   toolCapability,
-  isToolSupported,
   unsupportedToolMessage,
 } from "../src/target.ts";
 
@@ -35,7 +35,16 @@ test("web supports every capability; react-native is observability + idb interac
     expect(supports("react-native", cap)).toBe(true);
   }
   // still web-only / not applicable to native
-  for (const cap of ["navigate", "hover", "select", "emulate", "throttle", "clearStorage", "waitFor", "waitForNetworkIdle"] as const) {
+  for (const cap of [
+    "navigate",
+    "hover",
+    "select",
+    "emulate",
+    "throttle",
+    "clearStorage",
+    "waitFor",
+    "waitForNetworkIdle",
+  ] as const) {
     expect(supports("react-native", cap)).toBe(false);
   }
 });

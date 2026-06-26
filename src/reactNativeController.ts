@@ -12,23 +12,23 @@
  * scripts/rn-harness.ts against a booted sim.
  */
 import type { IBrowserController } from "./browserController.ts";
-import type { PageSnapshot } from "./pageSnapshot.ts";
+import { pointFromRef } from "./idb.ts";
 import type { LogBuffer } from "./logBuffer.ts";
-import { attachResolvedStack } from "./sourcemap.ts";
+import type { NativeDriver } from "./nativeDriver.ts";
+import type { PageSnapshot } from "./pageSnapshot.ts";
 import {
-  selectHermesTarget,
-  isErrorConsoleType,
+  connectFailureMessage,
   consoleArgsToText,
   errorStackFromArgs,
-  inspectorListUrl,
-  connectFailureMessage,
   HERMES_BUSY_HINT,
   type InspectorTarget,
+  inspectorListUrl,
+  isErrorConsoleType,
   type RemoteObject,
+  selectHermesTarget,
 } from "./reactNative.ts";
-import { pointFromRef } from "./idb.ts";
-import type { NativeDriver } from "./nativeDriver.ts";
 import { NET_INTERCEPTOR_JS, parseNetMarker } from "./reactNativeNet.ts";
+import { attachResolvedStack } from "./sourcemap.ts";
 
 export interface ReactNativeOptions {
   /** Metro dev-server base, e.g. http://localhost:8082 */
@@ -86,7 +86,9 @@ export class ReactNativeController implements IBrowserController {
       const res = await this.fetch(inspectorListUrl(this.opts.metroBase));
       const list = (await res.json()) as InspectorTarget[];
       // Skip targets we've already found unresponsive (stale leftovers from a reload).
-      return selectHermesTarget(list.filter((t) => !t.webSocketDebuggerUrl || !this.deadTargets.has(t.webSocketDebuggerUrl)));
+      return selectHermesTarget(
+        list.filter((t) => !t.webSocketDebuggerUrl || !this.deadTargets.has(t.webSocketDebuggerUrl)),
+      );
     } catch {
       return null;
     }
@@ -111,7 +113,13 @@ export class ReactNativeController implements IBrowserController {
           sawTarget = true;
           await this.attach(wsUrl);
           if (await this.ping()) {
-            this.buffer.push("browser", "console", "[devloop] attached to React Native (Hermes) over CDP", undefined, this.opts.target);
+            this.buffer.push(
+              "browser",
+              "console",
+              "[devloop] attached to React Native (Hermes) over CDP",
+              undefined,
+              this.opts.target,
+            );
             // Inject the network interceptor (Hermes has no CDP Network domain) — the global
             // resets on reload, so (re)inject on every successful attach.
             void this.send("Runtime.evaluate", { expression: NET_INTERCEPTOR_JS, returnByValue: true });
@@ -128,7 +136,8 @@ export class ReactNativeController implements IBrowserController {
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
-      if (!this.closed) this.buffer.push("browser", "console", connectFailureMessage(sawTarget), undefined, this.opts.target);
+      if (!this.closed)
+        this.buffer.push("browser", "console", connectFailureMessage(sawTarget), undefined, this.opts.target);
     } finally {
       this.connecting = false;
     }
@@ -225,7 +234,13 @@ export class ReactNativeController implements IBrowserController {
   private onException(params: { exceptionDetails?: { text?: string; exception?: { description?: string } } }): void {
     const d = params.exceptionDetails;
     const stack = d?.exception?.description ?? d?.text ?? "uncaught exception";
-    const entry = this.buffer.push("browser", "pageerror", stack.split("\n")[0] ?? "uncaught exception", { stack }, this.opts.target);
+    const entry = this.buffer.push(
+      "browser",
+      "pageerror",
+      stack.split("\n")[0] ?? "uncaught exception",
+      { stack },
+      this.opts.target,
+    );
     if (stack) void attachResolvedStack(entry, stack);
   }
 
@@ -237,9 +252,12 @@ export class ReactNativeController implements IBrowserController {
       // Time out rather than hang forever if we attached to a stale/dead target
       // (seen live: a leftover target from before a reload accepts the socket but
       // never answers). Resolves undefined so callers degrade instead of wedging.
-      const timer = setTimeout(() => {
-        if (this.pending.delete(id)) resolve(undefined);
-      }, timeoutMs ?? this.opts.sendTimeoutMs ?? 8000);
+      const timer = setTimeout(
+        () => {
+          if (this.pending.delete(id)) resolve(undefined);
+        },
+        timeoutMs ?? this.opts.sendTimeoutMs ?? 8000,
+      );
       this.pending.set(id, (result) => {
         clearTimeout(timer);
         resolve(result);
@@ -280,7 +298,10 @@ export class ReactNativeController implements IBrowserController {
   // --- native interactions + snapshot (idb / adb via the driver) ------------
 
   private driver(): NativeDriver {
-    if (!this.opts.driver) throw new Error("native interactions need a device driver (idb + a booted simulator, or adb + an Android device)");
+    if (!this.opts.driver)
+      throw new Error(
+        "native interactions need a device driver (idb + a booted simulator, or adb + an Android device)",
+      );
     return this.opts.driver;
   }
 
@@ -291,7 +312,10 @@ export class ReactNativeController implements IBrowserController {
     const snap = await this.snapshot();
     const node = snap.nodes.find((n) => n.name === selector) ?? snap.nodes.find((n) => n.name.includes(selector));
     const p = node && pointFromRef(node.ref);
-    if (!p) throw new Error(`no native element matching "${selector}" (use a "pt:x,y" ref from browser_snapshot, or its accessibility label)`);
+    if (!p)
+      throw new Error(
+        `no native element matching "${selector}" (use a "pt:x,y" ref from browser_snapshot, or its accessibility label)`,
+      );
     return p;
   }
 

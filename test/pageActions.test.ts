@@ -1,5 +1,5 @@
-import { test, expect } from "bun:test";
-import { scrollJs, selectJs, focusJs, centerJs } from "../src/pageActions.ts";
+import { expect, test } from "bun:test";
+import { centerJs, focusJs, scrollJs, selectJs } from "../src/pageActions.ts";
 
 test("scrollJs targets a selector or window coords", () => {
   const sel = scrollJs({ selector: "#a" });

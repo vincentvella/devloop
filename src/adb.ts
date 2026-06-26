@@ -8,29 +8,71 @@
  * platform-agnostically. Arg builders + parsers are pure and unit-tested; the live
  * `adb` spawn is injected (CI has no emulator).
  */
-import type { PageSnapshot, SnapNode } from "./pageSnapshot.ts";
-import type { NativeLogLine } from "./iosSimulator.ts";
+
 import { pointRef } from "./idb.ts";
+import type { NativeLogLine } from "./iosSimulator.ts";
+import type { PageSnapshot, SnapNode } from "./pageSnapshot.ts";
 
 // --- adb arg builders (after `adb`) ----------------------------------------
 
 const dev = (serial: string): string[] => (serial && serial !== "any" ? ["-s", serial] : []);
 
-export const adbTapArgs = (serial: string, x: number, y: number): string[] => [...dev(serial), "shell", "input", "tap", String(Math.round(x)), String(Math.round(y))];
+export const adbTapArgs = (serial: string, x: number, y: number): string[] => [
+  ...dev(serial),
+  "shell",
+  "input",
+  "tap",
+  String(Math.round(x)),
+  String(Math.round(y)),
+];
 
 /** `input text` treats spaces specially — encode them as %s (the documented escape). */
-export const adbTextArgs = (serial: string, text: string): string[] => [...dev(serial), "shell", "input", "text", text.replace(/ /g, "%s")];
+export const adbTextArgs = (serial: string, text: string): string[] => [
+  ...dev(serial),
+  "shell",
+  "input",
+  "text",
+  text.replace(/ /g, "%s"),
+];
 
-export function adbSwipeArgs(serial: string, x1: number, y1: number, x2: number, y2: number, durationMs?: number): string[] {
-  const a = [...dev(serial), "shell", "input", "swipe", String(Math.round(x1)), String(Math.round(y1)), String(Math.round(x2)), String(Math.round(y2))];
+export function adbSwipeArgs(
+  serial: string,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  durationMs?: number,
+): string[] {
+  const a = [
+    ...dev(serial),
+    "shell",
+    "input",
+    "swipe",
+    String(Math.round(x1)),
+    String(Math.round(y1)),
+    String(Math.round(x2)),
+    String(Math.round(y2)),
+  ];
   if (durationMs && durationMs > 0) a.push(String(Math.round(durationMs)));
   return a;
 }
 
-export const adbKeyeventArgs = (serial: string, keycode: number): string[] => [...dev(serial), "shell", "input", "keyevent", String(keycode)];
+export const adbKeyeventArgs = (serial: string, keycode: number): string[] => [
+  ...dev(serial),
+  "shell",
+  "input",
+  "keyevent",
+  String(keycode),
+];
 
 /** uiautomator XML to stdout (we strip the trailing "dumped to" line). */
-export const adbUiDumpArgs = (serial: string): string[] => [...dev(serial), "exec-out", "uiautomator", "dump", "/dev/tty"];
+export const adbUiDumpArgs = (serial: string): string[] => [
+  ...dev(serial),
+  "exec-out",
+  "uiautomator",
+  "dump",
+  "/dev/tty",
+];
 
 /** PNG screenshot bytes to stdout. */
 export const adbScreencapArgs = (serial: string): string[] => [...dev(serial), "exec-out", "screencap", "-p"];
@@ -42,10 +84,31 @@ export const adbScreencapArgs = (serial: string): string[] => [...dev(serial), "
  * timeline IPC. Native logs parallel iOS — JS console already arrives over CDP — so
  * the default keeps warnings + errors and drops verbose chatter.
  */
-export const adbLogcatArgs = (serial: string, filterSpec: string[] = ["*:W"]): string[] => [...dev(serial), "logcat", "-v", "brief", "-T", "1", ...filterSpec];
+export const adbLogcatArgs = (serial: string, filterSpec: string[] = ["*:W"]): string[] => [
+  ...dev(serial),
+  "logcat",
+  "-v",
+  "brief",
+  "-T",
+  "1",
+  ...filterSpec,
+];
 
 /** Android KeyEvent codes for the keys browser_press exposes. */
-const KEYCODES: Readonly<Record<string, number>> = { Enter: 66, Return: 66, Tab: 61, Escape: 111, Backspace: 67, Space: 62, ArrowUp: 19, ArrowDown: 20, ArrowLeft: 21, ArrowRight: 22, Back: 4, Home: 3 };
+const KEYCODES: Readonly<Record<string, number>> = {
+  Enter: 66,
+  Return: 66,
+  Tab: 61,
+  Escape: 111,
+  Backspace: 67,
+  Space: 62,
+  ArrowUp: 19,
+  ArrowDown: 20,
+  ArrowLeft: 21,
+  ArrowRight: 22,
+  Back: 4,
+  Home: 3,
+};
 export const androidKeycodeFor = (key: string): number | null => KEYCODES[key] ?? null;
 
 // --- uiautomator dump → snapshot -------------------------------------------
@@ -73,7 +136,12 @@ export function parseUiAutomatorDump(xml: string, opts: { url?: string; title?: 
     const clickable = attrs.clickable === "true";
     if (!name && !clickable) continue;
     const role = (attrs.class || "node").split(".").pop() || "node";
-    const node: SnapNode = { ref: pointRef((x1 + x2) / 2, (y1 + y2) / 2), role, name: name.slice(0, NAMELEN), tag: "native" };
+    const node: SnapNode = {
+      ref: pointRef((x1 + x2) / 2, (y1 + y2) / 2),
+      role,
+      name: name.slice(0, NAMELEN),
+      tag: "native",
+    };
     if (attrs.enabled === "false") node.state = "disabled";
     nodes.push(node);
   }
@@ -83,7 +151,14 @@ export function parseUiAutomatorDump(xml: string, opts: { url?: string; title?: 
 // --- logcat parsing --------------------------------------------------------
 
 // `logcat -v brief` priority letter → our normalized level.
-const PRIORITY: Readonly<Record<string, string>> = { V: "debug", D: "debug", I: "info", W: "log", E: "error", F: "fault" };
+const PRIORITY: Readonly<Record<string, string>> = {
+  V: "debug",
+  D: "debug",
+  I: "info",
+  W: "log",
+  E: "error",
+  F: "fault",
+};
 
 /**
  * Parse a `logcat -v brief` line: "E/AndroidRuntime( 1234): message". Drops the
@@ -120,7 +195,10 @@ export function parseAdbDevices(stdout: string): AdbDevice[] {
 }
 
 /** Usable (state === "device") serials only. */
-export const usableSerials = (stdout: string): string[] => parseAdbDevices(stdout).filter((d) => d.state === "device").map((d) => d.serial);
+export const usableSerials = (stdout: string): string[] =>
+  parseAdbDevices(stdout)
+    .filter((d) => d.state === "device")
+    .map((d) => d.serial);
 
 /** Parse `adb shell wm size` → device pixels (prefers an Override over Physical size). */
 export function parseWmSize(stdout: string): { width: number; height: number } | null {

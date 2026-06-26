@@ -2,8 +2,9 @@
  * "What's broken right now" — group/dedupe error entries and collect network
  * failures from the buffer, with an agent-readable summary. Pure over LogEntry[].
  */
-import type { LogEntry } from "./logBuffer.ts";
+
 import type { NetDetail } from "./har.ts";
+import type { LogEntry } from "./logBuffer.ts";
 
 export interface ErrorGroup {
   source: string;
@@ -46,7 +47,8 @@ export function staleNativeBuildNote(groups: ErrorGroup[]): string | null {
   return `native build looks stale — a native module${mod ? ` ('${mod}')` : ""} the JS uses isn't in the running build. Rebuild (▶ Build / \`expo run:ios\`) so the binary matches the JS.`;
 }
 
-const isServerError = (e: LogEntry) => e.source === "server" && /error|exception|traceback|unhandled|fatal|\bpanic\b/i.test(e.line);
+const isServerError = (e: LogEntry) =>
+  e.source === "server" && /error|exception|traceback|unhandled|fatal|\bpanic\b/i.test(e.line);
 const isConsoleError = (e: LogEntry) => e.source === "browser" && e.stream === "console" && /\[error\]/i.test(e.line);
 const isPageError = (e: LogEntry) => e.stream === "pageerror";
 const isNetFailure = (e: LogEntry) => {
@@ -55,7 +57,8 @@ const isNetFailure = (e: LogEntry) => {
   return !!d && (!!d.failure || d.status === undefined || (d.status ?? 0) >= 400);
 };
 
-const signature = (e: LogEntry) => `${e.source}:${e.stream}:${e.line.replace(/\d+/g, "#").replace(/\s+/g, " ").trim().slice(0, 200)}`;
+const signature = (e: LogEntry) =>
+  `${e.source}:${e.stream}:${e.line.replace(/\d+/g, "#").replace(/\s+/g, " ").trim().slice(0, 200)}`;
 
 export function diagnose(entries: LogEntry[], opts: { windowMs?: number | null; now?: number } = {}): DiagnoseResult {
   const windowMs = opts.windowMs ?? null;
@@ -77,7 +80,15 @@ export function diagnose(entries: LogEntry[], opts: { windowMs?: number | null; 
     } else if (isPageError(e) || isConsoleError(e) || isServerError(e)) {
       errorCount++;
       const sig = signature(e);
-      const g = groups.get(sig) ?? { source: e.source, stream: e.stream, sample: e.line, count: 0, firstTs: e.ts, lastTs: e.ts, targets: [] };
+      const g = groups.get(sig) ?? {
+        source: e.source,
+        stream: e.stream,
+        sample: e.line,
+        count: 0,
+        firstTs: e.ts,
+        lastTs: e.ts,
+        targets: [],
+      };
       g.count++;
       g.firstTs = Math.min(g.firstTs, e.ts);
       g.lastTs = Math.max(g.lastTs, e.ts);

@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { defineTool } from "../src/defineTool.ts";
 
 test("defineTool composes the description and generates the schema + required", () => {

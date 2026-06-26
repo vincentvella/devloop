@@ -21,12 +21,11 @@
  */
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-
-import { LogBuffer } from "./logBuffer.ts";
-import { DevServer } from "./devServer.ts";
 import { PuppeteerBrowserController } from "./browser.ts";
-import { configureTools } from "./toolLayer.ts";
+import { DevServer } from "./devServer.ts";
+import { LogBuffer } from "./logBuffer.ts";
 import { buildMcpServer } from "./mcpServer.ts";
+import { configureTools } from "./toolLayer.ts";
 
 async function runStdio(): Promise<void> {
   const buffer = new LogBuffer(Number(process.env.DEVLOOP_LOG_CAPACITY ?? 5000));
@@ -85,7 +84,9 @@ async function main(): Promise<void> {
       await bridgeStdioToDaemon(state.url);
       return;
     } catch (err) {
-      process.stderr.write(`[devloop] shared mode unavailable (${err instanceof Error ? err.message : err}); using a local instance\n`);
+      process.stderr.write(
+        `[devloop] shared mode unavailable (${err instanceof Error ? err.message : err}); using a local instance\n`,
+      );
     }
   }
   await runStdio();

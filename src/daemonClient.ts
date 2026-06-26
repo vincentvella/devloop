@@ -8,13 +8,13 @@
  * Opt-in only (--shared or DEVLOOP_DAEMON=1); the default per-session behavior in
  * src/index.ts is untouched. Bridging always falls back to local on any failure.
  */
-import { spawn, type SpawnOptions } from "node:child_process";
+import { type SpawnOptions, spawn } from "node:child_process";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { type DaemonState, readDaemonState, clearDaemonState, pidAlive, httpReachable } from "./daemonState.ts";
+import { clearDaemonState, type DaemonState, httpReachable, pidAlive, readDaemonState } from "./daemonState.ts";
 
 const log = (m: string) => process.stderr.write(`[devloop] ${m}\n`);
 

@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { toHar } from "../src/har.ts";
 import type { LogEntry } from "../src/logBuffer.ts";
 
@@ -45,7 +45,9 @@ test("toHar builds HAR 1.2 entries from network logs and ignores non-network", (
 });
 
 test("toHar represents failures and request bodies", () => {
-  const har = toHar([net({ kind: "network", url: "http://x/b", method: "POST", failure: "net::ERR_FAILED", requestBody: "q=1" })]) as {
+  const har = toHar([
+    net({ kind: "network", url: "http://x/b", method: "POST", failure: "net::ERR_FAILED", requestBody: "q=1" }),
+  ]) as {
     log: { entries: any[] };
   };
   const e = har.log.entries[0];

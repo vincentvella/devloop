@@ -1,5 +1,20 @@
 import { expect, test } from "bun:test";
-import { adbTapArgs, adbTextArgs, adbSwipeArgs, adbKeyeventArgs, adbUiDumpArgs, adbScreencapArgs, adbLogcatArgs, androidKeycodeFor, parseUiAutomatorDump, parseLogcatLine, androidErrorLevel, parseAdbDevices, usableSerials, parseWmSize } from "../src/adb.ts";
+import {
+  adbKeyeventArgs,
+  adbLogcatArgs,
+  adbScreencapArgs,
+  adbSwipeArgs,
+  adbTapArgs,
+  adbTextArgs,
+  adbUiDumpArgs,
+  androidErrorLevel,
+  androidKeycodeFor,
+  parseAdbDevices,
+  parseLogcatLine,
+  parseUiAutomatorDump,
+  parseWmSize,
+  usableSerials,
+} from "../src/adb.ts";
 
 const S = "emulator-5554";
 
@@ -7,7 +22,18 @@ test("adb arg builders (serial-scoped; 'any' drops -s)", () => {
   expect(adbTapArgs(S, 100.6, 200)).toEqual(["-s", S, "shell", "input", "tap", "101", "200"]);
   expect(adbTextArgs(S, "hello world")).toEqual(["-s", S, "shell", "input", "text", "hello%sworld"]);
   expect(adbSwipeArgs(S, 200, 600, 200, 200)).toEqual(["-s", S, "shell", "input", "swipe", "200", "600", "200", "200"]);
-  expect(adbSwipeArgs(S, 200, 600, 200, 200, 300)).toEqual(["-s", S, "shell", "input", "swipe", "200", "600", "200", "200", "300"]);
+  expect(adbSwipeArgs(S, 200, 600, 200, 200, 300)).toEqual([
+    "-s",
+    S,
+    "shell",
+    "input",
+    "swipe",
+    "200",
+    "600",
+    "200",
+    "200",
+    "300",
+  ]);
   expect(adbKeyeventArgs(S, 66)).toEqual(["-s", S, "shell", "input", "keyevent", "66"]);
   expect(adbUiDumpArgs(S)).toEqual(["-s", S, "exec-out", "uiautomator", "dump", "/dev/tty"]);
   expect(adbScreencapArgs(S)).toEqual(["-s", S, "exec-out", "screencap", "-p"]);
@@ -44,8 +70,16 @@ test("parseUiAutomatorDump tolerates junk", () => {
 });
 
 test("parseLogcatLine handles brief format, banners, and fallback", () => {
-  expect(parseLogcatLine("E/AndroidRuntime( 1234): FATAL EXCEPTION: main")).toEqual({ level: "error", process: "AndroidRuntime", message: "FATAL EXCEPTION: main" });
-  expect(parseLogcatLine("I/ReactNativeJS( 555): running app")).toEqual({ level: "info", process: "ReactNativeJS", message: "running app" });
+  expect(parseLogcatLine("E/AndroidRuntime( 1234): FATAL EXCEPTION: main")).toEqual({
+    level: "error",
+    process: "AndroidRuntime",
+    message: "FATAL EXCEPTION: main",
+  });
+  expect(parseLogcatLine("I/ReactNativeJS( 555): running app")).toEqual({
+    level: "info",
+    process: "ReactNativeJS",
+    message: "running app",
+  });
   expect(parseLogcatLine("--------- beginning of main")).toBeNull();
   expect(parseLogcatLine("")).toBeNull();
   expect(parseLogcatLine("loose line")).toEqual({ level: "log", message: "loose line" });
@@ -55,7 +89,17 @@ test("parseLogcatLine handles brief format, banners, and fallback", () => {
 
 test("adbLogcatArgs starts from now (-T 1, no ring-buffer dump), defaults to warning+", () => {
   expect(adbLogcatArgs(S)).toEqual(["-s", S, "logcat", "-v", "brief", "-T", "1", "*:W"]);
-  expect(adbLogcatArgs(S, ["ReactNative:V", "*:E"])).toEqual(["-s", S, "logcat", "-v", "brief", "-T", "1", "ReactNative:V", "*:E"]);
+  expect(adbLogcatArgs(S, ["ReactNative:V", "*:E"])).toEqual([
+    "-s",
+    S,
+    "logcat",
+    "-v",
+    "brief",
+    "-T",
+    "1",
+    "ReactNative:V",
+    "*:E",
+  ]);
 });
 
 test("parseAdbDevices + usableSerials", () => {

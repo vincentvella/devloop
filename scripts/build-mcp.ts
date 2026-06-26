@@ -4,7 +4,7 @@
  * Chromium). Output gets a `#!/usr/bin/env node` shebang so `npx devloop-mcp` works
  * without bun installed.
  */
-import { rmSync, chmodSync } from "node:fs";
+import { chmodSync, rmSync } from "node:fs";
 
 rmSync("dist", { recursive: true, force: true });
 

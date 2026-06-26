@@ -4,9 +4,9 @@
  * guessing ports. Lives at $DEVLOOP_HOME/daemon.json (default ~/.devloop). Pure
  * Node; mirrors registry.ts's lazy DEVLOOP_HOME resolution.
  */
-import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 
 export interface DaemonState {
   pid: number;

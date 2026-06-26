@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { DEVICE_PRESETS, THROTTLE } from "../src/emulation.ts";
 
 test("device presets have sane mobile metrics", () => {

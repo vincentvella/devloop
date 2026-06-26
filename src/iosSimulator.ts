@@ -7,11 +7,10 @@
  * Pure parsing + arg builders are unit-tested; NativeLogStream takes an injected
  * spawn so the parse→buffer wiring is testable without a real simulator (CI has none).
  */
-import { spawn as nodeSpawn } from "node:child_process";
+import { execFile, spawn as nodeSpawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { execFile } from "node:child_process";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { LogBuffer } from "./logBuffer.ts";
 
 export interface NativeLogLine {
@@ -102,7 +101,14 @@ export class NativeLogStream {
     this.partial = lines.pop() ?? "";
     for (const line of lines) {
       const parsed = parseLogLine(line);
-      if (parsed) this.buffer.push("native", parsed.level, parsed.message, parsed.process ? { process: parsed.process } : undefined, this.opts.target);
+      if (parsed)
+        this.buffer.push(
+          "native",
+          parsed.level,
+          parsed.message,
+          parsed.process ? { process: parsed.process } : undefined,
+          this.opts.target,
+        );
     }
   }
 

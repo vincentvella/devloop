@@ -22,11 +22,14 @@ export interface NetDetail {
   failure?: string;
 }
 
-const pairs = (h?: Record<string, string>) => Object.entries(h ?? {}).map(([name, value]) => ({ name, value: String(value) }));
+const pairs = (h?: Record<string, string>) =>
+  Object.entries(h ?? {}).map(([name, value]) => ({ name, value: String(value) }));
 
 /** Build a HAR 1.2 object from the network entries in a set of log entries. */
 export function toHar(entries: LogEntry[]): unknown {
-  const net = entries.filter((e) => e.source === "browser" && e.stream === "network" && e.detail) as (LogEntry & { detail: NetDetail })[];
+  const net = entries.filter((e) => e.source === "browser" && e.stream === "network" && e.detail) as (LogEntry & {
+    detail: NetDetail;
+  })[];
   return {
     log: {
       version: "1.2",
@@ -47,7 +50,14 @@ export function toHar(entries: LogEntry[]): unknown {
             queryString: [],
             headersSize: -1,
             bodySize: reqBody ? reqBody.length : 0,
-            ...(reqBody ? { postData: { mimeType: d.requestHeaders?.["content-type"] ?? "application/octet-stream", text: reqBody } } : {}),
+            ...(reqBody
+              ? {
+                  postData: {
+                    mimeType: d.requestHeaders?.["content-type"] ?? "application/octet-stream",
+                    text: reqBody,
+                  },
+                }
+              : {}),
           },
           response: {
             status: d.status ?? 0,

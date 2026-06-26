@@ -1,9 +1,13 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { extensionIdFromInput, webStoreDetailId } from "../src/extensions.ts";
 
 test("webStoreDetailId extracts the id only from a detail URL", () => {
-  expect(webStoreDetailId("https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh")).toBe("eimadpbcbfnmbkopoojfekhnkhdbieeh");
-  expect(webStoreDetailId("https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh?hl=en")).toBe("eimadpbcbfnmbkopoojfekhnkhdbieeh");
+  expect(
+    webStoreDetailId("https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh"),
+  ).toBe("eimadpbcbfnmbkopoojfekhnkhdbieeh");
+  expect(
+    webStoreDetailId("https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh?hl=en"),
+  ).toBe("eimadpbcbfnmbkopoojfekhnkhdbieeh");
   expect(webStoreDetailId("https://chromewebstore.google.com/category/extensions/productivity")).toBeNull();
   expect(webStoreDetailId("https://chromewebstore.google.com/")).toBeNull();
 });
@@ -14,8 +18,14 @@ test("extensionIdFromInput accepts a raw id", () => {
 });
 
 test("extensionIdFromInput extracts the id from a Web Store URL", () => {
-  expect(extensionIdFromInput("https://chromewebstore.google.com/detail/react-developer-tools/fmkadmapgofadopljbjfkapdkoienihi")).toBe("fmkadmapgofadopljbjfkapdkoienihi");
-  expect(extensionIdFromInput("https://chromewebstore.google.com/detail/fmkadmapgofadopljbjfkapdkoienihi?hl=en")).toBe("fmkadmapgofadopljbjfkapdkoienihi");
+  expect(
+    extensionIdFromInput(
+      "https://chromewebstore.google.com/detail/react-developer-tools/fmkadmapgofadopljbjfkapdkoienihi",
+    ),
+  ).toBe("fmkadmapgofadopljbjfkapdkoienihi");
+  expect(extensionIdFromInput("https://chromewebstore.google.com/detail/fmkadmapgofadopljbjfkapdkoienihi?hl=en")).toBe(
+    "fmkadmapgofadopljbjfkapdkoienihi",
+  );
 });
 
 test("extensionIdFromInput rejects non-ids", () => {
@@ -41,5 +51,7 @@ test("unifyExtensions: loaded→enabled, disabled→disabled, sorted, loaded win
 
 test("unifyExtensions: empties", () => {
   expect(unifyExtensions([], [])).toEqual([]);
-  expect(unifyExtensions([{ id: "x", name: "X", version: "1" }], [])).toEqual([{ id: "x", name: "X", version: "1", enabled: true }]);
+  expect(unifyExtensions([{ id: "x", name: "X", version: "1" }], [])).toEqual([
+    { id: "x", name: "X", version: "1", enabled: true },
+  ]);
 });

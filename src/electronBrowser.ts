@@ -10,12 +10,12 @@
  */
 
 import type { WebContents } from "electron";
-import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
-import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
-import { scrollJs, selectJs, focusJs, centerJs, hoverJs, PICKER_JS } from "./pageActions.ts";
-import type { NetDetail } from "./har.ts";
 import { DEVICE_PRESETS, THROTTLE } from "./emulation.ts";
+import type { NetDetail } from "./har.ts";
+import type { LogBuffer, LogEntry } from "./logBuffer.ts";
+import { centerJs, focusJs, hoverJs, PICKER_JS, scrollJs, selectJs } from "./pageActions.ts";
+import { type PageSnapshot, SNAPSHOT_JS } from "./pageSnapshot.ts";
 import { attachResolvedStack } from "./sourcemap.ts";
 
 export interface ElectronBrowserOptions {
@@ -42,7 +42,14 @@ export class ElectronBrowserController implements IBrowserController {
   private lastDocStatus: number | null = null;
   private readonly requests = new Map<
     string,
-    { url: string; method: string; postData?: string; headers?: Record<string, string>; type?: string; startedAt: number }
+    {
+      url: string;
+      method: string;
+      postData?: string;
+      headers?: Record<string, string>;
+      type?: string;
+      startedAt: number;
+    }
   >();
   /** Network entries awaiting their response body (fetched on loadingFinished). */
   private readonly pendingBodies = new Map<string, LogEntry>();
@@ -147,7 +154,12 @@ export class ElectronBrowserController implements IBrowserController {
           requestBody: cap(req?.postData),
         };
         // Ring always (full capture, #26); timeline + body-fetch only for the curated subset.
-        const entry = this.buffer.network(`${status} ${req?.method ?? ""} ${params.response.url}`.trim(), detail, this.id, onTimeline);
+        const entry = this.buffer.network(
+          `${status} ${req?.method ?? ""} ${params.response.url}`.trim(),
+          detail,
+          this.id,
+          onTimeline,
+        );
         if (onTimeline) this.pendingBodies.set(params.requestId, entry); // body fetched on loadingFinished
         break;
       }
@@ -208,7 +220,10 @@ export class ElectronBrowserController implements IBrowserController {
     return Promise.race([
       p,
       new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(`${label} exceeded ${this.opts.actionTimeoutMs}ms`)), this.opts.actionTimeoutMs),
+        setTimeout(
+          () => reject(new Error(`${label} exceeded ${this.opts.actionTimeoutMs}ms`)),
+          this.opts.actionTimeoutMs,
+        ),
       ),
     ]);
   }
@@ -320,7 +335,15 @@ export class ElectronBrowserController implements IBrowserController {
     return (await this.wc.executeJavaScript(PICKER_JS, true)) as string | null;
   }
 
-  async emulate(opts: { device?: string; width?: number; height?: number; deviceScaleFactor?: number; mobile?: boolean; userAgent?: string; reset?: boolean }): Promise<void> {
+  async emulate(opts: {
+    device?: string;
+    width?: number;
+    height?: number;
+    deviceScaleFactor?: number;
+    mobile?: boolean;
+    userAgent?: string;
+    reset?: boolean;
+  }): Promise<void> {
     const dbg = this.wc.debugger;
     if (opts.reset) {
       await dbg.sendCommand("Emulation.clearDeviceMetricsOverride");
@@ -328,12 +351,18 @@ export class ElectronBrowserController implements IBrowserController {
       return;
     }
     const d = opts.device ? DEVICE_PRESETS[opts.device] : undefined;
-    if (opts.device && !d) throw new Error(`unknown device preset "${opts.device}" (have: ${Object.keys(DEVICE_PRESETS).join(", ")})`);
+    if (opts.device && !d)
+      throw new Error(`unknown device preset "${opts.device}" (have: ${Object.keys(DEVICE_PRESETS).join(", ")})`);
     const width = d?.width ?? opts.width;
     const height = d?.height ?? opts.height;
     if (!width || !height) throw new Error("emulate needs a device preset or width+height");
     const mobile = d?.mobile ?? opts.mobile ?? false;
-    await dbg.sendCommand("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: d?.deviceScaleFactor ?? opts.deviceScaleFactor ?? 1, mobile });
+    await dbg.sendCommand("Emulation.setDeviceMetricsOverride", {
+      width,
+      height,
+      deviceScaleFactor: d?.deviceScaleFactor ?? opts.deviceScaleFactor ?? 1,
+      mobile,
+    });
     await dbg.sendCommand("Emulation.setTouchEmulationEnabled", { enabled: mobile });
     const ua = d?.userAgent ?? opts.userAgent;
     if (ua) await dbg.sendCommand("Emulation.setUserAgentOverride", { userAgent: ua });
@@ -373,7 +402,11 @@ export class ElectronBrowserController implements IBrowserController {
     }
   }
 
-  async waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }> {
+  async waitFor(opts: {
+    selector?: string;
+    text?: string;
+    timeoutMs?: number;
+  }): Promise<{ ok: boolean; waitedMs: number }> {
     const timeout = opts.timeoutMs ?? 10_000;
     const start = Date.now();
     const check = opts.selector

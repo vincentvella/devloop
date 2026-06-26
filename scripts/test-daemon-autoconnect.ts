@@ -6,8 +6,8 @@
  * `daemon --status` / `daemon --stop` work. Run: `bun run scripts/test-daemon-autoconnect.ts`
  * (headless; needs the dist build — runs `bun run mcp:build` first).
  */
-import { spawnSync, execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -51,7 +51,18 @@ async function main(): Promise<void> {
   check("shared client A connects + lists tools", toolsA.tools.length > 0, `${toolsA.tools.length} tools`);
   check("a daemon state file was written", existsSync(stateFile));
   const pid1 = readPid();
-  check("state file has a live daemon pid", !!pid1 && (() => { try { process.kill(pid1!, 0); return true; } catch { return false; } })());
+  check(
+    "state file has a live daemon pid",
+    !!pid1 &&
+      (() => {
+        try {
+          process.kill(pid1!, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
+  );
 
   // a non-browser tool works through the bridge (reads the shared log buffer)
   const logs = await a.callTool({ name: "get_logs", arguments: {} });

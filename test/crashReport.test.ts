@@ -1,5 +1,5 @@
-import { test, expect } from "bun:test";
-import { buildIssueUrl, blankIssueUrl, crashTitle, envLine, errorText, type CrashContext } from "../src/crashReport.ts";
+import { expect, test } from "bun:test";
+import { blankIssueUrl, buildIssueUrl, type CrashContext, crashTitle, envLine, errorText } from "../src/crashReport.ts";
 
 const ctx: CrashContext = {
   kind: "main process",

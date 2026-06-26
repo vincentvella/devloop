@@ -17,43 +17,71 @@
 // and it just spams the timeline. (Set before any window/view is created.)
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
-import { app, BrowserWindow, ipcMain, dialog, nativeImage, session, shell } from "electron";
-import { execFileSync, execFile } from "node:child_process";
-import { mergePath, parseShellPath } from "../src/shellPath.ts";
-import { existsSync, writeFileSync, readFileSync, readdirSync, mkdtempSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
+import { execFile, execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { installExtension, uninstallExtension, loadAllExtensions, installChromeWebStore } from "electron-chrome-web-store";
-import { extensionIdFromInput, unifyExtensions, type ExtMeta } from "../src/extensions.ts";
-import { getUnpackedExtensions, setUnpackedExtensions, getDisabledExtensions, setDisabledExtensions } from "../src/registry.ts";
+import { dirname, join, resolve } from "node:path";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from "electron";
+import {
+  installChromeWebStore,
+  installExtension,
+  loadAllExtensions,
+  uninstallExtension,
+} from "electron-chrome-web-store";
+import { type ExtMeta, extensionIdFromInput, unifyExtensions } from "../src/extensions.ts";
 import { DEFAULT_PARTITION } from "../src/partition.ts";
+import {
+  getDisabledExtensions,
+  getUnpackedExtensions,
+  setDisabledExtensions,
+  setUnpackedExtensions,
+} from "../src/registry.ts";
+import { mergePath, parseShellPath } from "../src/shellPath.ts";
 
 // Where main.cjs/preload.cjs/renderer live. Bun inlines __dirname to the SOURCE dir,
 // so we can't use it. Packaged: <app.asar>/out via getAppPath(). Dev (`electron
 // out/main.cjs`): the dir of the script Electron actually ran.
 const BASE = app.isPackaged ? join(app.getAppPath(), "out") : dirname(resolve(process.argv[1] ?? "."));
 
-import { buildMcpServer } from "../src/mcpServer.ts";
-import { startHttpMcp } from "../src/httpMcp.ts";
-
-import { LogBuffer } from "../src/logBuffer.ts";
-import { projectName, type DevServerLike } from "../src/devServer.ts";
-import { handleTool, configureTools } from "../src/toolLayer.ts";
-import { listProjects, addProject, getProject, getSession, setSession, getPanes, getProjectFingerprint } from "../src/registry.ts";
-import { bundleToHtml } from "../src/bundle.ts";
-import { detectTargetKind } from "../src/target.ts";
-import { resolveNativeInfo, type Platform } from "../src/nativeBuild.ts";
-import { runNativeBuild, computeFingerprint } from "../src/nativeBuildRunner.ts";
-import { BrowserManager } from "./browserManager.ts";
-import { initAutoUpdate, type Updater } from "./updater.ts";
-import { ServeSim } from "./serveSim.ts";
-import { NativeObservability } from "./nativeObservability.ts";
-import { metroBaseFromUrl, deriveAppMatch } from "../src/nativeObservability.ts";
-import { nativeEnvIssues, nativeEnvSummary, nativeEnvChecks, nativeEnvReady, type NativeEnvProbe, androidEnvIssues, androidEnvSummary, androidEnvChecks, androidEnvReady, type AndroidEnvProbe } from "../src/nativeEnv.ts";
+import { adbKeyeventArgs, adbTapArgs, adbTextArgs, androidKeycodeFor, usableSerials } from "../src/adb.ts";
 import { adbBinary } from "../src/androidLog.ts";
-import { usableSerials, adbTapArgs, adbTextArgs, adbKeyeventArgs, androidKeycodeFor } from "../src/adb.ts";
 import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
-import { buildIssueUrl, blankIssueUrl, errorText } from "../src/crashReport.ts";
+import { bundleToHtml } from "../src/bundle.ts";
+import { blankIssueUrl, buildIssueUrl, errorText } from "../src/crashReport.ts";
+import { type DevServerLike, projectName } from "../src/devServer.ts";
+import { startHttpMcp } from "../src/httpMcp.ts";
+import { LogBuffer } from "../src/logBuffer.ts";
+import { buildMcpServer } from "../src/mcpServer.ts";
+import { type Platform, resolveNativeInfo } from "../src/nativeBuild.ts";
+import { computeFingerprint, runNativeBuild } from "../src/nativeBuildRunner.ts";
+import {
+  type AndroidEnvProbe,
+  androidEnvChecks,
+  androidEnvIssues,
+  androidEnvReady,
+  androidEnvSummary,
+  type NativeEnvProbe,
+  nativeEnvChecks,
+  nativeEnvIssues,
+  nativeEnvReady,
+  nativeEnvSummary,
+} from "../src/nativeEnv.ts";
+import { deriveAppMatch, metroBaseFromUrl } from "../src/nativeObservability.ts";
+import {
+  addProject,
+  getPanes,
+  getProject,
+  getProjectFingerprint,
+  getSession,
+  listProjects,
+  setSession,
+} from "../src/registry.ts";
+import { detectTargetKind } from "../src/target.ts";
+import { configureTools, handleTool } from "../src/toolLayer.ts";
+import { BrowserManager } from "./browserManager.ts";
+import { NativeObservability } from "./nativeObservability.ts";
+import { ServeSim } from "./serveSim.ts";
+import { initAutoUpdate, type Updater } from "./updater.ts";
 
 const PORT = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
 const SELFTEST = process.env.DEVLOOP_SELFTEST === "1";
@@ -78,7 +106,10 @@ function importShellPath(): void {
   try {
     const shell = process.env.SHELL || "/bin/zsh";
     const marker = "__DEVLOOP_PATH__";
-    const out = execFileSync(shell, ["-lic", `printf '%s' '${marker}'; printf '%s' "$PATH"`], { encoding: "utf8", timeout: 4000 });
+    const out = execFileSync(shell, ["-lic", `printf '%s' '${marker}'; printf '%s' "$PATH"`], {
+      encoding: "utf8",
+      timeout: 4000,
+    });
     const got = parseShellPath(out, marker);
     if (got) {
       process.env.PATH = mergePath(process.env.PATH, got);
@@ -101,7 +132,9 @@ function probeNativeEnv(): NativeEnvProbe {
   };
   let bootedSim = false;
   try {
-    bootedSim = /Booted/.test(execFileSync("xcrun", ["simctl", "list", "devices", "booted"], { encoding: "utf8", timeout: 5000 }));
+    bootedSim = /Booted/.test(
+      execFileSync("xcrun", ["simctl", "list", "devices", "booted"], { encoding: "utf8", timeout: 5000 }),
+    );
   } catch {
     /* no xcrun / Xcode */
   }
@@ -111,7 +144,9 @@ function probeNativeEnv(): NativeEnvProbe {
 /** Run `adb <args>` → stdout (async). adb is resolved via the SDK if not on PATH. */
 function runAdb(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(adbBinary(), args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(new Error(stderr || (err as Error).message)) : resolve(stdout)));
+    execFile(adbBinary(), args, { maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) =>
+      err ? reject(new Error(stderr || (err as Error).message)) : resolve(stdout),
+    );
   });
 }
 
@@ -154,11 +189,22 @@ async function doOpenSimulator(): Promise<{ ok: boolean; summary?: string }> {
   const issues = nativeEnvIssues(probeNativeEnv());
   if (issues.length) {
     log(`native env: ${nativeEnvSummary(probeNativeEnv())}`);
-    buffer.push("native", "log", `⚠ native interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`, undefined, active?.id);
+    buffer.push(
+      "native",
+      "log",
+      `⚠ native interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`,
+      undefined,
+      active?.id,
+    );
   }
   const metroBase = metroBaseFromUrl(active?.url);
   if (active && metroBase) {
-    const rn = observability.attach({ paneId: active.id, metroBase, device: "booted", appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined });
+    const rn = observability.attach({
+      paneId: active.id,
+      metroBase,
+      device: "booted",
+      appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined,
+    });
     manager.setNativeController(active.id, rn); // browser_* → the RN/idb controller while iOS is active
   } else {
     log("simulator: no Metro URL on the active pane — start its bundler to stream JS logs");
@@ -179,7 +225,13 @@ async function doOpenAndroid(): Promise<{ ok: boolean; summary?: string; serial?
   const active = manager.listPanes().find((p) => p.active);
   if (issues.length) {
     log(`android env: ${androidEnvSummary(probe)}`);
-    buffer.push("native", "log", `⚠ Android interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`, undefined, active?.id);
+    buffer.push(
+      "native",
+      "log",
+      `⚠ Android interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`,
+      undefined,
+      active?.id,
+    );
     if (!probe.adb || !probe.bootedDevice) return { ok: false, summary: androidEnvSummary(probe) };
   }
   const serial = firstAndroidSerial();
@@ -187,7 +239,12 @@ async function doOpenAndroid(): Promise<{ ok: boolean; summary?: string; serial?
   const metroBase = metroBaseFromUrl(active?.url);
   if (active) {
     // With Metro → JS over CDP too; without → still mirror + allow taps.
-    const rn = observability.attach({ paneId: active.id, metroBase: metroBase || "http://localhost:8081", device: serial, platform: "android" });
+    const rn = observability.attach({
+      paneId: active.id,
+      metroBase: metroBase || "http://localhost:8081",
+      device: serial,
+      platform: "android",
+    });
     manager.setNativeController(active.id, rn);
   }
   manager.setAndroidActive(true);
@@ -195,7 +252,10 @@ async function doOpenAndroid(): Promise<{ ok: boolean; summary?: string; serial?
   shellWin?.webContents.send("devloop:androidSize", size ?? { width: 1080, height: 2400 });
   androidStream?.stop();
   if (!process.env.DEVLOOP_NO_ANDROID_STREAM) {
-    androidStream = new AndroidScreenStream({ serial, onFrame: (b64) => shellWin?.webContents.send("devloop:androidFrame", b64) });
+    androidStream = new AndroidScreenStream({
+      serial,
+      onFrame: (b64) => shellWin?.webContents.send("devloop:androidFrame", b64),
+    });
     androidStream.start();
   }
   log(`android: mirroring ${serial}${metroBase ? ` (JS=${metroBase})` : ""}`);
@@ -234,7 +294,11 @@ let cleanedUp = false;
 
 // --- MCP over HTTP (stateful sessions) — shared transport with the daemon (#22) ---
 async function startHttp(): Promise<void> {
-  const { server, port } = await startHttpMcp({ buildServer: () => buildMcpServer("devloop-cockpit"), port: PORT, log });
+  const { server, port } = await startHttpMcp({
+    buildServer: () => buildMcpServer("devloop-cockpit"),
+    port: PORT,
+    log,
+  });
   httpServer = server;
   chosenPort = port;
 }
@@ -340,12 +404,14 @@ function wireIpc(): void {
   });
   ipcMain.handle("devloop:androidText", async (_e, text: string) => {
     const serial = firstAndroidSerial();
-    if (serial && text) await runAdb(adbTextArgs(serial, text)).catch((e) => log(`android text failed: ${(e as Error).message}`));
+    if (serial && text)
+      await runAdb(adbTextArgs(serial, text)).catch((e) => log(`android text failed: ${(e as Error).message}`));
   });
   ipcMain.handle("devloop:androidKey", async (_e, key: string) => {
     const serial = firstAndroidSerial();
     const code = androidKeycodeFor(key);
-    if (serial && code != null) await runAdb(adbKeyeventArgs(serial, code)).catch((e) => log(`android key failed: ${(e as Error).message}`));
+    if (serial && code != null)
+      await runAdb(adbKeyeventArgs(serial, code)).catch((e) => log(`android key failed: ${(e as Error).message}`));
   });
 
   // Per-pane dev lifecycle (top-bar controls act on the active pane).
@@ -371,7 +437,8 @@ function wireIpc(): void {
   ipcMain.handle("devloop:setBoundsFor", (_e, id: string, rect) => manager.setBoundsFor(id, rect));
   ipcMain.handle("devloop:screenshotFor", async (_e, id: string) => {
     const shot = await manager.screenshotFor(id);
-    if (shot.base64) buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, id);
+    if (shot.base64)
+      buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, id);
   });
   ipcMain.handle("devloop:pick", () => manager.pick());
   ipcMain.handle("devloop:clearStorage", (_e, opts) => manager.clearStorage(opts));
@@ -402,7 +469,10 @@ function wireIpc(): void {
   ipcMain.handle("devloop:extList", () => extList());
   ipcMain.handle("devloop:extInstall", (_e, input: string) => doExtInstall(String(input)));
   ipcMain.handle("devloop:extLoadUnpacked", async () => {
-    const r = await dialog.showOpenDialog(shellWin!, { properties: ["openDirectory"], title: "Select an unpacked extension folder" });
+    const r = await dialog.showOpenDialog(shellWin!, {
+      properties: ["openDirectory"],
+      title: "Select an unpacked extension folder",
+    });
     if (r.canceled || !r.filePaths[0]) return null;
     const dir = r.filePaths[0];
     const ext = await extSession().extensions.loadExtension(dir, { allowFileAccess: true });
@@ -418,7 +488,13 @@ function wireIpc(): void {
   ipcMain.handle("devloop:screenshot", async () => {
     const shot = await manager.screenshot(false);
     const active = manager.listPanes().find((p) => p.active);
-    buffer.push("browser", "screenshot", "screenshot", { image: `data:${shot.mimeType};base64,${shot.base64}` }, active?.id);
+    buffer.push(
+      "browser",
+      "screenshot",
+      "screenshot",
+      { image: `data:${shot.mimeType};base64,${shot.base64}` },
+      active?.id,
+    );
   });
   // #25 viewport/throttle picker → the same browser_emulate / browser_throttle the MCP tools drive.
   ipcMain.handle("devloop:emulate", (_e, opts: { device?: string; reset?: boolean }) => manager.emulate(opts ?? {}));
@@ -510,7 +586,12 @@ function openExtensionsWindow(): void {
     icon: [join(BASE, "../assets/icon.png"), join(BASE, "assets/icon.png")].find(existsSync),
     // Inject our own "Add to Devloop" button — Google greys the native "Add to
     // Chrome" for non-Chrome browsers, so we install via the direct-CRX path instead.
-    webPreferences: { partition: DEFAULT_PARTITION, contextIsolation: true, sandbox: false, preload: join(BASE, "extStorePreload.cjs") },
+    webPreferences: {
+      partition: DEFAULT_PARTITION,
+      contextIsolation: true,
+      sandbox: false,
+      preload: join(BASE, "extStorePreload.cjs"),
+    },
   });
   extWin.on("closed", () => (extWin = undefined));
   void extWin.loadURL(WEB_STORE_URL);
@@ -546,8 +627,12 @@ function extMeta(id: string): ExtMeta | null {
 
 /** Loaded extensions (enabled) + known-disabled ones, for the UI's toggle list. */
 const extList = () => {
-  const loaded = extSession().extensions.getAllExtensions().map((e) => ({ id: e.id, name: e.name, version: e.version }));
-  const disabled = getDisabledExtensions().map(extMeta).filter((m): m is ExtMeta => !!m);
+  const loaded = extSession()
+    .extensions.getAllExtensions()
+    .map((e) => ({ id: e.id, name: e.name, version: e.version }));
+  const disabled = getDisabledExtensions()
+    .map(extMeta)
+    .filter((m): m is ExtMeta => !!m);
   return unifyExtensions(loaded, disabled);
 };
 
@@ -564,7 +649,9 @@ async function prepareSession(partition: string): Promise<void> {
 }
 
 /** Run `fn` against every prepared session (so install/remove/toggle apply everywhere). */
-async function eachExtSession(fn: (ses: ReturnType<typeof session.fromPartition>) => Promise<void> | void): Promise<void> {
+async function eachExtSession(
+  fn: (ses: ReturnType<typeof session.fromPartition>) => Promise<void> | void,
+): Promise<void> {
   for (const partition of preparedPartitions) await fn(session.fromPartition(partition));
 }
 
@@ -654,7 +741,13 @@ async function setupExtensionsFor(ses: ReturnType<typeof session.fromPartition>)
     // modulePath → the lib loads its preload from `<BASE>/dist/chrome-web-store.preload.js`
     // (build.ts copies it there). Without it, the bundled lib resolves a non-existent
     // source path and every pane logs "Unable to load preload script".
-    await installChromeWebStore({ session: ses, extensionsPath: EXT_DIR, loadExtensions: false, allowUnpackedExtensions: true, modulePath: BASE });
+    await installChromeWebStore({
+      session: ses,
+      extensionsPath: EXT_DIR,
+      loadExtensions: false,
+      allowUnpackedExtensions: true,
+      modulePath: BASE,
+    });
   } catch (e) {
     log(`extensions: web store setup failed: ${e}`);
   }
@@ -700,7 +793,8 @@ async function nativeInfo(cwd: string) {
   }
   const probe = { hasIosDir: existsSync(join(cwd, "ios")), hasAndroidDir: existsSync(join(cwd, "android")) };
   const kind = detectTargetKind({ dependencies: deps, ...probe });
-  if (kind !== "react-native") return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
+  if (kind !== "react-native")
+    return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
   const webCapable = !!(deps["expo"] || deps["react-native-web"]); // Expo / RNW → has a Web target
   const iosCapable = process.platform === "darwin"; // iOS simulator + idb are macOS-only
   const current = await computeFingerprint(cwd);
@@ -747,7 +841,11 @@ async function main() {
       actionTimeoutMs: Number(process.env.DEVLOOP_ACTION_TIMEOUT ?? 10_000),
     },
     SELFTEST,
-    { indexPath: join(BASE, "renderer/index.html"), preloadPath: join(BASE, "preload.cjs"), simPreloadPath: join(BASE, "simPreload.cjs") },
+    {
+      indexPath: join(BASE, "renderer/index.html"),
+      preloadPath: join(BASE, "preload.cjs"),
+      simPreloadPath: join(BASE, "simPreload.cjs"),
+    },
     prepareSession, // #27: load extensions into each per-project session before its pane navigates
   );
   manager.attachTo(shellWin!);
@@ -839,7 +937,11 @@ async function runSelfTest() {
 
   tick("tool layer (electron)");
   // 2) tool layer over the Electron substrate
-  const clickRes = await handleTool("repro", { action: { kind: "click", selector: "#go" }, settleMs: 300, clear: false });
+  const clickRes = await handleTool("repro", {
+    action: { kind: "click", selector: "#go" },
+    settleMs: 300,
+    clear: false,
+  });
   const clicked = JSON.parse((clickRes.content[0] as any).text);
   console.log(`SELFTEST repro click: stepCount=${clicked.stepCount} errorCount=${clicked.errorCount}`);
 
@@ -877,9 +979,7 @@ async function runSelfTest() {
   const tl = shellWin!.webContents;
   for (let i = 0; i < 50 && tl.isLoading(); i++) await new Promise((r) => setTimeout(r, 100));
   const api = await tl.executeJavaScript("typeof window.devloop");
-  const methods = await tl.executeJavaScript(
-    "window.devloop ? Object.keys(window.devloop).join(',') : 'NONE'",
-  );
+  const methods = await tl.executeJavaScript("window.devloop ? Object.keys(window.devloop).join(',') : 'NONE'");
   console.log(`SELFTEST renderer api=${api} methods=${methods}`);
   const navJson = await tl.executeJavaScript(
     "window.devloop.navigate('data:text/html,<script>console.log(\\'from-renderer-nav\\')</script>').then(r=>JSON.stringify(r)).catch(e=>'ERR:'+e.message)",
@@ -911,7 +1011,9 @@ async function runSelfTest() {
   };
   const p2Event = buffer.query({}).find((e) => e.line.includes("in-pane-2"));
   const taggedRight = p2Event?.target === pane2.id;
-  console.log(`SELFTEST panes: count=${paneList.panes.length} pane2=${pane2.id} eventTarget=${p2Event?.target} tagged=${taggedRight}`);
+  console.log(
+    `SELFTEST panes: count=${paneList.panes.length} pane2=${pane2.id} eventTarget=${p2Event?.target} tagged=${taggedRight}`,
+  );
 
   // 6a) persistence: the open panes should be saved (for restore on relaunch)
   const persistedCount = getPanes().panes.length;
@@ -923,7 +1025,9 @@ async function runSelfTest() {
   const afterPop = JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as {
     panes: { id: string; popped?: boolean }[];
   };
-  const poppedInfo = afterPop.panes.find((p) => p.id === pane2.id) as { popped?: boolean; active?: boolean } | undefined;
+  const poppedInfo = afterPop.panes.find((p) => p.id === pane2.id) as
+    | { popped?: boolean; active?: boolean }
+    | undefined;
   // Popped pane stays ACTIVE so its config/controls persist (regression: gear cleared on pop-out).
   const popOk = poppedInfo?.popped === true && poppedInfo?.active === true;
   console.log(`SELFTEST pop-out: ${pane2.id} popped=${poppedInfo?.popped} stillActive=${poppedInfo?.active}`);
@@ -965,7 +1069,11 @@ async function runSelfTest() {
   const nameOk = devName === "devloop-mcp"; // package.json name of this repo
 
   // 8b) per-pane: the dev server's logs are tagged with the active pane; reload IPC works.
-  const activeId = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string; active: boolean }[] }).panes.find((p) => p.active)!.id;
+  const activeId = (
+    JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as {
+      panes: { id: string; active: boolean }[];
+    }
+  ).panes.find((p) => p.active)!.id;
   const serverTagged = buffer.query({ source: "server" }).some((e) => e.target === activeId);
   await tl.executeJavaScript("window.devloop.reload(false)");
   await tl.executeJavaScript("window.devloop.reload(true)");
@@ -973,7 +1081,9 @@ async function runSelfTest() {
   const perPaneOk = serverTagged;
 
   // 8c) app-scoped logs: get_logs({ app }) returns only that pane's entries.
-  const scoped = JSON.parse((await handleTool("get_logs", { app: activeId, limit: 500 })).content[0]!.text as string) as {
+  const scoped = JSON.parse(
+    (await handleTool("get_logs", { app: activeId, limit: 500 })).content[0]!.text as string,
+  ) as {
     entries: { target?: string }[];
   };
   const appScopeOk = scoped.entries.length > 0 && scoped.entries.every((e) => e.target === activeId);
@@ -981,14 +1091,30 @@ async function runSelfTest() {
 
   tick("snapshot + interactions + picker");
   // 8d) browser_snapshot + browser_wait_for (+ a repro 'wait' step).
-  await manager.navigate("data:text/html,<h1>snap</h1><label for=q>Find</label><input id=q><button id=b aria-label='Tap'>x</button>");
-  const waitRes = JSON.parse((await handleTool("browser_wait_for", { selector: "#b", timeoutMs: 3000 })).content[0]!.text as string) as { ok: boolean };
-  const snap = JSON.parse((await handleTool("browser_snapshot")).content[0]!.text as string) as { nodes: { ref: string; role: string; name: string }[] };
+  await manager.navigate(
+    "data:text/html,<h1>snap</h1><label for=q>Find</label><input id=q><button id=b aria-label='Tap'>x</button>",
+  );
+  const waitRes = JSON.parse(
+    (await handleTool("browser_wait_for", { selector: "#b", timeoutMs: 3000 })).content[0]!.text as string,
+  ) as { ok: boolean };
+  const snap = JSON.parse((await handleTool("browser_snapshot")).content[0]!.text as string) as {
+    nodes: { ref: string; role: string; name: string }[];
+  };
   const hasBtn = snap.nodes.some((n) => n.ref === "#b" && n.role === "button" && n.name === "Tap");
   const hasInput = snap.nodes.some((n) => n.ref === "#q" && n.role === "textbox" && n.name === "Find");
-  const reproWait = JSON.parse((await handleTool("repro", { action: { kind: "wait", selector: "#b", timeoutMs: 3000 }, waitFor: "settle", settleMs: 200 })).content[0]!.text as string) as { stepCount: number };
+  const reproWait = JSON.parse(
+    (
+      await handleTool("repro", {
+        action: { kind: "wait", selector: "#b", timeoutMs: 3000 },
+        waitFor: "settle",
+        settleMs: 200,
+      })
+    ).content[0]!.text as string,
+  ) as { stepCount: number };
   const snapshotOk = waitRes.ok && hasBtn && hasInput && reproWait.stepCount === 1;
-  console.log(`SELFTEST snapshot: nodes=${snap.nodes.length} waitOk=${waitRes.ok} btn=${hasBtn} input=${hasInput} reproWait=${reproWait.stepCount} ok=${snapshotOk}`);
+  console.log(
+    `SELFTEST snapshot: nodes=${snap.nodes.length} waitOk=${waitRes.ok} btn=${hasBtn} input=${hasInput} reproWait=${reproWait.stepCount} ok=${snapshotOk}`,
+  );
 
   // 8e) richer interactions: select / press / hover.
   await manager.navigate(
@@ -998,7 +1124,13 @@ async function runSelfTest() {
   await handleTool("browser_press", { key: "Enter", selector: "#t" });
   await handleTool("browser_hover", { selector: "#h" });
   const ixv = JSON.parse(
-    JSON.parse((await handleTool("browser_eval", { expression: "JSON.stringify({sel:document.getElementById('s').value,p:!!window.__p,h:!!window.__h})" })).content[0]!.text as string).value as string,
+    JSON.parse(
+      (
+        await handleTool("browser_eval", {
+          expression: "JSON.stringify({sel:document.getElementById('s').value,p:!!window.__p,h:!!window.__h})",
+        })
+      ).content[0]!.text as string,
+    ).value as string,
   ) as { sel: string; p: boolean; h: boolean };
   const ixOk = ixv.sel === "b" && ixv.p && ixv.h;
   console.log(`SELFTEST interactions: select=${ixv.sel === "b"} press=${ixv.p} hover=${ixv.h} ok=${ixOk}`);
@@ -1014,31 +1146,39 @@ async function runSelfTest() {
 
   tick("network + HAR + clear-storage");
   // 9) network body: fetch the cockpit's own HTTP server for a 404 (subresource → reliable body).
-  await manager.navigate(
-    `data:text/html,<script>fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`,
-  );
+  await manager.navigate(`data:text/html,<script>fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`);
   await new Promise((r) => setTimeout(r, 800));
   const net = buffer
     .query({ source: "browser", stream: "network" })
     .find((e) => (e.detail as { status?: number })?.status === 404);
   const body = (net?.detail as { responseBody?: string } | undefined)?.responseBody;
   const bodyOk = typeof body === "string" && body.includes("not found");
-  console.log(`SELFTEST network body: status=${(net?.detail as { status?: number })?.status} body=${JSON.stringify(body)}`);
+  console.log(
+    `SELFTEST network body: status=${(net?.detail as { status?: number })?.status} body=${JSON.stringify(body)}`,
+  );
 
   // 9b) enriched network detail + HAR export.
   const nd = net?.detail as { requestHeaders?: unknown; responseHeaders?: unknown; durationMs?: number } | undefined;
-  const har = JSON.parse((await handleTool("export_har", {})).content[0]!.text as string) as { log: { entries: { response?: { status?: number } }[] } };
+  const har = JSON.parse((await handleTool("export_har", {})).content[0]!.text as string) as {
+    log: { entries: { response?: { status?: number } }[] };
+  };
   const harHas404 = har.log.entries.some((en) => en.response?.status === 404);
   const harOk = !!nd?.requestHeaders && !!nd?.responseHeaders && har.log.entries.length >= 1 && harHas404;
-  console.log(`SELFTEST HAR: entries=${har.log.entries.length} 404=${harHas404} reqH=${!!nd?.requestHeaders} resH=${!!nd?.responseHeaders} ok=${harOk}`);
+  console.log(
+    `SELFTEST HAR: entries=${har.log.entries.length} 404=${harHas404} reqH=${!!nd?.requestHeaders} resH=${!!nd?.responseHeaders} ok=${harOk}`,
+  );
 
   // 9c) clear storage: set localStorage on a real http origin, clear, verify it's gone.
   await manager.navigate(`http://localhost:${chosenPort}/devloop-clear-test`);
   await new Promise((r) => setTimeout(r, 300));
   await handleTool("browser_eval", { expression: "localStorage.setItem('__cs','yes')" });
-  const csBefore = JSON.parse((await handleTool("browser_eval", { expression: "localStorage.getItem('__cs')" })).content[0]!.text as string).value as string | null;
+  const csBefore = JSON.parse(
+    (await handleTool("browser_eval", { expression: "localStorage.getItem('__cs')" })).content[0]!.text as string,
+  ).value as string | null;
   await handleTool("browser_clear_storage", {});
-  const csAfter = JSON.parse((await handleTool("browser_eval", { expression: "localStorage.getItem('__cs')" })).content[0]!.text as string).value as string | null;
+  const csAfter = JSON.parse(
+    (await handleTool("browser_eval", { expression: "localStorage.getItem('__cs')" })).content[0]!.text as string,
+  ).value as string | null;
   const clearOk = csBefore === "yes" && csAfter === null;
   console.log(`SELFTEST clear-storage: before=${csBefore} after=${csAfter} ok=${clearOk}`);
 
@@ -1046,35 +1186,56 @@ async function runSelfTest() {
   // 9d) device emulation + network throttling.
   await manager.navigate('data:text/html,<meta name="viewport" content="width=device-width"><h1>vp</h1>');
   await handleTool("browser_emulate", { device: "iphone" });
-  const ew = JSON.parse((await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string).value as string;
+  const ew = JSON.parse(
+    (await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string,
+  ).value as string;
   await handleTool("browser_emulate", { reset: true });
   // clearDeviceMetricsOverride is async — poll until the viewport actually resets
   // (reading too soon returns the stale emulated 390; was a recurring CI flake).
   let ew2 = "390";
   for (let i = 0; i < 15 && Number(ew2) <= 390; i++) {
     await new Promise((r) => setTimeout(r, 200));
-    ew2 = JSON.parse((await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string).value as string;
+    ew2 = JSON.parse(
+      (await handleTool("browser_eval", { expression: "String(innerWidth)" })).content[0]!.text as string,
+    ).value as string;
   }
   const emuOk = ew === "390" && Number(ew2) > 390;
   await handleTool("browser_throttle", { profile: "offline" });
-  const thOff = JSON.parse((await handleTool("browser_eval", { expression: `fetch('http://localhost:${chosenPort}/x').then(()=>'ok').catch(()=>'fail')` })).content[0]!.text as string).value as string;
+  const thOff = JSON.parse(
+    (
+      await handleTool("browser_eval", {
+        expression: `fetch('http://localhost:${chosenPort}/x').then(()=>'ok').catch(()=>'fail')`,
+      })
+    ).content[0]!.text as string,
+  ).value as string;
   await handleTool("browser_throttle", { profile: "none" });
-  const thOn = JSON.parse((await handleTool("browser_eval", { expression: `fetch('http://localhost:${chosenPort}/x').then(()=>'ok').catch(()=>'fail')` })).content[0]!.text as string).value as string;
+  const thOn = JSON.parse(
+    (
+      await handleTool("browser_eval", {
+        expression: `fetch('http://localhost:${chosenPort}/x').then(()=>'ok').catch(()=>'fail')`,
+      })
+    ).content[0]!.text as string,
+  ).value as string;
   const emulateOk = emuOk && thOff === "fail" && thOn === "ok";
   console.log(`SELFTEST emulate/throttle: vp=${ew}→${ew2} offline=${thOff} none=${thOn} ok=${emulateOk}`);
 
   tick("diagnose + bundle");
   // 9e) diagnose: group duplicate errors + collect network failures.
   await handleTool("clear_logs", {});
-  await manager.navigate(`data:text/html,<script>console.error('[boom] beta');console.error('[boom] beta');fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`);
+  await manager.navigate(
+    `data:text/html,<script>console.error('[boom] beta');console.error('[boom] beta');fetch('http://localhost:${chosenPort}/nope').catch(()=>{})</script>`,
+  );
   await new Promise((r) => setTimeout(r, 700));
   const diag = JSON.parse((await handleTool("diagnose", {})).content[0]!.text as string) as {
     errorCount: number;
     groups: { count: number }[];
     network: { status?: number }[];
   };
-  const diagnoseOk = diag.errorCount >= 2 && diag.groups.some((g) => g.count >= 2) && diag.network.some((n) => n.status === 404);
-  console.log(`SELFTEST diagnose: errors=${diag.errorCount} dupGroup=${diag.groups.some((g) => g.count >= 2)} net404=${diag.network.some((n) => n.status === 404)} ok=${diagnoseOk}`);
+  const diagnoseOk =
+    diag.errorCount >= 2 && diag.groups.some((g) => g.count >= 2) && diag.network.some((n) => n.status === 404);
+  console.log(
+    `SELFTEST diagnose: errors=${diag.errorCount} dupGroup=${diag.groups.some((g) => g.count >= 2)} net404=${diag.network.some((n) => n.status === 404)} ok=${diagnoseOk}`,
+  );
 
   // 9f) export_bundle: capture a screenshot, then assemble the bundle (logs + screenshot + har + diagnose).
   await tl.executeJavaScript("window.devloop.screenshot()");
@@ -1086,8 +1247,15 @@ async function runSelfTest() {
     screenshots: unknown[];
     logs: unknown[];
   };
-  const bundleOk = !!bundle.diagnose && !!bundle.har && bundle.screenshots.length >= 1 && bundle.logs.length > 0 && bundle.meta.counts.errors >= 2;
-  console.log(`SELFTEST bundle: logs=${bundle.meta.counts.logs} screenshots=${bundle.screenshots.length} errors=${bundle.meta.counts.errors} ok=${bundleOk}`);
+  const bundleOk =
+    !!bundle.diagnose &&
+    !!bundle.har &&
+    bundle.screenshots.length >= 1 &&
+    bundle.logs.length > 0 &&
+    bundle.meta.counts.errors >= 2;
+  console.log(
+    `SELFTEST bundle: logs=${bundle.meta.counts.logs} screenshots=${bundle.screenshots.length} errors=${bundle.meta.counts.errors} ok=${bundleOk}`,
+  );
 
   tick("extensions (load + ext_* tools)");
   // 9g) chrome extension: load the unpacked fixture into the panes' session; its content script marks pages.
@@ -1097,10 +1265,18 @@ async function runSelfTest() {
   try {
     const loaded = await extSession().extensions.loadExtension(extPath!, { allowFileAccess: true });
     await loadExtIntoAll(extPath!); // #27: also into the active pane's per-project session (mirrors extLoadUnpacked)
-    const listed = extSession().extensions.getAllExtensions().some((x) => x.id === loaded.id && x.name === "devloop-test-ext");
+    const listed = extSession()
+      .extensions.getAllExtensions()
+      .some((x) => x.id === loaded.id && x.name === "devloop-test-ext");
     await manager.navigate(`http://localhost:${chosenPort}/ext-check`);
     await new Promise((r) => setTimeout(r, 700));
-    const marked = JSON.parse((await handleTool("browser_eval", { expression: "String(document.documentElement.getAttribute('data-devloop-ext'))" })).content[0]!.text as string).value as string;
+    const marked = JSON.parse(
+      (
+        await handleTool("browser_eval", {
+          expression: "String(document.documentElement.getAttribute('data-devloop-ext'))",
+        })
+      ).content[0]!.text as string,
+    ).value as string;
     extLoadedOk = listed && marked === "loaded";
     console.log(`SELFTEST extension: listed=${listed} contentScriptRan=${marked === "loaded"} ok=${extLoadedOk}`);
 
@@ -1153,13 +1329,16 @@ async function runSelfTest() {
   // 11) regression: closing every pane then a dev action must not crash ("no pane undefined").
   let robustOk = false;
   try {
-    for (const p of (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string }[] }).panes) {
+    for (const p of (
+      JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string }[] }
+    ).panes) {
       await handleTool("pane_close", { id: p.id });
     }
     await new Promise((r) => setTimeout(r, 300)); // let the replacement pane settle
     JSON.parse((await handleTool("dev_status")).content[0]!.text as string); // must not throw
     await tl.executeJavaScript(`window.devloop.setDevConfig({ cwd: ${JSON.stringify(process.cwd())} })`);
-    const after = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: unknown[] }).panes.length;
+    const after = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: unknown[] }).panes
+      .length;
     robustOk = after >= 1;
     console.log(`SELFTEST robustness (close-all → dev action): panesAfter=${after} ok=${robustOk}`);
   } catch (e) {
@@ -1167,7 +1346,9 @@ async function runSelfTest() {
   }
 
   // 12) dev "failed" state: a non-zero exit surfaces as exitCode on the status.
-  await tl.executeJavaScript(`window.devloop.devStart({ cmd: "bash -c 'exit 3'", cwd: ${JSON.stringify(process.cwd())} })`);
+  await tl.executeJavaScript(
+    `window.devloop.devStart({ cmd: "bash -c 'exit 3'", cwd: ${JSON.stringify(process.cwd())} })`,
+  );
   await new Promise((r) => setTimeout(r, 800));
   const failStatus = JSON.parse((await handleTool("dev_status")).content[0]!.text as string) as { exitCode?: number };
   const failOk = failStatus.exitCode === 3;
@@ -1184,10 +1365,16 @@ async function runSelfTest() {
 
   // 14) pane_set_label via the tool layer → reflected in pane_list.
   let paneLabelOk = false;
-  const lblPanes = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string }[] }).panes;
+  const lblPanes = (
+    JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string }[] }
+  ).panes;
   if (lblPanes[0]) {
     await handleTool("pane_set_label", { id: lblPanes[0].id, label: "smoke-label" });
-    const relisted = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string; label?: string }[] }).panes;
+    const relisted = (
+      JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as {
+        panes: { id: string; label?: string }[];
+      }
+    ).panes;
     paneLabelOk = relisted.some((p) => p.id === lblPanes[0]!.id && p.label === "smoke-label");
   }
   console.log(`SELFTEST pane_set_label: ok=${paneLabelOk}`);
@@ -1294,11 +1481,12 @@ function reportCrash(kind: string, error: unknown): void {
   if (crashPrompting) return;
   crashPrompting = true;
   void dialog
-    .showMessageBox(shellWin && !shellWin.isDestroyed() ? shellWin : undefined as never, {
+    .showMessageBox(shellWin && !shellWin.isDestroyed() ? shellWin : (undefined as never), {
       type: "error",
       title: "Devloop crashed",
       message: `Devloop's ${kind} hit an unexpected error.`,
-      detail: "You can open a prefilled GitHub issue — review it (remove anything sensitive) and submit under your own account. Nothing is sent automatically.",
+      detail:
+        "You can open a prefilled GitHub issue — review it (remove anything sensitive) and submit under your own account. Nothing is sent automatically.",
       buttons: ["Report on GitHub…", "Ignore"],
       defaultId: 0,
       cancelId: 1,

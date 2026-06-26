@@ -10,18 +10,19 @@
  * pane; dev lifecycle (start/stop/restart/reload) is per-pane.
  */
 import { BrowserWindow, WebContentsView } from "electron";
-import type { LogBuffer } from "../src/logBuffer.ts";
 import type { IBrowserController, IBrowserManager, PaneInfo } from "../src/browserController.ts";
-import type { TargetKind } from "../src/target.ts";
-import { SERVE_SIM_URL, type SimInfo } from "../src/simulator.ts";
+import { DevServer, type DevStatus, detectDevCommand } from "../src/devServer.ts";
+import type { LogBuffer } from "../src/logBuffer.ts";
+import { DEFAULT_PARTITION, partitionForCwd } from "../src/partition.ts";
 import { getPanes, setPanes } from "../src/registry.ts";
-import { DevServer, detectDevCommand, type DevStatus } from "../src/devServer.ts";
-import { partitionForCwd, DEFAULT_PARTITION } from "../src/partition.ts";
+import { SERVE_SIM_URL, type SimInfo } from "../src/simulator.ts";
+import type { TargetKind } from "../src/target.ts";
 
 /** Default session for panes with no project bound — separate from the shell's default
  *  session so loaded extensions never inject into the cockpit UI itself. Panes bound to a
  *  project get their own per-project partition (#27) via partitionForCwd. */
 export const PANE_PARTITION = DEFAULT_PARTITION;
+
 import { ElectronBrowserController, type ElectronBrowserOptions } from "../src/electronBrowser.ts";
 
 interface Pane {
@@ -304,7 +305,10 @@ export class BrowserManager implements IBrowserManager {
   // --- pane management ---
   /** Create a WebContentsView + controller on a prepared partition, and wire address-bar
    *  URL tracking onto the given pane. Shared by newPane + recreateView (#27). */
-  private async createView(pane: Pane, partition: string): Promise<{ view: WebContentsView; ctl: ElectronBrowserController }> {
+  private async createView(
+    pane: Pane,
+    partition: string,
+  ): Promise<{ view: WebContentsView; ctl: ElectronBrowserController }> {
     await this.prepareSession?.(partition); // load extensions into this session first
     const view = new WebContentsView({ webPreferences: { partition, sandbox: false, offscreen: this.offscreen } });
     await view.webContents.loadURL("about:blank");
@@ -326,7 +330,17 @@ export class BrowserManager implements IBrowserManager {
   async newPane(url?: string, label?: string, cmd?: string, cwd?: string): Promise<PaneInfo> {
     const id = `pane-${++this.counter}`;
     const partition = partitionForCwd(cwd);
-    const pane: Pane = { id, view: undefined as unknown as WebContentsView, ctl: undefined as unknown as ElectronBrowserController, dev: new DevServer(this.buffer, id), cmd, cwd, label, url: url ?? "about:blank", partition };
+    const pane: Pane = {
+      id,
+      view: undefined as unknown as WebContentsView,
+      ctl: undefined as unknown as ElectronBrowserController,
+      dev: new DevServer(this.buffer, id),
+      cmd,
+      cwd,
+      label,
+      url: url ?? "about:blank",
+      partition,
+    };
     const { view, ctl } = await this.createView(pane, partition);
     pane.view = view;
     pane.ctl = ctl;
@@ -434,7 +448,12 @@ export class BrowserManager implements IBrowserManager {
       height: 720,
       show: !this.offscreen,
       title: `Devloop — ${p.label ?? id}`,
-      webPreferences: { preload: this.popChrome.preloadPath, contextIsolation: true, sandbox: false, offscreen: this.offscreen },
+      webPreferences: {
+        preload: this.popChrome.preloadPath,
+        contextIsolation: true,
+        sandbox: false,
+        offscreen: this.offscreen,
+      },
     });
     win.contentView.addChildView(p.view);
     // Initial bounds (leave room for the bar); the pop renderer refines via setBoundsFor once mounted.
@@ -540,7 +559,10 @@ export class BrowserManager implements IBrowserManager {
     const st = p.dev.status();
     let nav = { canBack: false, canForward: false };
     try {
-      nav = { canBack: p.view.webContents.navigationHistory.canGoBack(), canForward: p.view.webContents.navigationHistory.canGoForward() };
+      nav = {
+        canBack: p.view.webContents.navigationHistory.canGoBack(),
+        canForward: p.view.webContents.navigationHistory.canGoForward(),
+      };
     } catch {
       /* view gone */
     }
@@ -603,7 +625,12 @@ export class BrowserManager implements IBrowserManager {
   setBoundsFor(id: string, rect: Rect): void {
     const p = this.panes.get(id);
     if (!p || !p.popped) return; // only meaningful while popped
-    p.view.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) });
+    p.view.setBounds({
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    });
   }
   screenshotFor(id: string): Promise<{ base64: string; mimeType: string }> {
     const p = this.panes.get(id);
@@ -646,7 +673,15 @@ export class BrowserManager implements IBrowserManager {
   clearStorage(opts?: { allOrigins?: boolean }) {
     return this.routed().clearStorage(opts);
   }
-  emulate(opts: { device?: string; width?: number; height?: number; deviceScaleFactor?: number; mobile?: boolean; userAgent?: string; reset?: boolean }) {
+  emulate(opts: {
+    device?: string;
+    width?: number;
+    height?: number;
+    deviceScaleFactor?: number;
+    mobile?: boolean;
+    userAgent?: string;
+    reset?: boolean;
+  }) {
     return this.routed().emulate(opts);
   }
   throttle(profile: string) {

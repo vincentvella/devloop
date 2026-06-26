@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import {
-  selectHermesTarget,
-  isErrorConsoleType,
+  connectFailureMessage,
   consoleArgsToText,
   errorStackFromArgs,
-  inspectorListUrl,
-  connectFailureMessage,
   type InspectorTarget,
+  inspectorListUrl,
+  isErrorConsoleType,
+  selectHermesTarget,
 } from "../src/reactNative.ts";
 
 test("connectFailureMessage distinguishes a busy/owned target from no target (#23)", () => {
@@ -39,7 +39,11 @@ test("selectHermesTarget picks the JS runtime, not the UI page", () => {
 });
 
 test("selectHermesTarget prefers the most recent runtime after a reload", () => {
-  const stale = { ...RUNTIME, id: "old", webSocketDebuggerUrl: "ws://localhost:8082/inspector/debug?device=dev&page=0" };
+  const stale = {
+    ...RUNTIME,
+    id: "old",
+    webSocketDebuggerUrl: "ws://localhost:8082/inspector/debug?device=dev&page=0",
+  };
   // stale first, fresh last → fresh wins
   expect(selectHermesTarget([stale, UI_PAGE, RUNTIME])?.id).toBe("dev-1");
 });
@@ -63,12 +67,21 @@ test("isErrorConsoleType: error/assert are errors (the RN-via-console finding)",
 });
 
 test("consoleArgsToText flattens values and object descriptions", () => {
-  expect(consoleArgsToText([{ type: "string", value: "user" }, { type: "object", value: { id: 7 } }])).toBe('user {"id":7}');
-  expect(consoleArgsToText([{ type: "object", subtype: "error", description: "Error: boom\n at f" }])).toBe("Error: boom\n at f");
+  expect(
+    consoleArgsToText([
+      { type: "string", value: "user" },
+      { type: "object", value: { id: 7 } },
+    ]),
+  ).toBe('user {"id":7}');
+  expect(consoleArgsToText([{ type: "object", subtype: "error", description: "Error: boom\n at f" }])).toBe(
+    "Error: boom\n at f",
+  );
 });
 
 test("errorStackFromArgs extracts an Error object's stack, else null", () => {
-  expect(errorStackFromArgs([{ subtype: "error", description: "Error: boom\n  at App (app.bundle:1:2)" }])).toContain("at App");
+  expect(errorStackFromArgs([{ subtype: "error", description: "Error: boom\n  at App (app.bundle:1:2)" }])).toContain(
+    "at App",
+  );
   expect(errorStackFromArgs([{ type: "string", value: "just a log" }])).toBeNull();
 });
 

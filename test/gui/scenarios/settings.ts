@@ -7,14 +7,21 @@ export async function projectRegistry(_app: ElectronApplication, win: Page): Pro
   await win.waitForTimeout(400);
   // The saved project (named from the pane label) appears in the project picker.
   const opts = await win.locator(".settings select option").allTextContents();
-  check("saving a project adds it to the picker", opts.some((o) => o.includes("renamed-pane") || o.includes("devloop")), opts.filter(Boolean).join(","));
+  check(
+    "saving a project adds it to the picker",
+    opts.some((o) => o.includes("renamed-pane") || o.includes("devloop")),
+    opts.filter(Boolean).join(","),
+  );
   await closeWrench(win);
 }
 
 export async function settingsAndExtensions(app: ElectronApplication, win: Page): Promise<void> {
   await win.getByLabel("settings (⌘,) — extensions & updates").click();
   await win.waitForSelector('[data-testid="settings-panel"]', { timeout: 10_000 });
-  check("settings opens with the extensions list", (await win.locator('[data-testid="ext-list"], [data-testid="ext-empty"]').count()) > 0);
+  check(
+    "settings opens with the extensions list",
+    (await win.locator('[data-testid="ext-list"], [data-testid="ext-empty"]').count()) > 0,
+  );
 
   const extInput = win.getByPlaceholder("Web Store link or extension id");
   await extInput.fill("test-id");
@@ -23,7 +30,10 @@ export async function settingsAndExtensions(app: ElectronApplication, win: Page)
 
   if (RUN_EXT_E2E) {
     const loaded = (part: string): Promise<boolean> =>
-      app.evaluate(({ session }, p) => !!session.fromPartition(p).extensions.getExtension("eimadpbcbfnmbkopoojfekhnkhdbieeh"), part);
+      app.evaluate(
+        ({ session }, p) => !!session.fromPartition(p).extensions.getExtension("eimadpbcbfnmbkopoojfekhnkhdbieeh"),
+        part,
+      );
     await extInput.fill(DARK_READER);
     await win.getByTitle("install from the pasted id / URL").click();
     await win.waitForSelector(`[data-testid="ext-chip-${DARK_READER}"]`, { timeout: 60_000 });
@@ -32,7 +42,10 @@ export async function settingsAndExtensions(app: ElectronApplication, win: Page)
     // Toggle off → chip gets the "off" class + unloaded from the session; toggle on → reloaded.
     await win.locator(`[data-testid="ext-chip-${DARK_READER}"] .ext-name`).click();
     await win.waitForTimeout(800);
-    check("ext disable unloads it (chip dims)", !(await loaded(PANE_PARTITION)) && (await win.locator(`[data-testid="ext-chip-${DARK_READER}"].off`).count()) > 0);
+    check(
+      "ext disable unloads it (chip dims)",
+      !(await loaded(PANE_PARTITION)) && (await win.locator(`[data-testid="ext-chip-${DARK_READER}"].off`).count()) > 0,
+    );
     await win.locator(`[data-testid="ext-chip-${DARK_READER}"] .ext-name`).click();
     await win.waitForTimeout(800);
     check("ext enable reloads it", await loaded(PANE_PARTITION));
@@ -54,6 +67,9 @@ export async function storeInjectedButton(app: ElectronApplication, win: Page): 
   const store = await storeP;
   await store.goto(`https://chromewebstore.google.com/detail/dark-reader/${DARK_READER}`).catch(() => {});
   await store.waitForSelector("#__devloop_install_btn", { timeout: 15_000 });
-  check("store window injects an Add-to-Devloop button", ((await store.locator("#__devloop_install_btn").textContent()) ?? "").includes("Add to Devloop"));
+  check(
+    "store window injects an Add-to-Devloop button",
+    ((await store.locator("#__devloop_install_btn").textContent()) ?? "").includes("Add to Devloop"),
+  );
   await store.close();
 }

@@ -29,7 +29,9 @@ export function selectHermesTarget(targets: InspectorTarget[]): InspectorTarget 
   if (!withWs.length) return null;
   const runtime = withWs.filter((t) => !/\bUI\b/.test(t.description ?? ""));
   const pool = runtime.length ? runtime : withWs;
-  const rn = pool.filter((t) => t.reactNative || /react native|hermes|bridgeless/i.test(`${t.title ?? ""} ${t.description ?? ""}`));
+  const rn = pool.filter(
+    (t) => t.reactNative || /react native|hermes|bridgeless/i.test(`${t.title ?? ""} ${t.description ?? ""}`),
+  );
   return (rn.length ? rn : pool).at(-1) ?? null;
 }
 

@@ -15,8 +15,8 @@ import { join } from "node:path";
 import type { ElectronApplication, Page } from "playwright-core";
 import { launchReady, ROOT, waitForActive } from "./harness.ts";
 import { devServerAndLogs } from "./scenarios/devServer.ts";
-import { repro } from "./scenarios/timeline.ts";
 import { multiPane } from "./scenarios/panes.ts";
+import { repro } from "./scenarios/timeline.ts";
 
 const SHOTS = join(ROOT, "site", "shots");
 // A real, visually rich page for the browser pane (dogfooding) instead of the

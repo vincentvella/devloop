@@ -3,9 +3,9 @@
  * (per-param descriptions, MCP annotations, non-trivial description). A new tool
  * with an undocumented param or a missing hint fails CI here. See src/tdqs.ts.
  */
-import { test, expect } from "bun:test";
-import { TOOLS } from "../src/toolLayer.ts";
+import { expect, test } from "bun:test";
 import { auditTool } from "../src/tdqs.ts";
+import { TOOLS } from "../src/toolLayer.ts";
 
 for (const tool of TOOLS) {
   test(`TDQS: ${tool.name}`, () => {

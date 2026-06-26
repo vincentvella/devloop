@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { pointRef, pointFromRef, idbTapArgs, idbTextArgs, idbSwipeArgs, idbKeyArgs, idbDescribeAllArgs, keycodeFor, parseDescribeAll } from "../src/idb.ts";
+import {
+  idbDescribeAllArgs,
+  idbKeyArgs,
+  idbSwipeArgs,
+  idbTapArgs,
+  idbTextArgs,
+  keycodeFor,
+  parseDescribeAll,
+  pointFromRef,
+  pointRef,
+} from "../src/idb.ts";
 
 const UDID = "763E2D1D-7A24-447F-93AE-290FE2333E0D";
 
@@ -15,7 +25,18 @@ test("idb arg builders", () => {
   expect(idbTapArgs(UDID, 100.6, 200)).toEqual(["ui", "tap", "--udid", UDID, "101", "200"]);
   expect(idbTextArgs(UDID, "hello")).toEqual(["ui", "text", "--udid", UDID, "hello"]);
   expect(idbSwipeArgs(UDID, 200, 600, 200, 200)).toEqual(["ui", "swipe", "--udid", UDID, "200", "600", "200", "200"]);
-  expect(idbSwipeArgs(UDID, 200, 600, 200, 200, 500)).toEqual(["ui", "swipe", "--udid", UDID, "200", "600", "200", "200", "--duration", "0.5"]);
+  expect(idbSwipeArgs(UDID, 200, 600, 200, 200, 500)).toEqual([
+    "ui",
+    "swipe",
+    "--udid",
+    UDID,
+    "200",
+    "600",
+    "200",
+    "200",
+    "--duration",
+    "0.5",
+  ]);
   expect(idbKeyArgs(UDID, 40)).toEqual(["ui", "key", "--udid", UDID, "40"]);
   expect(idbDescribeAllArgs(UDID)).toEqual(["ui", "describe-all", "--udid", UDID, "--json"]);
 });
@@ -36,7 +57,11 @@ test("parseDescribeAll builds a snapshot with center-point refs", () => {
     { frame: { x: 0, y: 0, width: 0, height: 0 }, type: "Other", AXLabel: "zero" }, // zero-size → dropped
     { frame: { x: 16, y: 300, width: 100, height: 30 }, type: "Other" }, // unnamed non-interactive → dropped
   ]);
-  const snap = parseDescribeAll(json, { url: "Caliburr", title: "Caliburr", screen: { x: 0, y: 0, width: 390, height: 844 } });
+  const snap = parseDescribeAll(json, {
+    url: "Caliburr",
+    title: "Caliburr",
+    screen: { x: 0, y: 0, width: 390, height: 844 },
+  });
   expect(snap.url).toBe("Caliburr");
   expect(snap.nodes.map((n) => n.name)).toEqual(["Sign in", "Email", "Welcome back"]);
   expect(snap.nodes[0]).toEqual({ ref: "pt:195,122", role: "Button", name: "Sign in", tag: "native" });

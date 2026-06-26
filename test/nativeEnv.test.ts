@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { nativeEnvIssues, nativeEnvReady, nativeEnvSummary, nativeEnvChecks, androidEnvIssues, androidEnvReady, androidEnvChecks, androidEnvSummary } from "../src/nativeEnv.ts";
+import {
+  androidEnvChecks,
+  androidEnvIssues,
+  androidEnvReady,
+  androidEnvSummary,
+  nativeEnvChecks,
+  nativeEnvIssues,
+  nativeEnvReady,
+  nativeEnvSummary,
+} from "../src/nativeEnv.ts";
 
 test("nativeEnvChecks yields a ✓/✗ row per requirement with a fix only when failing", () => {
   const checks = nativeEnvChecks({ idb: true, idbCompanion: false, bootedSim: true });

@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { availablePlatforms, buildCommand, fingerprintStatus, buildStatusLabel, resolveNativeInfo } from "../src/nativeBuild.ts";
+import {
+  availablePlatforms,
+  buildCommand,
+  buildStatusLabel,
+  fingerprintStatus,
+  resolveNativeInfo,
+} from "../src/nativeBuild.ts";
 
 test("availablePlatforms reflects prebuilt native dirs, iOS first", () => {
   expect(availablePlatforms({ hasIosDir: true, hasAndroidDir: true })).toEqual(["ios", "android"]);
@@ -32,12 +38,23 @@ test("buildStatusLabel: badge text only when actionable", () => {
 });
 
 test("resolveNativeInfo: web projects are not native", () => {
-  expect(resolveNativeInfo("web", { hasIosDir: false })).toEqual({ isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null });
+  expect(resolveNativeInfo("web", { hasIosDir: false })).toEqual({
+    isNative: false,
+    platforms: [],
+    targets: [],
+    buildStatus: "unknown",
+    badge: null,
+  });
 });
 
 test("resolveNativeInfo: RN project offers platforms + staleness badge", () => {
   const stale = resolveNativeInfo("react-native", { hasIosDir: true }, "now", "old");
-  expect(stale).toMatchObject({ isNative: true, platforms: ["ios"], buildStatus: "stale", badge: "rebuild recommended" });
+  expect(stale).toMatchObject({
+    isNative: true,
+    platforms: ["ios"],
+    buildStatus: "stale",
+    badge: "rebuild recommended",
+  });
 
   const fresh = resolveNativeInfo("react-native", { hasIosDir: true, hasAndroidDir: true }, "h", "h");
   expect(fresh.platforms).toEqual(["ios", "android"]);
@@ -50,10 +67,17 @@ test("resolveNativeInfo: managed RN project (no native dirs) still offers iOS", 
 
 test("resolveNativeInfo: view targets — web added only when webCapable, iOS gated to macOS", () => {
   // webCapable + iosCapable (default true)
-  expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, true).targets).toEqual(["web", "ios", "android"]);
+  expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, true).targets).toEqual([
+    "web",
+    "ios",
+    "android",
+  ]);
   expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, false).targets).toEqual(["ios", "android"]);
   // iosCapable=false (Windows/Linux) — no iOS target (simulator/idb are macOS-only)
-  expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, true, false).targets).toEqual(["web", "android"]);
+  expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, true, false).targets).toEqual([
+    "web",
+    "android",
+  ]);
   expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, false, false).targets).toEqual(["android"]);
   expect(resolveNativeInfo("web", {}, null, null, true).targets).toEqual([]); // not native → no targets
 });

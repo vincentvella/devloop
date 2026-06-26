@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { partitionForCwd, normalizeCwd, DEFAULT_PARTITION } from "../src/partition.ts";
+import { DEFAULT_PARTITION, normalizeCwd, partitionForCwd } from "../src/partition.ts";
 
 test("no cwd → the shared default partition (legacy behavior)", () => {
   expect(partitionForCwd(undefined)).toBe(DEFAULT_PARTITION);

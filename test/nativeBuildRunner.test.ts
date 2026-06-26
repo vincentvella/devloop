@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { fingerprintNodeArgs, computeFingerprint, runNativeBuild } from "../src/nativeBuildRunner.ts";
 import { LogBuffer } from "../src/logBuffer.ts";
+import { computeFingerprint, fingerprintNodeArgs, runNativeBuild } from "../src/nativeBuildRunner.ts";
 
 test("fingerprintNodeArgs uses the project's own @expo/fingerprint via env root", () => {
   const [flag, script] = fingerprintNodeArgs();
@@ -28,11 +28,18 @@ function fakeProc() {
     proc: {
       stdout: { on: (_e: string, cb: (c: string) => void) => streamHandlers.push(cb) },
       stderr: { on: () => {} },
-      on: (e: string, cb: (arg?: unknown) => void) => ((handlers[e] ??= []).push(cb), undefined),
+      on: (e: string, cb: (arg?: unknown) => void) => {
+        handlers[e] ??= [];
+        handlers[e].push(cb);
+      },
       kill: () => {},
     },
-    emitStdout: (s: string) => streamHandlers.forEach((h) => h(s)),
-    exit: (code: number | null) => (handlers.exit ?? []).forEach((h) => h(code)),
+    emitStdout: (s: string) => {
+      for (const h of streamHandlers) h(s);
+    },
+    exit: (code: number | null) => {
+      for (const h of handlers.exit ?? []) h(code);
+    },
   };
 }
 

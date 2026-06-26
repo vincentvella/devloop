@@ -6,9 +6,9 @@
  * MCP protocol.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { basename, join } from "node:path";
 import type { LogBuffer } from "./logBuffer.ts";
 
 type ServerStream = "stdout" | "stderr";
@@ -103,7 +103,13 @@ export class DevServer implements DevServerLike {
     this.pipe("stdout", this.child.stdout);
     this.pipe("stderr", this.child.stderr);
     this.child.on("exit", (code, signal) => {
-      this.buffer.push("server", "stderr", `[devloop] dev server exited code=${code} signal=${signal}`, undefined, this.target);
+      this.buffer.push(
+        "server",
+        "stderr",
+        `[devloop] dev server exited code=${code} signal=${signal}`,
+        undefined,
+        this.target,
+      );
       this.lastExit = { code, signal };
       this.child = undefined;
       this.meta = undefined;

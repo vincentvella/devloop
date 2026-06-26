@@ -9,11 +9,11 @@
  * Named ✓/✗ checks with a real exit code, same style as test-smoke.ts.
  */
 import { execFile } from "node:child_process";
+import { AndroidLogStream, adbBinary, captureAdbScreenshot } from "../src/androidLog.ts";
+import { captureSimctlScreenshot, NativeLogStream } from "../src/iosSimulator.ts";
 import { LogBuffer } from "../src/logBuffer.ts";
+import { adbDriver, idbDriver } from "../src/nativeDriver.ts";
 import { ReactNativeController } from "../src/reactNativeController.ts";
-import { NativeLogStream, captureSimctlScreenshot } from "../src/iosSimulator.ts";
-import { AndroidLogStream, captureAdbScreenshot, adbBinary } from "../src/androidLog.ts";
-import { idbDriver, adbDriver } from "../src/nativeDriver.ts";
 
 // usage: rn-harness.ts <metroBase> <appMatch> [ios|android] [device|serial]
 const metroBase = process.argv[2] ?? "http://localhost:8082";
@@ -30,10 +30,18 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // idb runner (iOS) for the interaction/snapshot path (needs idb on PATH).
 const runIdb = (args: string[]): Promise<string> =>
-  new Promise((resolve, reject) => execFile("idb", args, { maxBuffer: 16 * 1024 * 1024 }, (e, out, errOut) => (e ? reject(new Error(errOut || (e as Error).message)) : resolve(out))));
+  new Promise((resolve, reject) =>
+    execFile("idb", args, { maxBuffer: 16 * 1024 * 1024 }, (e, out, errOut) =>
+      e ? reject(new Error(errOut || (e as Error).message)) : resolve(out),
+    ),
+  );
 // adb runner (Android).
 const runAdb = (args: string[]): Promise<string> =>
-  new Promise((resolve, reject) => execFile(adbBinary(), args, { maxBuffer: 16 * 1024 * 1024 }, (e, out, errOut) => (e ? reject(new Error(errOut || (e as Error).message)) : resolve(out))));
+  new Promise((resolve, reject) =>
+    execFile(adbBinary(), args, { maxBuffer: 16 * 1024 * 1024 }, (e, out, errOut) =>
+      e ? reject(new Error(errOut || (e as Error).message)) : resolve(out),
+    ),
+  );
 
 const buffer = new LogBuffer(5000);
 const driver = isAndroid ? adbDriver(device, runAdb) : idbDriver(device, runIdb);
@@ -41,13 +49,20 @@ const captureScreenshot = () => (isAndroid ? captureAdbScreenshot(device) : capt
 const rn = new ReactNativeController(buffer, { metroBase, driver, captureScreenshot });
 
 // Native device logs (simctl on iOS, logcat on Android) — runs alongside the JS console.
-const nativeLogs = isAndroid ? new AndroidLogStream(buffer, { serial: device }) : new NativeLogStream(buffer, { device, match: appMatch });
+const nativeLogs = isAndroid
+  ? new AndroidLogStream(buffer, { serial: device })
+  : new NativeLogStream(buffer, { device, match: appMatch });
 nativeLogs.start();
 
-console.log(`# attaching to ${metroBase} (${platform}, native logs ${isAndroid ? "via logcat" : `scoped to "${appMatch}"`})`);
+console.log(
+  `# attaching to ${metroBase} (${platform}, native logs ${isAndroid ? "via logcat" : `scoped to "${appMatch}"`})`,
+);
 await rn.start();
 await sleep(500);
-check("attached to Hermes over CDP", buffer.query({}).some((e) => e.line.includes("attached to React Native")));
+check(
+  "attached to Hermes over CDP",
+  buffer.query({}).some((e) => e.line.includes("attached to React Native")),
+);
 
 // evaluate round-trips
 const sum = await rn.evaluate("1 + 2");
@@ -56,7 +71,10 @@ check("evaluate(1+2) → 3", sum === 3);
 // console capture
 await rn.evaluate("console.log('devloop-rn-harness hello', { ok: true })");
 await sleep(400);
-check("console.log captured", buffer.query({}).some((e) => e.stream === "console" && e.line.includes("devloop-rn-harness hello")));
+check(
+  "console.log captured",
+  buffer.query({}).some((e) => e.stream === "console" && e.line.includes("devloop-rn-harness hello")),
+);
 
 // #17 network capture: the injected XHR interceptor should turn a fetch into a network row.
 await rn.evaluate("fetch('https://example.com/').then(function(r){return r.text()}).catch(function(){})");
@@ -67,15 +85,16 @@ for (let i = 0; i < 10; i++) {
   if (netEntry) break;
 }
 check("RN network request captured (XHR interceptor)", !!netEntry);
-if (netEntry) console.log(`    network row: ${netEntry.line} (${(netEntry.detail as any)?.mimeType ?? "?"}, ${(netEntry.detail as any)?.durationMs ?? "?"}ms)`);
+if (netEntry)
+  console.log(
+    `    network row: ${netEntry.line} (${(netEntry.detail as any)?.mimeType ?? "?"}, ${(netEntry.detail as any)?.durationMs ?? "?"}ms)`,
+  );
 
 // error via console.error (the RN path) → pageerror + source-mapped stack.
 // Trigger it from BUNDLE code (Metro's global require __r on a bad id) so the
 // stack has real entry.bundle frames to resolve — a `new Error()` made inside
 // Runtime.evaluate would only have <eval> frames with nothing to map.
-await rn.evaluate(
-  "(function(){ try { (globalThis.__r || require)(999999999); } catch (e) { console.error(e); } })()",
-);
+await rn.evaluate("(function(){ try { (globalThis.__r || require)(999999999); } catch (e) { console.error(e); } })()");
 let err: (typeof buffer.query extends (...a: any) => infer R ? R : never)[number] | undefined;
 for (let i = 0; i < 12; i++) {
   await sleep(600); // async source-map fetch/resolve (Metro bundle + map are large)
@@ -96,7 +115,9 @@ check("screenshot captured (PNG base64)", shot.base64.length > 1000 && shot.mime
 try {
   const snap = await rn.snapshot();
   check("idb snapshot returns a11y nodes", snap.nodes.length > 0);
-  console.log(`    snapshot nodes: ${snap.nodes.length}${snap.nodes[0] ? ` (e.g. ${snap.nodes[0].role} "${snap.nodes[0].name}" @ ${snap.nodes[0].ref})` : ""}`);
+  console.log(
+    `    snapshot nodes: ${snap.nodes.length}${snap.nodes[0] ? ` (e.g. ${snap.nodes[0].role} "${snap.nodes[0].name}" @ ${snap.nodes[0].ref})` : ""}`,
+  );
 } catch (e) {
   console.log(`    (idb snapshot skipped: ${(e as Error).message.split(":").pop()?.trim()})`);
 }
@@ -116,5 +137,7 @@ await rn.evaluate(
 await sleep(300);
 
 await rn.close();
-console.log(fails.length ? `\nRN-HARNESS FAIL (${fails.length}): ${fails.join(", ")}` : "\nRN-HARNESS OK (all checks passed)");
+console.log(
+  fails.length ? `\nRN-HARNESS FAIL (${fails.length}): ${fails.join(", ")}` : "\nRN-HARNESS OK (all checks passed)",
+);
 process.exit(fails.length ? 1 : 0);

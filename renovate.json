@@ -15,7 +15,15 @@
     },
     {
       "description": "Group the cockpit UI deps into one PR.",
-      "matchPackageNames": ["react", "react-dom", "@radix-ui/**", "lucide-react", "tailwindcss", "@tailwindcss/cli", "zustand"],
+      "matchPackageNames": [
+        "react",
+        "react-dom",
+        "@radix-ui/**",
+        "lucide-react",
+        "tailwindcss",
+        "@tailwindcss/cli",
+        "zustand"
+      ],
       "groupName": "cockpit UI"
     },
     {

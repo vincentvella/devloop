@@ -26,8 +26,16 @@ export interface NativeEnvIssue {
 export function nativeEnvIssues(p: NativeEnvProbe): NativeEnvIssue[] {
   const issues: NativeEnvIssue[] = [];
   if (!p.idbCompanion) issues.push({ what: "idb_companion not found", fix: "brew install facebook/fb/idb-companion" });
-  if (!p.idb) issues.push({ what: "idb CLI not found", fix: "pipx install fb-idb  (needs Python <3.14, e.g. `pipx install --python python3.12 fb-idb`)" });
-  if (!p.bootedSim) issues.push({ what: "no booted simulator", fix: "boot one in Simulator.app, or run a build (▶ Build / `expo run:ios`)" });
+  if (!p.idb)
+    issues.push({
+      what: "idb CLI not found",
+      fix: "pipx install fb-idb  (needs Python <3.14, e.g. `pipx install --python python3.12 fb-idb`)",
+    });
+  if (!p.bootedSim)
+    issues.push({
+      what: "no booted simulator",
+      fix: "boot one in Simulator.app, or run a build (▶ Build / `expo run:ios`)",
+    });
   return issues;
 }
 
@@ -43,9 +51,17 @@ export interface NativeEnvCheck {
 /** Per-requirement checklist for the cockpit's preflight panel (✓/✗ + fix). */
 export function nativeEnvChecks(p: NativeEnvProbe): NativeEnvCheck[] {
   return [
-    { label: "idb_companion", ok: p.idbCompanion, fix: p.idbCompanion ? undefined : "brew install facebook/fb/idb-companion" },
+    {
+      label: "idb_companion",
+      ok: p.idbCompanion,
+      fix: p.idbCompanion ? undefined : "brew install facebook/fb/idb-companion",
+    },
     { label: "idb CLI (fb-idb)", ok: p.idb, fix: p.idb ? undefined : "pipx install fb-idb  (needs Python <3.14)" },
-    { label: "Booted simulator", ok: p.bootedSim, fix: p.bootedSim ? undefined : "Boot one in Simulator.app, or run a build (▶ Build)" },
+    {
+      label: "Booted simulator",
+      ok: p.bootedSim,
+      fix: p.bootedSim ? undefined : "Boot one in Simulator.app, or run a build (▶ Build)",
+    },
   ];
 }
 
@@ -71,8 +87,16 @@ export interface AndroidEnvProbe {
 
 export function androidEnvIssues(p: AndroidEnvProbe): NativeEnvIssue[] {
   const issues: NativeEnvIssue[] = [];
-  if (!p.adb) issues.push({ what: "adb not found", fix: "install Android SDK platform-tools (`brew install --cask android-platform-tools`) or set $ANDROID_HOME" });
-  if (!p.bootedDevice) issues.push({ what: "no booted device", fix: "start an emulator (Android Studio ▸ Device Manager), or run a build (▶ Build / `expo run:android`)" });
+  if (!p.adb)
+    issues.push({
+      what: "adb not found",
+      fix: "install Android SDK platform-tools (`brew install --cask android-platform-tools`) or set $ANDROID_HOME",
+    });
+  if (!p.bootedDevice)
+    issues.push({
+      what: "no booted device",
+      fix: "start an emulator (Android Studio ▸ Device Manager), or run a build (▶ Build / `expo run:android`)",
+    });
   return issues;
 }
 
@@ -80,8 +104,16 @@ export const androidEnvReady = (p: AndroidEnvProbe): boolean => androidEnvIssues
 
 export function androidEnvChecks(p: AndroidEnvProbe): NativeEnvCheck[] {
   return [
-    { label: "adb (Android SDK)", ok: p.adb, fix: p.adb ? undefined : "Install Android SDK platform-tools or set $ANDROID_HOME" },
-    { label: "Booted device/emulator", ok: p.bootedDevice, fix: p.bootedDevice ? undefined : "Start an emulator, or run a build (▶ Build)" },
+    {
+      label: "adb (Android SDK)",
+      ok: p.adb,
+      fix: p.adb ? undefined : "Install Android SDK platform-tools or set $ANDROID_HOME",
+    },
+    {
+      label: "Booted device/emulator",
+      ok: p.bootedDevice,
+      fix: p.bootedDevice ? undefined : "Start an emulator, or run a build (▶ Build)",
+    },
   ];
 }
 

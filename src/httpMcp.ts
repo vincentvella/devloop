@@ -7,8 +7,9 @@
  * Pure transport plumbing; the backend (browser/devServer) is wired separately via
  * configureTools before this is started.
  */
-import { createServer, type IncomingMessage, type Server as HttpServer } from "node:http";
+
 import { randomUUID } from "node:crypto";
+import { createServer, type Server as HttpServer, type IncomingMessage } from "node:http";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";

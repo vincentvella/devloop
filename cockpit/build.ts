@@ -3,7 +3,7 @@
  * Run via `bun run app:build`. Electron itself is left external (provided by the
  * runtime); everything else (MCP SDK, shared src/ core) is bundled in.
  */
-import { rmSync, mkdirSync, cpSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 
 rmSync("out", { recursive: true, force: true });
 mkdirSync("out/renderer", { recursive: true });

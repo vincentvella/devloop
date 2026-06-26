@@ -5,9 +5,26 @@
  * already shared via Metro's Hermes inspector). The live `run` (spawn) is injected;
  * the arg builders + parsers it composes are pure + unit-tested (idb.ts / adb.ts).
  */
+
+import {
+  adbKeyeventArgs,
+  adbSwipeArgs,
+  adbTapArgs,
+  adbTextArgs,
+  adbUiDumpArgs,
+  androidKeycodeFor,
+  parseUiAutomatorDump,
+} from "./adb.ts";
+import {
+  idbDescribeAllArgs,
+  idbKeyArgs,
+  idbSwipeArgs,
+  idbTapArgs,
+  idbTextArgs,
+  keycodeFor,
+  parseDescribeAll,
+} from "./idb.ts";
 import type { PageSnapshot } from "./pageSnapshot.ts";
-import { idbDescribeAllArgs, idbKeyArgs, idbSwipeArgs, idbTapArgs, idbTextArgs, keycodeFor, parseDescribeAll } from "./idb.ts";
-import { adbKeyeventArgs, adbSwipeArgs, adbTapArgs, adbTextArgs, adbUiDumpArgs, androidKeycodeFor, parseUiAutomatorDump } from "./adb.ts";
 
 export interface NativeDriver {
   readonly platform: "ios" | "android";

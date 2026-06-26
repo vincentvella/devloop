@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { metroBaseFromUrl, deriveAppMatch } from "../src/nativeObservability.ts";
+import { deriveAppMatch, metroBaseFromUrl } from "../src/nativeObservability.ts";
 
 test("metroBaseFromUrl returns the local origin (with port), else null", () => {
   expect(metroBaseFromUrl("http://localhost:8082/some/path")).toBe("http://localhost:8082");

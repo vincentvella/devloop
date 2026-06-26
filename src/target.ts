@@ -52,7 +52,15 @@ const WEB_CAPABILITIES: Capability[] = [
 // interactions + a11y snapshot via idb (tap/type/scroll/press, describe-all).
 // navigate/hover/select/emulate/throttle/clearStorage/network-idle are web concepts
 // (or land later) and stay gated off.
-const REACT_NATIVE_CAPABILITIES: Capability[] = ["evaluate", "screenshot", "click", "type", "scroll", "press", "snapshot"];
+const REACT_NATIVE_CAPABILITIES: Capability[] = [
+  "evaluate",
+  "screenshot",
+  "click",
+  "type",
+  "scroll",
+  "press",
+  "snapshot",
+];
 
 export const CAPABILITIES: Record<TargetKind, ReadonlySet<Capability>> = {
   web: new Set(WEB_CAPABILITIES),

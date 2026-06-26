@@ -1,40 +1,50 @@
-import { createRoot } from "react-dom/client";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { updateStatusLabel, type UpdateStatus } from "../../src/update.ts";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
-  Play,
-  Square,
-  Power,
-  RotateCw,
-  RefreshCw,
-  Camera,
-  Settings,
-  Wrench,
-  Puzzle,
-  Hammer,
-  ExternalLink,
-  PanelRightClose,
-  PanelRightOpen,
-  X,
-  Plus,
-  FolderOpen,
   ArrowDown,
-  Save,
   ArrowLeft,
   ArrowRight,
+  Bug,
+  Camera,
   Crosshair,
   Eraser,
-  Bug,
+  ExternalLink,
+  FolderOpen,
+  Hammer,
+  PanelRightClose,
+  PanelRightOpen,
+  Play,
+  Plus,
+  Power,
+  Puzzle,
+  RefreshCw,
+  RotateCw,
+  Save,
+  Settings,
+  Square,
+  Wrench,
+  X,
 } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { type UpdateStatus, updateStatusLabel } from "../../src/update.ts";
 import type { Entry, Pane, Project, Step } from "./global";
 import { useDevloopStore } from "./store";
 
 const dl = () => window.devloop;
 
 // Accessible icon button with a Radix tooltip.
-function IconBtn({ tip, onClick, children, disabled }: { tip: string; onClick: () => void; children: ReactNode; disabled?: boolean }) {
+function IconBtn({
+  tip,
+  onClick,
+  children,
+  disabled,
+}: {
+  tip: string;
+  onClick: () => void;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
@@ -54,11 +64,25 @@ function IconBtn({ tip, onClick, children, disabled }: { tip: string; onClick: (
 /** Full-width software-update banner: a spinner while checking/downloading, a
  *  progress bar with percent, and in-app Download / Restart actions (no native
  *  dialogs). Renders nothing when idle. */
-function UpdateBanner({ status, onDownload, onInstall, onDismiss }: { status: UpdateStatus; onDownload: () => void; onInstall: () => void; onDismiss: () => void }): ReactNode {
+function UpdateBanner({
+  status,
+  onDownload,
+  onInstall,
+  onDismiss,
+}: {
+  status: UpdateStatus;
+  onDownload: () => void;
+  onInstall: () => void;
+  onDismiss: () => void;
+}): ReactNode {
   if (status.state === "idle") return null;
   const spinning = status.state === "checking" || status.state === "downloading";
   const tone = status.state === "error" ? "bad" : status.state === "downloaded" ? "ok" : "info";
-  const dismissible = status.state === "available" || status.state === "downloaded" || status.state === "error" || status.state === "uptodate";
+  const dismissible =
+    status.state === "available" ||
+    status.state === "downloaded" ||
+    status.state === "error" ||
+    status.state === "uptodate";
   return (
     <div className={`update-banner ${tone}`}>
       {spinning ? <span className="update-spinner" /> : <span className="update-dot" />}
@@ -124,7 +148,8 @@ function normalizeUrl(input: string): string {
 function isErr(e: Entry): boolean {
   return (
     e.stream === "pageerror" ||
-    (e.stream === "network" && (!!e.detail?.failure || e.detail?.status === undefined || (e.detail?.status ?? 0) >= 400)) ||
+    (e.stream === "network" &&
+      (!!e.detail?.failure || e.detail?.status === undefined || (e.detail?.status ?? 0) >= 400)) ||
     (e.stream === "console" && /\[error\]/.test(e.line)) ||
     (e.source === "native" && (e.stream === "error" || e.stream === "fault")) ||
     (e.source === "server" && /error|exception|traceback|unhandled/i.test(e.line)) ||
@@ -194,14 +219,19 @@ function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
         <img className="shot" src={d.image} onClick={() => onZoom(d.image!)} />
       ) : isNet ? (
         <span className="msg net">
-          <span onClick={() => setOpen((v) => !v)} title="click for request/response details" style={{ cursor: "pointer" }}>
+          <span
+            onClick={() => setOpen((v) => !v)}
+            title="click for request/response details"
+            style={{ cursor: "pointer" }}
+          >
             {e.line}
             {d?.durationMs != null ? <span className="net-ms"> · {Math.round(d.durationMs)}ms</span> : null}
           </span>
           {open && (
             <div className="net-detail">
               <div className="net-h">
-                {d?.method} {d?.status ?? ""} {d?.statusText ?? d?.failure ?? ""} · {d?.resourceType ?? ""} {d?.mimeType ? "· " + d.mimeType : ""}
+                {d?.method} {d?.status ?? ""} {d?.statusText ?? d?.failure ?? ""} · {d?.resourceType ?? ""}{" "}
+                {d?.mimeType ? "· " + d.mimeType : ""}
               </div>
               <HeaderList title="request headers" h={d?.requestHeaders} />
               {d?.requestBody ? (
@@ -233,7 +263,16 @@ function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
   );
 }
 
-const KEYMAP: Record<string, string> = { Enter: "Enter", Backspace: "Backspace", Tab: "Tab", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight", Escape: "Back" };
+const KEYMAP: Record<string, string> = {
+  Enter: "Enter",
+  Backspace: "Backspace",
+  Tab: "Tab",
+  ArrowUp: "ArrowUp",
+  ArrowDown: "ArrowDown",
+  ArrowLeft: "ArrowLeft",
+  ArrowRight: "ArrowRight",
+  Escape: "Back",
+};
 
 /**
  * Live Android screen mirror (the parallel to serve-sim's iOS preview). Subscribes
@@ -284,7 +323,9 @@ function AndroidMirror(): ReactNode {
   return (
     <div className="android-mirror" tabIndex={0} onKeyDown={onKeyDown} title="click to tap · type to send keys">
       <img ref={imgRef} className="android-frame" style={{ display: "none" }} onClick={onClick} draggable={false} />
-      <div ref={waitRef} className="android-waiting">connecting to device…</div>
+      <div ref={waitRef} className="android-waiting">
+        connecting to device…
+      </div>
     </div>
   );
 }
@@ -304,8 +345,14 @@ function App() {
   const [filter, setFilter] = useState("");
   const [chips, setChips] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
-  const [nativeEnv, setNativeEnv] = useState<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] } | null>(null);
-  const [androidEnv, setAndroidEnv] = useState<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[] } | null>(null);
+  const [nativeEnv, setNativeEnv] = useState<{
+    ready: boolean;
+    checks: { label: string; ok: boolean; fix?: string }[];
+  } | null>(null);
+  const [androidEnv, setAndroidEnv] = useState<{
+    ready: boolean;
+    checks: { label: string; ok: boolean; fix?: string }[];
+  } | null>(null);
   const [emuDevice, setEmuDevice] = useState("responsive"); // #25 viewport picker (web)
   const [netProfile, setNetProfile] = useState("none"); // #25 throttle picker (web)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
@@ -522,9 +569,31 @@ function App() {
       const stopped = r.stoppedAtStep === null ? "" : ` · stopped@${r.stoppedAtStep}`;
       setReproStatus(`${r.stepCount} steps · ${r.errorCount} errors${stopped}`);
       const now = Date.now();
-      const rows: Entry[] = [{ seq: reproUid--, ts: now, source: "repro", stream: "summary", line: `▶ repro · ${r.stepCount} steps · ${r.errorCount} errors${stopped}` }];
-      for (const s of r.steps) rows.push({ seq: reproUid--, ts: now, source: "repro", stream: "step", line: `   ${s.index}. ${s.action.kind} ${s.error ? "✗ " + s.error : "✓"}` });
-      for (const e of r.errors) rows.push({ seq: reproUid--, ts: now, source: "repro", stream: "error", line: `   ✗ [${e.source}:${e.stream}] ${e.line}` });
+      const rows: Entry[] = [
+        {
+          seq: reproUid--,
+          ts: now,
+          source: "repro",
+          stream: "summary",
+          line: `▶ repro · ${r.stepCount} steps · ${r.errorCount} errors${stopped}`,
+        },
+      ];
+      for (const s of r.steps)
+        rows.push({
+          seq: reproUid--,
+          ts: now,
+          source: "repro",
+          stream: "step",
+          line: `   ${s.index}. ${s.action.kind} ${s.error ? "✗ " + s.error : "✓"}`,
+        });
+      for (const e of r.errors)
+        rows.push({
+          seq: reproUid--,
+          ts: now,
+          source: "repro",
+          stream: "error",
+          line: `   ✗ [${e.source}:${e.stream}] ${e.line}`,
+        });
       appendEntries(rows);
       setPanelTab("logs"); // surface the run's output in the timeline
       saveSession();
@@ -611,7 +680,13 @@ function App() {
     const a = (await dl().panes()).find((p) => p.active);
     const name = a?.label || devCwd.split("/").filter(Boolean).pop();
     if (!name || !devCwd.trim()) return;
-    await dl().projectAdd({ name, cwd: devCwd.trim(), cmd: devCmd.trim() || undefined, url: url.trim() || undefined, steps });
+    await dl().projectAdd({
+      name,
+      cwd: devCwd.trim(),
+      cmd: devCmd.trim() || undefined,
+      url: url.trim() || undefined,
+      steps,
+    });
     await refreshProjects();
     setSelProject(name);
   }, [devCwd, devCmd, url, steps, refreshProjects]);
@@ -705,126 +780,159 @@ function App() {
           </IconBtn>
           <span className="icon-badge-wrap">
             <IconBtn
-              tip={nativeInfo?.isNative && nativeEnv && !nativeEnv.ready ? "settings — ⚠ native (iOS) readiness needs attention" : "settings (⌘,) — extensions & updates"}
+              tip={
+                nativeInfo?.isNative && nativeEnv && !nativeEnv.ready
+                  ? "settings — ⚠ native (iOS) readiness needs attention"
+                  : "settings (⌘,) — extensions & updates"
+              }
               onClick={() => setSettingsOpen(true)}
             >
               <Settings size={15} />
             </IconBtn>
-            {nativeInfo?.isNative && nativeEnv && !nativeEnv.ready && <span className="icon-badge" title="native readiness check failed" />}
+            {nativeInfo?.isNative && nativeEnv && !nativeEnv.ready && (
+              <span className="icon-badge" title="native readiness check failed" />
+            )}
           </span>
         </div>
-
       </div>
 
       {!active?.popped && (
-      <div className="browser-bar">
-        <IconBtn tip="back" disabled={!active?.nav?.canBack} onClick={() => void dl().back().then(refreshPanes)}>
-          <ArrowLeft size={15} />
-        </IconBtn>
-        <IconBtn tip="forward" disabled={!active?.nav?.canForward} onClick={() => void dl().forward().then(refreshPanes)}>
-          <ArrowRight size={15} />
-        </IconBtn>
-        <IconBtn tip="reload page (⌘R)" onClick={() => void dl().reload(false)}>
-          <RotateCw size={15} />
-        </IconBtn>
-        <IconBtn tip="hard reload — ignore cache (⌘⇧R)" onClick={() => void dl().reload(true)}>
-          <RefreshCw size={15} />
-        </IconBtn>
-        <IconBtn tip="clear site data (cookies/localStorage) + reload" onClick={() => void dl().clearStorage().then(() => dl().reload(false))}>
-          <Eraser size={15} />
-        </IconBtn>
-        {nativeInfo?.isNative && nativeInfo.targets.length > 0 && (
-          <div className="segmented target-switch" title="view target — Web (browser), iOS (simulator), or Android (device mirror)">
-            {nativeInfo.targets.map((t) => (
-              <button key={t} className={`seg${viewTarget === t ? " on" : ""}`} onClick={() => void switchTarget(t)}>
-                {t === "web" ? "Web" : t === "ios" ? "iOS" : t === "android" ? "Android" : t}
+        <div className="browser-bar">
+          <IconBtn tip="back" disabled={!active?.nav?.canBack} onClick={() => void dl().back().then(refreshPanes)}>
+            <ArrowLeft size={15} />
+          </IconBtn>
+          <IconBtn
+            tip="forward"
+            disabled={!active?.nav?.canForward}
+            onClick={() => void dl().forward().then(refreshPanes)}
+          >
+            <ArrowRight size={15} />
+          </IconBtn>
+          <IconBtn tip="reload page (⌘R)" onClick={() => void dl().reload(false)}>
+            <RotateCw size={15} />
+          </IconBtn>
+          <IconBtn tip="hard reload — ignore cache (⌘⇧R)" onClick={() => void dl().reload(true)}>
+            <RefreshCw size={15} />
+          </IconBtn>
+          <IconBtn
+            tip="clear site data (cookies/localStorage) + reload"
+            onClick={() =>
+              void dl()
+                .clearStorage()
+                .then(() => dl().reload(false))
+            }
+          >
+            <Eraser size={15} />
+          </IconBtn>
+          {nativeInfo?.isNative && nativeInfo.targets.length > 0 && (
+            <div
+              className="segmented target-switch"
+              title="view target — Web (browser), iOS (simulator), or Android (device mirror)"
+            >
+              {nativeInfo.targets.map((t) => (
+                <button key={t} className={`seg${viewTarget === t ? " on" : ""}`} onClick={() => void switchTarget(t)}>
+                  {t === "web" ? "Web" : t === "ios" ? "iOS" : t === "android" ? "Android" : t}
+                </button>
+              ))}
+            </div>
+          )}
+          {nativeInfo?.isNative && (viewTarget === "ios" || viewTarget === "android") && (
+            <>
+              <button
+                className="labeled btn-primary"
+                disabled={building}
+                title={`build + launch the ${viewTarget} dev build (output → timeline)${nativeInfo.badge ? " · " + nativeInfo.badge : ""}`}
+                onClick={() => {
+                  setBuilding(true);
+                  void dl()
+                    .nativeBuild(devCwd, viewTarget)
+                    .finally(() => setBuilding(false));
+                }}
+              >
+                <Hammer size={13} /> {building ? "building…" : "Build"}
               </button>
-            ))}
-          </div>
-        )}
-        {nativeInfo?.isNative && (viewTarget === "ios" || viewTarget === "android") && (
-          <>
-            <button
-              className="labeled btn-primary"
-              disabled={building}
-              title={`build + launch the ${viewTarget} dev build (output → timeline)${nativeInfo.badge ? " · " + nativeInfo.badge : ""}`}
-              onClick={() => {
-                setBuilding(true);
-                void dl()
-                  .nativeBuild(devCwd, viewTarget)
-                  .finally(() => setBuilding(false));
-              }}
-            >
-              <Hammer size={13} /> {building ? "building…" : "Build"}
-            </button>
-            {nativeInfo.badge && <span className="build-badge" title="run a build to refresh">⚠</span>}
-          </>
-        )}
-        <input
-          ref={urlRef}
-          className="address"
-          placeholder="3000  or  http://localhost:3000  —  ↵ to open"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void navigate()}
-        />
-        {(!nativeInfo?.isNative || viewTarget === "web") && (
-          <>
-            <select
-              className="bar-select"
-              title="emulate a device viewport (browser_emulate)"
-              value={emuDevice}
-              onChange={(e) => {
-                const v = e.target.value;
-                setEmuDevice(v);
-                void dl().emulate(v === "responsive" ? { reset: true } : { device: v });
-              }}
-            >
-              <option value="responsive">Responsive</option>
-              <option value="iphone">iPhone</option>
-              <option value="ipad">iPad</option>
-              <option value="pixel">Pixel</option>
-            </select>
-            <select
-              className="bar-select"
-              title="throttle the network (browser_throttle)"
-              value={netProfile}
-              onChange={(e) => {
-                const v = e.target.value;
-                setNetProfile(v);
-                void dl().throttle(v);
-              }}
-            >
-              <option value="none">No throttle</option>
-              <option value="fast-3g">Fast 3G</option>
-              <option value="slow-3g">Slow 3G</option>
-              <option value="offline">Offline</option>
-            </select>
-          </>
-        )}
-        <IconBtn tip="screenshot → timeline" onClick={() => void dl().screenshot()}>
-          <Camera size={15} />
-        </IconBtn>
-        <IconBtn
-          tip="pop active pane into its own window"
-          onClick={async () => {
-            if (active && !active.popped) await dl().panePop(active.id);
-            await refreshPanes();
-          }}
-        >
-          <ExternalLink size={15} />
-        </IconBtn>
-      </div>
+              {nativeInfo.badge && (
+                <span className="build-badge" title="run a build to refresh">
+                  ⚠
+                </span>
+              )}
+            </>
+          )}
+          <input
+            ref={urlRef}
+            className="address"
+            placeholder="3000  or  http://localhost:3000  —  ↵ to open"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void navigate()}
+          />
+          {(!nativeInfo?.isNative || viewTarget === "web") && (
+            <>
+              <select
+                className="bar-select"
+                title="emulate a device viewport (browser_emulate)"
+                value={emuDevice}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setEmuDevice(v);
+                  void dl().emulate(v === "responsive" ? { reset: true } : { device: v });
+                }}
+              >
+                <option value="responsive">Responsive</option>
+                <option value="iphone">iPhone</option>
+                <option value="ipad">iPad</option>
+                <option value="pixel">Pixel</option>
+              </select>
+              <select
+                className="bar-select"
+                title="throttle the network (browser_throttle)"
+                value={netProfile}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setNetProfile(v);
+                  void dl().throttle(v);
+                }}
+              >
+                <option value="none">No throttle</option>
+                <option value="fast-3g">Fast 3G</option>
+                <option value="slow-3g">Slow 3G</option>
+                <option value="offline">Offline</option>
+              </select>
+            </>
+          )}
+          <IconBtn tip="screenshot → timeline" onClick={() => void dl().screenshot()}>
+            <Camera size={15} />
+          </IconBtn>
+          <IconBtn
+            tip="pop active pane into its own window"
+            onClick={async () => {
+              if (active && !active.popped) await dl().panePop(active.id);
+              await refreshPanes();
+            }}
+          >
+            <ExternalLink size={15} />
+          </IconBtn>
+        </div>
       )}
 
       {viewTarget === "ios" && nativeEnv && !nativeEnv.ready && (
         <div className="native-warn" onClick={() => setSettingsOpen(true)} title="open Settings → native readiness">
-          ⚠ Native taps & snapshot need idb — {nativeEnv.checks.filter((c) => !c.ok).map((c) => c.label).join(", ")} missing. Click for setup.
+          ⚠ Native taps & snapshot need idb —{" "}
+          {nativeEnv.checks
+            .filter((c) => !c.ok)
+            .map((c) => c.label)
+            .join(", ")}{" "}
+          missing. Click for setup.
         </div>
       )}
       {viewTarget === "android" && androidEnv && !androidEnv.ready && (
         <div className="native-warn" title="Android readiness">
-          ⚠ Android needs {androidEnv.checks.filter((c) => !c.ok).map((c) => c.label).join(", ")} — {androidEnv.checks.find((c) => !c.ok)?.fix}
+          ⚠ Android needs{" "}
+          {androidEnv.checks
+            .filter((c) => !c.ok)
+            .map((c) => c.label)
+            .join(", ")}{" "}
+          — {androidEnv.checks.find((c) => !c.ok)?.fix}
         </div>
       )}
 
@@ -834,7 +942,9 @@ function App() {
           {viewTarget === "android" && <AndroidMirror />}
         </div>
 
-        {!sidebarHidden && !fillTimeline && <div className={`divider${dragging ? " drag" : ""}`} onMouseDown={startDrag} />}
+        {!sidebarHidden && !fillTimeline && (
+          <div className={`divider${dragging ? " drag" : ""}`} onMouseDown={startDrag} />
+        )}
 
         <div
           className={`sidebar${sidebarHidden ? " hidden" : ""}`}
@@ -851,7 +961,10 @@ function App() {
             </div>
             <span className="spacer" />
             {devFailed && <span className="dev-status fail">✗ exited {dev?.exitCode}</span>}
-            <IconBtn tip={nativeInfo?.isNative ? "start / stop the bundler (Metro)" : "start / stop dev server"} onClick={() => void onPlay()}>
+            <IconBtn
+              tip={nativeInfo?.isNative ? "start / stop the bundler (Metro)" : "start / stop dev server"}
+              onClick={() => void onPlay()}
+            >
               {devRunning ? <Square size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
             </IconBtn>
             <IconBtn tip="restart dev server" onClick={() => void dl().devRestart().then(refreshPanes)}>
@@ -870,7 +983,11 @@ function App() {
                 </button>
                 <button
                   className="labeled"
-                  title={viewTarget === "ios" ? "pick a native element (from the iOS accessibility tree)" : "pick an element in the page → adds a click step"}
+                  title={
+                    viewTarget === "ios"
+                      ? "pick a native element (from the iOS accessibility tree)"
+                      : "pick an element in the page → adds a click step"
+                  }
                   disabled={picking}
                   onClick={async () => {
                     if (viewTarget === "ios") {
@@ -878,7 +995,9 @@ function App() {
                       setReproStatus("loading native elements…");
                       const nodes = await dl().nativeElements();
                       setNativePick(nodes);
-                      setReproStatus(nodes.length ? "" : "no native elements — is idb ready + the app in the foreground?");
+                      setReproStatus(
+                        nodes.length ? "" : "no native elements — is idb ready + the app in the foreground?",
+                      );
                       return;
                     }
                     setPicking(true);
@@ -920,7 +1039,11 @@ function App() {
                 <input placeholder="filter (substring)…" value={filter} onChange={(e) => setFilter(e.target.value)} />
                 <div className="chips">
                   {CHIPS.filter((c) => c.key !== "native" || nativeInfo?.isNative).map((c) => (
-                    <span key={c.key} className={`fchip${chips.has(c.key) ? " on" : ""}`} onClick={() => toggleChip(c.key)}>
+                    <span
+                      key={c.key}
+                      className={`fchip${chips.has(c.key) ? " on" : ""}`}
+                      onClick={() => toggleChip(c.key)}
+                    >
                       {c.label}
                     </span>
                   ))}
@@ -1010,7 +1133,11 @@ function App() {
                     </option>
                   ))}
                 </select>
-                <button className="labeled" title="save the active pane as a project (rename on its tab)" onClick={() => void saveProject()}>
+                <button
+                  className="labeled"
+                  title="save the active pane as a project (rename on its tab)"
+                  onClick={() => void saveProject()}
+                >
                   <Save size={13} /> save
                 </button>
               </div>
@@ -1043,7 +1170,9 @@ function App() {
               {nativeInfo?.isNative && (
                 <div className="row">
                   <span className="field-label">native</span>
-                  <span className="ext-empty">Use the Web/iOS switcher in the browser bar to run + build this target.</span>
+                  <span className="ext-empty">
+                    Use the Web/iOS switcher in the browser bar to run + build this target.
+                  </span>
                 </div>
               )}
             </div>
@@ -1084,7 +1213,9 @@ function App() {
                         setExts(list);
                         setExtInput("");
                       })
-                      .catch((err) => setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`));
+                      .catch((err) =>
+                        setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`),
+                      );
                   }}
                 />
                 <button
@@ -1098,39 +1229,68 @@ function App() {
                         setExts(list);
                         setExtInput("");
                       })
-                      .catch((err) => setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`));
+                      .catch((err) =>
+                        setReproStatus(`ext: ${(err as Error)?.message?.split(": ").pop() ?? "install failed"}`),
+                      );
                   }}
                 >
                   <Plus size={13} /> install
                 </button>
-                <IconBtn tip="Load an unpacked extension — pick its folder" onClick={() => void dl().extLoadUnpacked().then((l) => l && setExts(l))}>
+                <IconBtn
+                  tip="Load an unpacked extension — pick its folder"
+                  onClick={() =>
+                    void dl()
+                      .extLoadUnpacked()
+                      .then((l) => l && setExts(l))
+                  }
+                >
                   <FolderOpen size={14} />
                 </IconBtn>
               </div>
               <div className="ext-hint">
-                In the store window, use the “+ Add to Devloop” button (Google greys its own “Add to Chrome” outside Chrome). Or paste a Web Store link / id above.
+                In the store window, use the “+ Add to Devloop” button (Google greys its own “Add to Chrome” outside
+                Chrome). Or paste a Web Store link / id above.
               </div>
               {exts.length > 0 ? (
                 <div className="ext-list" data-testid="ext-list">
                   {exts.map((x) => (
-                    <span key={x.id} data-testid={`ext-chip-${x.id}`} className={`ext-chip${x.enabled ? "" : " off"}`} title={`${x.id} · v${x.version} — click to ${x.enabled ? "disable" : "enable"}`}>
-                      <span className="ext-name" onClick={() => void dl().extSetEnabled(x.id, !x.enabled).then(setExts)}>
+                    <span
+                      key={x.id}
+                      data-testid={`ext-chip-${x.id}`}
+                      className={`ext-chip${x.enabled ? "" : " off"}`}
+                      title={`${x.id} · v${x.version} — click to ${x.enabled ? "disable" : "enable"}`}
+                    >
+                      <span
+                        className="ext-name"
+                        onClick={() => void dl().extSetEnabled(x.id, !x.enabled).then(setExts)}
+                      >
                         {x.name}
                       </span>
-                      <span className="x" data-testid={`ext-remove-${x.id}`} title="remove (uninstall)" onClick={() => void dl().extRemove(x.id).then(setExts)}>
+                      <span
+                        className="x"
+                        data-testid={`ext-remove-${x.id}`}
+                        title="remove (uninstall)"
+                        onClick={() => void dl().extRemove(x.id).then(setExts)}
+                      >
                         <X size={13} />
                       </span>
                     </span>
                   ))}
                 </div>
               ) : (
-                <div className="ext-empty" data-testid="ext-empty">No extensions installed yet.</div>
+                <div className="ext-empty" data-testid="ext-empty">
+                  No extensions installed yet.
+                </div>
               )}
               <div className="modal-section">native (iOS) readiness</div>
               <NativeReadiness data={nativeEnv} onRecheck={() => void dl().nativeEnv().then(setNativeEnv)} />
 
               <div className="modal-section">updates</div>
-              <button className="labeled" title="check GitHub for a newer Devloop release" onClick={() => void dl().checkForUpdates()}>
+              <button
+                className="labeled"
+                title="check GitHub for a newer Devloop release"
+                onClick={() => void dl().checkForUpdates()}
+              >
                 <RefreshCw size={13} /> check for updates
               </button>
 
@@ -1204,7 +1364,13 @@ function ReproStepRow({ step, onChange, onDelete }: { step: Step; onChange: (s: 
         ))}
       </select>
       {k !== "none" && <input placeholder={ph} value={a1} onChange={(e) => set1(e.target.value)} />}
-      {k === "type" && <input placeholder="text" value={step.text ?? ""} onChange={(e) => onChange({ ...step, text: e.target.value })} />}
+      {k === "type" && (
+        <input
+          placeholder="text"
+          value={step.text ?? ""}
+          onChange={(e) => onChange({ ...step, text: e.target.value })}
+        />
+      )}
       <span className="del" onClick={onDelete}>
         <X size={13} />
       </span>
@@ -1277,7 +1443,11 @@ function PopApp({ paneId }: { paneId: string }) {
         <IconBtn tip="back" disabled={!pane?.nav?.canBack} onClick={() => void dl().backFor(paneId).then(refresh)}>
           <ArrowLeft size={15} />
         </IconBtn>
-        <IconBtn tip="forward" disabled={!pane?.nav?.canForward} onClick={() => void dl().forwardFor(paneId).then(refresh)}>
+        <IconBtn
+          tip="forward"
+          disabled={!pane?.nav?.canForward}
+          onClick={() => void dl().forwardFor(paneId).then(refresh)}
+        >
           <ArrowRight size={15} />
         </IconBtn>
         <IconBtn tip="reload page (⌘R)" onClick={() => void dl().reloadFor(paneId, false)}>

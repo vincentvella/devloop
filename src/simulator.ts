@@ -98,6 +98,9 @@ export function serveSimSpawn(runner: "bunx" | "npx" = "bunx"): { cmd: string; a
  * (the Electron binary); ELECTRON_RUN_AS_NODE makes it run `entryJs` as a plain
  * Node script. This is the preferred path when the vendored copy is present.
  */
-export function serveSimVendoredSpawn(execPath: string, entryJs: string): { cmd: string; args: string[]; env: Record<string, string> } {
+export function serveSimVendoredSpawn(
+  execPath: string,
+  entryJs: string,
+): { cmd: string; args: string[]; env: Record<string, string> } {
   return { cmd: execPath, args: [entryJs, "--port", String(SERVE_SIM_PORT)], env: { ELECTRON_RUN_AS_NODE: "1" } };
 }

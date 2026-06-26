@@ -94,7 +94,10 @@ export function buildIssueUrl(ctx: CrashContext, repo: string = REPO): string {
 }
 
 /** A blank prefilled bug report for the manual "Report a bug" affordance. */
-export function blankIssueUrl(ctx: Pick<CrashContext, "appVersion" | "platform" | "arch" | "electronVersion">, repo: string = REPO): string {
+export function blankIssueUrl(
+  ctx: Pick<CrashContext, "appVersion" | "platform" | "arch" | "electronVersion">,
+  repo: string = REPO,
+): string {
   const p = new URLSearchParams({
     template: "bug_report.yml",
     surface: "Electron cockpit",

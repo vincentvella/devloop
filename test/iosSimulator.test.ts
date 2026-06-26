@@ -1,10 +1,22 @@
 import { expect, test } from "bun:test";
-import { parseLogLine, logStreamArgs, screenshotArgs, nativeErrorLevel, NativeLogStream, type SpawnLike } from "../src/iosSimulator.ts";
+import {
+  logStreamArgs,
+  NativeLogStream,
+  nativeErrorLevel,
+  parseLogLine,
+  type SpawnLike,
+  screenshotArgs,
+} from "../src/iosSimulator.ts";
 import { LogBuffer } from "../src/logBuffer.ts";
 
 test("parseLogLine: compact line → level + process + message", () => {
   const r = parseLogLine("2026-06-12 21:09:00.123-0700 Df Caliburr[461:1a2b] hello from native");
-  expect(r).toEqual({ ts: "2026-06-12 21:09:00.123-0700", level: "log", process: "Caliburr", message: "hello from native" });
+  expect(r).toEqual({
+    ts: "2026-06-12 21:09:00.123-0700",
+    level: "log",
+    process: "Caliburr",
+    message: "hello from native",
+  });
 });
 
 test("parseLogLine maps type codes to levels", () => {

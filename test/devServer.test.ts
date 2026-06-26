@@ -1,8 +1,8 @@
-import { test, expect } from "bun:test";
-import { detectDevCommand, projectName } from "../src/devServer.ts";
+import { expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, basename } from "node:path";
+import { basename, join } from "node:path";
+import { detectDevCommand, projectName } from "../src/devServer.ts";
 
 const pkgDir = (pkg: unknown) => {
   const d = mkdtempSync(join(tmpdir(), "dl-dev-"));

@@ -27,7 +27,10 @@ export function availablePlatforms(probe: NativeProbe): Platform[] {
 export type PackageManager = "bun" | "npm";
 
 /** The command to build + install + launch a dev build for a platform. */
-export function buildCommand(platform: Platform, opts: { packageManager?: PackageManager } = {}): { cmd: string; args: string[] } {
+export function buildCommand(
+  platform: Platform,
+  opts: { packageManager?: PackageManager } = {},
+): { cmd: string; args: string[] } {
   const runner = opts.packageManager === "npm" ? "npx" : "bunx";
   return { cmd: runner, args: ["expo", `run:${platform}`] };
 }
@@ -85,12 +88,17 @@ export function resolveNativeInfo(
   /** Whether the host can drive iOS (simulator + idb are macOS-only) — adds the iOS target. */
   iosCapable = true,
 ): NativeInfo {
-  if (kind !== "react-native") return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
+  if (kind !== "react-native")
+    return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
   const dirs = availablePlatforms(probe);
   const platforms: Platform[] = dirs.length ? dirs : ["ios"];
   // Offer iOS (macOS only — simulator/idb) + Android views; both prebuild on first
   // `expo run:<platform>`. Readiness (idb / adb + a booted device) is surfaced separately.
-  const targets: ViewTarget[] = [...(webCapable ? (["web"] as ViewTarget[]) : []), ...(iosCapable ? (["ios"] as ViewTarget[]) : []), "android"];
+  const targets: ViewTarget[] = [
+    ...(webCapable ? (["web"] as ViewTarget[]) : []),
+    ...(iosCapable ? (["ios"] as ViewTarget[]) : []),
+    "android",
+  ];
   const buildStatus = fingerprintStatus(currentFingerprint, recordedFingerprint);
   return { isNative: true, platforms, targets, buildStatus, badge: buildStatusLabel(buildStatus) };
 }

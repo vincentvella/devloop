@@ -25,7 +25,9 @@ const panes = JSON.parse(txt(await call("pane_list"))).panes as {
   dev?: { running: boolean; cmd?: string; cwd?: string };
 }[];
 const active = panes.find((p) => p.active) ?? panes[0]!;
-console.log(`\nactive pane: ${active.id} (${active.label}) — cwd=${active.dev?.cwd} running=${active.dev?.running} url=${active.url}`);
+console.log(
+  `\nactive pane: ${active.id} (${active.label}) — cwd=${active.dev?.cwd} running=${active.dev?.running} url=${active.url}`,
+);
 if (!active.dev?.cwd) {
   console.log("no cwd configured on the active pane — set one in the cockpit first. Aborting.");
   await client.close();
@@ -35,8 +37,13 @@ if (!active.dev?.cwd) {
 // 2) start the dev server over MCP (uses the pane's cmd, else auto-detect) — unless already up
 if (!active.dev?.running) {
   await call("clear_logs");
-  console.log(`\ndev_start({ cwd: ${active.dev.cwd}${active.dev.cmd ? `, cmd: ${active.dev.cmd}` : " (auto-detect)"} }) …`);
-  console.log("dev_start →", txt(await call("dev_start", { cwd: active.dev.cwd, ...(active.dev.cmd ? { cmd: active.dev.cmd } : {}) })));
+  console.log(
+    `\ndev_start({ cwd: ${active.dev.cwd}${active.dev.cmd ? `, cmd: ${active.dev.cmd}` : " (auto-detect)"} }) …`,
+  );
+  console.log(
+    "dev_start →",
+    txt(await call("dev_start", { cwd: active.dev.cwd, ...(active.dev.cmd ? { cmd: active.dev.cmd } : {}) })),
+  );
 } else {
   console.log("\ndev server already running — skipping dev_start");
 }

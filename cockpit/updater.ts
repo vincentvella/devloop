@@ -10,7 +10,7 @@
  * Only meaningful in a packaged, signed build — in dev / selftest there's no
  * app-update.yml and macOS auto-update requires code signing, so we no-op.
  */
-import { type BrowserWindow } from "electron";
+import type { BrowserWindow } from "electron";
 import { isNewerVersion, type UpdateStatus } from "../src/update.ts";
 
 export interface Updater {

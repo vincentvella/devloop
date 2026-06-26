@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import {
-  parseSemver,
   compareSemver,
-  isNewerVersion,
-  updateAvailableMessage,
-  upToDateMessage,
   formatBytesPerSec,
+  isNewerVersion,
+  parseSemver,
+  updateAvailableMessage,
   updateStatusLabel,
+  upToDateMessage,
 } from "../src/update.ts";
 
 test("formatBytesPerSec scales B/KB/MB and drops missing/zero", () => {
@@ -21,7 +21,9 @@ test("updateStatusLabel renders each state (empty when idle)", () => {
   expect(updateStatusLabel({ state: "idle" })).toBe("");
   expect(updateStatusLabel({ state: "checking" })).toBe("Checking for updates…");
   expect(updateStatusLabel({ state: "available", version: "0.3.5" })).toBe("Devloop 0.3.5 available");
-  expect(updateStatusLabel({ state: "downloading", version: "0.3.5", percent: 42.4, bytesPerSecond: 1258291 })).toBe("Downloading 0.3.5… 42% · 1.2 MB/s");
+  expect(updateStatusLabel({ state: "downloading", version: "0.3.5", percent: 42.4, bytesPerSecond: 1258291 })).toBe(
+    "Downloading 0.3.5… 42% · 1.2 MB/s",
+  );
   expect(updateStatusLabel({ state: "downloading", version: "0.3.5", percent: 7 })).toBe("Downloading 0.3.5… 7%");
   expect(updateStatusLabel({ state: "downloaded", version: "0.3.5" })).toBe("Devloop 0.3.5 ready — restart to install");
   expect(updateStatusLabel({ state: "uptodate", version: "0.3.4" })).toBe("You're up to date");

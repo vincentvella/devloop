@@ -15,8 +15,13 @@ export type BufExec = (cmd: string, args: string[]) => Promise<Buffer>;
 export type StrExec = (cmd: string, args: string[]) => Promise<string>;
 
 /** Device pixel size via `adb shell wm size` (for mapping a click in the scaled <img> back to device px). */
-export async function deviceSize(serial: string, run: StrExec = strExec): Promise<{ width: number; height: number } | null> {
-  return parseWmSize(await run(adbBinary(), [...(serial && serial !== "any" ? ["-s", serial] : []), "shell", "wm", "size"]));
+export async function deviceSize(
+  serial: string,
+  run: StrExec = strExec,
+): Promise<{ width: number; height: number } | null> {
+  return parseWmSize(
+    await run(adbBinary(), [...(serial && serial !== "any" ? ["-s", serial] : []), "shell", "wm", "size"]),
+  );
 }
 
 export class AndroidScreenStream {
@@ -66,7 +71,13 @@ export class AndroidScreenStream {
 }
 
 const bufExec: BufExec = (cmd, args) =>
-  new Promise((resolve, reject) => execFile(cmd, args, { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 }, (e, out) => (e ? reject(e) : resolve(out as Buffer))));
+  new Promise((resolve, reject) =>
+    execFile(cmd, args, { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 }, (e, out) =>
+      e ? reject(e) : resolve(out as Buffer),
+    ),
+  );
 
 const strExec: StrExec = (cmd, args) =>
-  new Promise((resolve, reject) => execFile(cmd, args, { maxBuffer: 1024 * 1024 }, (e, out) => (e ? reject(e) : resolve(out))));
+  new Promise((resolve, reject) =>
+    execFile(cmd, args, { maxBuffer: 1024 * 1024 }, (e, out) => (e ? reject(e) : resolve(out))),
+  );

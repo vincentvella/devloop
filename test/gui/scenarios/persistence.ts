@@ -30,7 +30,11 @@ export async function persistence(): Promise<void> {
     ({ app, win } = await launchReady(home, ud2));
     await win.waitForTimeout(800);
     const labels = await win.locator(".tab .name").allTextContents();
-    check("panes restore across relaunch", labels.some((l) => l.includes("persist-marker")), labels.join(","));
+    check(
+      "panes restore across relaunch",
+      labels.some((l) => l.includes("persist-marker")),
+      labels.join(","),
+    );
     await app.close();
   } finally {
     rmSync(home, { recursive: true, force: true });

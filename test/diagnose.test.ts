@@ -1,8 +1,15 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { diagnose, staleNativeBuildNote } from "../src/diagnose.ts";
 import type { LogEntry } from "../src/logBuffer.ts";
 
-const e = (over: Partial<LogEntry>): LogEntry => ({ seq: 0, ts: 1000, source: "browser", stream: "console", line: "", ...over });
+const e = (over: Partial<LogEntry>): LogEntry => ({
+  seq: 0,
+  ts: 1000,
+  source: "browser",
+  stream: "console",
+  line: "",
+  ...over,
+});
 
 test("#14: a missing native module flags a stale native build (and leads the summary)", () => {
   const r = diagnose([e({ stream: "pageerror", line: "Error: Cannot find native module 'ExpoCamera'", ts: 100 })]);
@@ -15,9 +22,13 @@ test("#14: a missing native module flags a stale native build (and leads the sum
 });
 
 test("staleNativeBuildNote matches the known signatures, not unrelated errors", () => {
-  const g = (sample: string) => [{ source: "browser", stream: "pageerror", sample, count: 1, firstTs: 0, lastTs: 0, targets: [] }];
+  const g = (sample: string) => [
+    { source: "browser", stream: "pageerror", sample, count: 1, firstTs: 0, lastTs: 0, targets: [] },
+  ];
   expect(staleNativeBuildNote(g("Cannot find native module 'X'"))).not.toBeNull();
-  expect(staleNativeBuildNote(g("Your JavaScript code tried to access a native module that doesn't exist"))).not.toBeNull();
+  expect(
+    staleNativeBuildNote(g("Your JavaScript code tried to access a native module that doesn't exist")),
+  ).not.toBeNull();
   expect(staleNativeBuildNote(g("TypeError: undefined is not a function"))).toBeNull();
 });
 
@@ -27,10 +38,24 @@ test("groups repeated errors with counts and collects network failures", () => {
     e({ stream: "console", line: "[error] TypeError: x is undefined", ts: 200 }), // dup → grouped
     e({ stream: "console", line: "[log] hi" }), // not an error
     e({ stream: "pageerror", line: "Error: boom", ts: 300 }),
-    e({ stream: "network", line: "500 GET /api/x", detail: { kind: "network", url: "http://h/api/x", method: "GET", status: 500 }, ts: 400 }),
-    e({ stream: "network", line: "500 GET /api/x", detail: { kind: "network", url: "http://h/api/x", method: "GET", status: 500 }, ts: 450 }), // dup net
+    e({
+      stream: "network",
+      line: "500 GET /api/x",
+      detail: { kind: "network", url: "http://h/api/x", method: "GET", status: 500 },
+      ts: 400,
+    }),
+    e({
+      stream: "network",
+      line: "500 GET /api/x",
+      detail: { kind: "network", url: "http://h/api/x", method: "GET", status: 500 },
+      ts: 450,
+    }), // dup net
     e({ source: "server", stream: "stderr", line: "UnhandledPromiseRejection: nope", ts: 500 }),
-    e({ stream: "network", line: "200 GET /ok", detail: { kind: "network", url: "http://h/ok", method: "GET", status: 200 } }), // healthy
+    e({
+      stream: "network",
+      line: "200 GET /ok",
+      detail: { kind: "network", url: "http://h/ok", method: "GET", status: 200 },
+    }), // healthy
   ]);
   expect(r.errorCount).toBe(6); // 2 console + 1 page + 2 net + 1 server
   const typeErr = r.groups.find((g) => g.sample.includes("TypeError"));
@@ -45,7 +70,10 @@ test("groups repeated errors with counts and collects network failures", () => {
 
 test("windowMs keeps only recent entries", () => {
   const now = 10_000;
-  const r = diagnose([e({ stream: "pageerror", line: "old", ts: 1000 }), e({ stream: "pageerror", line: "recent", ts: 9_500 })], { windowMs: 1000, now });
+  const r = diagnose(
+    [e({ stream: "pageerror", line: "old", ts: 1000 }), e({ stream: "pageerror", line: "recent", ts: 9_500 })],
+    { windowMs: 1000, now },
+  );
   expect(r.errorCount).toBe(1);
   expect(r.groups[0]!.sample).toBe("recent");
 });

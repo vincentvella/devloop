@@ -309,7 +309,6 @@
     border-left: none;
   }
 
-
   .panel-head {
     display: flex;
     align-items: center;
@@ -530,17 +529,53 @@
     color: var(--color-warn);
   }
   /* network status tiers (tag color) */
-  .logrow.s2 .tag { color: var(--color-ok); }
-  .logrow.s3 .tag { color: var(--color-info); }
-  .logrow.s4 .tag { color: var(--color-warn); }
-  .logrow.s5 .tag { color: var(--color-bad); }
-  .logrow .net-ms { color: var(--color-dim); }
-  .net-detail { margin-top: 4px; padding: 6px 8px; background: var(--color-bg2); border: 1px solid var(--color-edge); border-radius: 6px; }
-  .net-h { color: var(--color-dim); margin: 2px 0; }
-  .net-sec { margin-top: 4px; }
-  .net-hdr { white-space: pre-wrap; word-break: break-all; }
-  .net-k { color: var(--color-accent); }
-  .net-body { margin: 2px 0 0; max-height: 9em; overflow: auto; white-space: pre-wrap; word-break: break-word; background: var(--color-bg); border: 1px solid var(--color-edge); border-radius: 4px; padding: 4px 6px; }
+  .logrow.s2 .tag {
+    color: var(--color-ok);
+  }
+  .logrow.s3 .tag {
+    color: var(--color-info);
+  }
+  .logrow.s4 .tag {
+    color: var(--color-warn);
+  }
+  .logrow.s5 .tag {
+    color: var(--color-bad);
+  }
+  .logrow .net-ms {
+    color: var(--color-dim);
+  }
+  .net-detail {
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: var(--color-bg2);
+    border: 1px solid var(--color-edge);
+    border-radius: 6px;
+  }
+  .net-h {
+    color: var(--color-dim);
+    margin: 2px 0;
+  }
+  .net-sec {
+    margin-top: 4px;
+  }
+  .net-hdr {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .net-k {
+    color: var(--color-accent);
+  }
+  .net-body {
+    margin: 2px 0 0;
+    max-height: 9em;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--color-bg);
+    border: 1px solid var(--color-edge);
+    border-radius: 4px;
+    padding: 4px 6px;
+  }
   .logrow .msg.clamp {
     max-height: 4.5em;
     overflow: hidden;
@@ -712,9 +747,15 @@
   background: var(--color-bg2);
   border-bottom: 1px solid var(--color-edge);
 }
-.update-banner.ok { border-bottom-color: var(--color-ok); }
-.update-banner.bad { border-bottom-color: var(--color-bad); }
-.update-banner.info { border-bottom-color: var(--color-info); }
+.update-banner.ok {
+  border-bottom-color: var(--color-ok);
+}
+.update-banner.bad {
+  border-bottom-color: var(--color-bad);
+}
+.update-banner.info {
+  border-bottom-color: var(--color-info);
+}
 .update-spinner {
   flex: none;
   width: 14px;
@@ -725,12 +766,26 @@
   animation: update-spin 0.7s linear infinite;
 }
 @keyframes update-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
-.update-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.update-banner.ok .update-dot { background: var(--color-ok); }
-.update-banner.bad .update-dot { background: var(--color-bad); }
-.update-text { white-space: nowrap; }
+.update-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.update-banner.ok .update-dot {
+  background: var(--color-ok);
+}
+.update-banner.bad .update-dot {
+  background: var(--color-bad);
+}
+.update-text {
+  white-space: nowrap;
+}
 .update-progress {
   flex: 1;
   max-width: 260px;
@@ -739,8 +794,15 @@
   border-radius: 999px;
   overflow: hidden;
 }
-.update-progress-fill { display: block; height: 100%; background: var(--color-info); transition: width 0.2s ease; }
-.update-spacer { flex: 1; }
+.update-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-info);
+  transition: width 0.2s ease;
+}
+.update-spacer {
+  flex: 1;
+}
 .update-btn {
   padding: 4px 12px;
   font-size: 12px;
@@ -750,8 +812,17 @@
   background: var(--color-raise);
   color: var(--color-fg);
 }
-.update-btn.primary { background: var(--color-accent); border-color: var(--color-accent); color: #1c1033; font-weight: 600; }
-.update-btn.ghost { border: none; background: transparent; color: var(--color-dim); }
+.update-btn.primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #1c1033;
+  font-weight: 600;
+}
+.update-btn.ghost {
+  border: none;
+  background: transparent;
+  color: var(--color-dim);
+}
 
 /* Hint under the extensions install field — the store's "Add to Chrome" is gated
    to real Chrome, so pasting a link is the working install path. */
@@ -763,14 +834,44 @@
 }
 
 /* Native (iOS) readiness preflight — Settings checklist + the iOS warning bar. */
-.native-readiness { display: flex; flex-direction: column; gap: 5px; }
-.native-check { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.native-mark { width: 14px; text-align: center; font-weight: 700; }
-.native-check.ok .native-mark { color: var(--color-ok); }
-.native-check.bad .native-mark { color: var(--color-bad); }
-.native-label { color: var(--color-fg); min-width: 120px; }
-.native-fix { font-size: 11px; color: var(--color-dim); background: var(--color-bg); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--color-edge); }
-.native-readiness .labeled { align-self: flex-start; margin-top: 4px; }
+.native-readiness {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.native-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.native-mark {
+  width: 14px;
+  text-align: center;
+  font-weight: 700;
+}
+.native-check.ok .native-mark {
+  color: var(--color-ok);
+}
+.native-check.bad .native-mark {
+  color: var(--color-bad);
+}
+.native-label {
+  color: var(--color-fg);
+  min-width: 120px;
+}
+.native-fix {
+  font-size: 11px;
+  color: var(--color-dim);
+  background: var(--color-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--color-edge);
+}
+.native-readiness .labeled {
+  align-self: flex-start;
+  margin-top: 4px;
+}
 .native-warn {
   padding: 6px 14px;
   font-size: 12px;
@@ -781,7 +882,10 @@
 }
 
 /* Attention badge on the settings gear (e.g. native readiness check failed). */
-.icon-badge-wrap { position: relative; display: inline-flex; }
+.icon-badge-wrap {
+  position: relative;
+  display: inline-flex;
+}
 .icon-badge {
   position: absolute;
   top: 1px;
@@ -795,7 +899,13 @@
 }
 
 /* Native (iOS) element picker list. */
-.native-pick-list { display: flex; flex-direction: column; gap: 3px; max-height: 360px; overflow-y: auto; }
+.native-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 360px;
+  overflow-y: auto;
+}
 .native-pick-row {
   display: flex;
   align-items: baseline;
@@ -806,6 +916,19 @@
   border: 1px solid var(--color-edge);
   border-radius: 6px;
 }
-.native-pick-row:hover { background: var(--color-raise); border-color: var(--color-accent); }
-.native-pick-role { flex: none; font-size: 11px; color: var(--color-dim); min-width: 92px; }
-.native-pick-name { color: var(--color-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.native-pick-row:hover {
+  background: var(--color-raise);
+  border-color: var(--color-accent);
+}
+.native-pick-role {
+  flex: none;
+  font-size: 11px;
+  color: var(--color-dim);
+  min-width: 92px;
+}
+.native-pick-name {
+  color: var(--color-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

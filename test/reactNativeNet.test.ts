@@ -1,11 +1,28 @@
 import { expect, test } from "bun:test";
-import { NET_MARKER, NET_INTERCEPTOR_JS, parseNetMarker } from "../src/reactNativeNet.ts";
+import { NET_INTERCEPTOR_JS, NET_MARKER, parseNetMarker } from "../src/reactNativeNet.ts";
 
 test("parseNetMarker turns a marker into a NetDetail timeline row", () => {
-  const ev = { kind: "network", method: "GET", url: "https://api.example.com/recipes?q=espresso", status: 200, durationMs: 142, requestHeaders: { accept: "application/json" }, responseHeaders: { "content-type": "application/json" }, mimeType: "application/json", responseBody: '{"ok":true}' };
+  const ev = {
+    kind: "network",
+    method: "GET",
+    url: "https://api.example.com/recipes?q=espresso",
+    status: 200,
+    durationMs: 142,
+    requestHeaders: { accept: "application/json" },
+    responseHeaders: { "content-type": "application/json" },
+    mimeType: "application/json",
+    responseBody: '{"ok":true}',
+  };
   const out = parseNetMarker(NET_MARKER + JSON.stringify(ev))!;
   expect(out.line).toBe("200 GET https://api.example.com/recipes?q=espresso");
-  expect(out.detail).toMatchObject({ kind: "network", method: "GET", status: 200, durationMs: 142, mimeType: "application/json", responseBody: '{"ok":true}' });
+  expect(out.detail).toMatchObject({
+    kind: "network",
+    method: "GET",
+    status: 200,
+    durationMs: 142,
+    mimeType: "application/json",
+    responseBody: '{"ok":true}',
+  });
   expect(out.detail.requestHeaders).toEqual({ accept: "application/json" });
 });
 

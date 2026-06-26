@@ -3,9 +3,10 @@
  * Playwright and gives scenarios a small toolkit for driving the renderer + reading
  * main-process state. See run.ts for the entry point and the bun→node note.
  */
-import { _electron as electron, type ElectronApplication, type Page } from "playwright-core";
+
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type ElectronApplication, _electron as electron, type Page } from "playwright-core";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const FIXTURE = join(ROOT, "test", "fixtures", "web-app");
@@ -43,7 +44,11 @@ export const tabCount = (win: Page): Promise<number> => win.locator(".tab:not(.a
 // async predicate that calls the devloop IPC bridge resolves immediately — it
 // treats the returned Promise as truthy without awaiting it per poll — so we
 // drive the polling here instead.)
-export async function waitForActive(win: Page, pred: (p: Pane) => boolean, timeoutMs = 30_000): Promise<Pane | undefined> {
+export async function waitForActive(
+  win: Page,
+  pred: (p: Pane) => boolean,
+  timeoutMs = 30_000,
+): Promise<Pane | undefined> {
   const end = Date.now() + timeoutMs;
   for (;;) {
     const ap = await activePane(win);
@@ -63,7 +68,11 @@ export async function run(name: string, fn: () => Promise<void>): Promise<void> 
 }
 
 /** Launch the built cockpit with an isolated registry + Chromium profile. */
-export function launchApp(home: string, userData: string, extraEnv: Record<string, string> = {}): Promise<ElectronApplication> {
+export function launchApp(
+  home: string,
+  userData: string,
+  extraEnv: Record<string, string> = {},
+): Promise<ElectronApplication> {
   return electron.launch({
     args: [
       "out/main.cjs",
@@ -86,7 +95,12 @@ export function launchApp(home: string, userData: string, extraEnv: Record<strin
 /** Launch and wait until the renderer is interactive (IPC bridge + shell mounted),
  *  relaunching if a cold start stalls — so a slow/occluded CI runner can't wedge the
  *  whole suite. Returns the app + its shell window. */
-export async function launchReady(home: string, userData: string, extraEnv: Record<string, string> = {}, attempts = 3): Promise<{ app: ElectronApplication; win: Page }> {
+export async function launchReady(
+  home: string,
+  userData: string,
+  extraEnv: Record<string, string> = {},
+  attempts = 3,
+): Promise<{ app: ElectronApplication; win: Page }> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const app = await launchApp(home, userData, extraEnv);
@@ -131,5 +145,8 @@ export async function setDevConfig(win: Page, cmd: string, cwd: string): Promise
 
 export async function closeWrench(win: Page): Promise<void> {
   await win.keyboard.press("Escape");
-  await win.locator('input[placeholder="cmd (blank = auto-detect)"]').waitFor({ state: "hidden" }).catch(() => {});
+  await win
+    .locator('input[placeholder="cmd (blank = auto-detect)"]')
+    .waitFor({ state: "hidden" })
+    .catch(() => {});
 }

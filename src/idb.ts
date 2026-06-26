@@ -24,13 +24,36 @@ export function pointFromRef(ref: string): { x: number; y: number } | null {
 
 // --- idb arg builders (after `idb`) ----------------------------------------
 
-export const idbTapArgs = (udid: string, x: number, y: number): string[] => ["ui", "tap", "--udid", udid, String(Math.round(x)), String(Math.round(y))];
+export const idbTapArgs = (udid: string, x: number, y: number): string[] => [
+  "ui",
+  "tap",
+  "--udid",
+  udid,
+  String(Math.round(x)),
+  String(Math.round(y)),
+];
 
 export const idbTextArgs = (udid: string, text: string): string[] => ["ui", "text", "--udid", udid, text];
 
 /** A swipe gesture (also how we scroll): from (x1,y1) to (x2,y2). */
-export function idbSwipeArgs(udid: string, x1: number, y1: number, x2: number, y2: number, durationMs?: number): string[] {
-  const a = ["ui", "swipe", "--udid", udid, String(Math.round(x1)), String(Math.round(y1)), String(Math.round(x2)), String(Math.round(y2))];
+export function idbSwipeArgs(
+  udid: string,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  durationMs?: number,
+): string[] {
+  const a = [
+    "ui",
+    "swipe",
+    "--udid",
+    udid,
+    String(Math.round(x1)),
+    String(Math.round(y1)),
+    String(Math.round(x2)),
+    String(Math.round(y2)),
+  ];
   if (durationMs && durationMs > 0) a.push("--duration", String(durationMs / 1000));
   return a;
 }
@@ -41,7 +64,18 @@ export const idbKeyArgs = (udid: string, keycode: number): string[] => ["ui", "k
 export const idbDescribeAllArgs = (udid: string): string[] => ["ui", "describe-all", "--udid", udid, "--json"];
 
 /** USB-HID keycodes for the keys browser_press exposes (RN/native). */
-const KEYCODES: Readonly<Record<string, number>> = { Enter: 40, Return: 40, Escape: 41, Backspace: 42, Tab: 43, Space: 44, ArrowRight: 79, ArrowLeft: 80, ArrowDown: 81, ArrowUp: 82 };
+const KEYCODES: Readonly<Record<string, number>> = {
+  Enter: 40,
+  Return: 40,
+  Escape: 41,
+  Backspace: 42,
+  Tab: 43,
+  Space: 44,
+  ArrowRight: 79,
+  ArrowLeft: 80,
+  ArrowDown: 81,
+  ArrowUp: 82,
+};
 export const keycodeFor = (key: string): number | null => KEYCODES[key] ?? null;
 
 // --- describe-all → snapshot -----------------------------------------------
@@ -70,7 +104,10 @@ const NAMELEN = 80;
  * `ref` is its center point so a tap can be issued straight from the snapshot.
  * The full-screen root container and zero-size elements are dropped.
  */
-export function parseDescribeAll(json: string, opts: { url?: string; title?: string; screen?: IdbFrame } = {}): PageSnapshot {
+export function parseDescribeAll(
+  json: string,
+  opts: { url?: string; title?: string; screen?: IdbFrame } = {},
+): PageSnapshot {
   let arr: unknown;
   try {
     arr = JSON.parse(json);
@@ -89,8 +126,14 @@ export function parseDescribeAll(json: string, opts: { url?: string; title?: str
     const name = String(raw.AXLabel ?? raw.title ?? raw.AXValue ?? "").trim();
     // Keep things worth acting on: anything named, or a known interactive type.
     if (!name && !/button|cell|textfield|securetextfield|switch|slider|tab|link/i.test(role)) continue;
-    const node: SnapNode = { ref: pointRef(f.x + f.width / 2, f.y + f.height / 2), role, name: name.slice(0, NAMELEN), tag: "native" };
-    if (raw.AXValue && String(raw.AXValue).trim() && String(raw.AXValue) !== name) node.value = String(raw.AXValue).slice(0, NAMELEN);
+    const node: SnapNode = {
+      ref: pointRef(f.x + f.width / 2, f.y + f.height / 2),
+      role,
+      name: name.slice(0, NAMELEN),
+      tag: "native",
+    };
+    if (raw.AXValue && String(raw.AXValue).trim() && String(raw.AXValue) !== name)
+      node.value = String(raw.AXValue).slice(0, NAMELEN);
     if (raw.enabled === false) node.state = "disabled";
     nodes.push(node);
   }

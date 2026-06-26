@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { shouldShowSimulator, simulatorBounds, serveSimSpawn, serveSimVendoredSpawn, SERVE_SIM_URL, simulatorViewerHtml, streamUrlFromApi, simInfoFromApi } from "../src/simulator.ts";
+import {
+  SERVE_SIM_URL,
+  serveSimSpawn,
+  serveSimVendoredSpawn,
+  shouldShowSimulator,
+  simInfoFromApi,
+  simulatorBounds,
+  simulatorViewerHtml,
+  streamUrlFromApi,
+} from "../src/simulator.ts";
 
 test("shouldShowSimulator: visible only when active + no overlay + window shown", () => {
   expect(shouldShowSimulator({ isActiveView: true, overlayOpen: false, windowVisible: true })).toBe(true);
@@ -45,14 +54,19 @@ test("simulatorViewerHtml embeds the stream URL as an <img> data: page", () => {
 });
 
 test("streamUrlFromApi extracts a valid stream URL, else null", () => {
-  expect(streamUrlFromApi({ streamUrl: "http://127.0.0.1:3100/stream.mjpeg" })).toBe("http://127.0.0.1:3100/stream.mjpeg");
+  expect(streamUrlFromApi({ streamUrl: "http://127.0.0.1:3100/stream.mjpeg" })).toBe(
+    "http://127.0.0.1:3100/stream.mjpeg",
+  );
   expect(streamUrlFromApi({})).toBeNull();
   expect(streamUrlFromApi(null)).toBeNull();
   expect(streamUrlFromApi({ streamUrl: "garbage" })).toBeNull();
 });
 
 test("simInfoFromApi extracts device + url (for preview mode), else null", () => {
-  expect(simInfoFromApi({ device: "UDID", url: "http://127.0.0.1:3100" })).toEqual({ device: "UDID", url: "http://127.0.0.1:3100" });
+  expect(simInfoFromApi({ device: "UDID", url: "http://127.0.0.1:3100" })).toEqual({
+    device: "UDID",
+    url: "http://127.0.0.1:3100",
+  });
   expect(simInfoFromApi({ device: "UDID" })).toBeNull();
   expect(simInfoFromApi({ url: "http://127.0.0.1:3100" })).toBeNull();
   expect(simInfoFromApi(null)).toBeNull();

@@ -8,23 +8,24 @@
 
 import puppeteer, {
   type Browser,
-  type Page,
   type CDPSession,
   type ConsoleMessage,
   type HTTPRequest,
   type HTTPResponse,
   type KeyInput,
+  type Page,
 } from "puppeteer";
-import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import type { IBrowserController } from "./browserController.ts";
-import { SNAPSHOT_JS, type PageSnapshot } from "./pageSnapshot.ts";
-import { scrollJs, selectJs } from "./pageActions.ts";
-import type { NetDetail } from "./har.ts";
 import { DEVICE_PRESETS, THROTTLE } from "./emulation.ts";
+import type { NetDetail } from "./har.ts";
+import type { LogBuffer, LogEntry } from "./logBuffer.ts";
+import { scrollJs, selectJs } from "./pageActions.ts";
+import { type PageSnapshot, SNAPSHOT_JS } from "./pageSnapshot.ts";
 import { attachResolvedStack } from "./sourcemap.ts";
 
 /** Cap a captured body/string to keep the buffer light. */
-const cap = (s?: string, max = 2048): string | undefined => (s == null ? undefined : s.length > max ? s.slice(0, max) + `… (+${s.length - max})` : s);
+const cap = (s?: string, max = 2048): string | undefined =>
+  s == null ? undefined : s.length > max ? s.slice(0, max) + `… (+${s.length - max})` : s;
 
 export interface BrowserOptions {
   headless: boolean;
@@ -95,7 +96,8 @@ export class PuppeteerBrowserController implements IBrowserController {
     return page;
   }
 
-  private static readonly STALE = /detached|Target closed|Session closed|Execution context was destroyed|page has been closed/i;
+  private static readonly STALE =
+    /detached|Target closed|Session closed|Execution context was destroyed|page has been closed/i;
 
   /** Run an op against a live page; on a detach-class error, re-acquire and retry once. */
   private async withRecovery<T>(op: (page: Page) => Promise<T>, label: string): Promise<T> {
@@ -136,16 +138,21 @@ export class PuppeteerBrowserController implements IBrowserController {
 
     page.on("requestfailed", (req: HTTPRequest) => {
       // Failures always hit the timeline (and the ring).
-      this.buffer.network(`FAILED ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "unknown"}`, {
-        kind: "network",
-        url: req.url(),
-        method: req.method(),
-        resourceType: req.resourceType(),
-        requestHeaders: req.headers(),
-        requestBody: cap(req.postData()),
-        startedAt: Date.now(),
-        failure: req.failure()?.errorText,
-      } satisfies NetDetail, undefined, true);
+      this.buffer.network(
+        `FAILED ${req.method()} ${req.url()} — ${req.failure()?.errorText ?? "unknown"}`,
+        {
+          kind: "network",
+          url: req.url(),
+          method: req.method(),
+          resourceType: req.resourceType(),
+          requestHeaders: req.headers(),
+          requestBody: cap(req.postData()),
+          startedAt: Date.now(),
+          failure: req.failure()?.errorText,
+        } satisfies NetDetail,
+        undefined,
+        true,
+      );
     });
 
     page.on("response", async (res: HTTPResponse) => {
@@ -163,20 +170,25 @@ export class PuppeteerBrowserController implements IBrowserController {
           /* no body (redirect/304/etc.) */
         }
       }
-      this.buffer.network(`${status} ${req.method()} ${res.url()}`, {
-        kind: "network",
-        url: res.url(),
-        status,
-        statusText: res.statusText(),
-        method: req.method(),
-        resourceType: req.resourceType(),
-        mimeType: res.headers()["content-type"],
-        requestHeaders: req.headers(),
-        responseHeaders: res.headers(),
-        requestBody: cap(req.postData()),
-        responseBody,
-        startedAt: Date.now(),
-      } satisfies NetDetail, undefined, onTimeline);
+      this.buffer.network(
+        `${status} ${req.method()} ${res.url()}`,
+        {
+          kind: "network",
+          url: res.url(),
+          status,
+          statusText: res.statusText(),
+          method: req.method(),
+          resourceType: req.resourceType(),
+          mimeType: res.headers()["content-type"],
+          requestHeaders: req.headers(),
+          responseHeaders: res.headers(),
+          requestBody: cap(req.postData()),
+          responseBody,
+          startedAt: Date.now(),
+        } satisfies NetDetail,
+        undefined,
+        onTimeline,
+      );
     });
   }
 
@@ -197,9 +209,7 @@ export class PuppeteerBrowserController implements IBrowserController {
         }
       }),
     );
-    entry.line = `[${msg.type()}] ${values
-      .map((v) => (typeof v === "string" ? v : JSON.stringify(v)))
-      .join(" ")}`;
+    entry.line = `[${msg.type()}] ${values.map((v) => (typeof v === "string" ? v : JSON.stringify(v))).join(" ")}`;
     (entry.detail as Record<string, unknown>).args = values;
   }
 
@@ -264,7 +274,10 @@ export class PuppeteerBrowserController implements IBrowserController {
   }
 
   async hover(selector: string): Promise<void> {
-    await this.withRecovery((page) => this.withTimeout(page.hover(selector), `hover(${selector})`), `hover(${selector})`);
+    await this.withRecovery(
+      (page) => this.withTimeout(page.hover(selector), `hover(${selector})`),
+      `hover(${selector})`,
+    );
   }
 
   async scroll(opts: { selector?: string; x?: number; y?: number }): Promise<void> {
@@ -306,19 +319,34 @@ export class PuppeteerBrowserController implements IBrowserController {
     return (await this.evaluate(SNAPSHOT_JS)) as PageSnapshot;
   }
 
-  async emulate(opts: { device?: string; width?: number; height?: number; deviceScaleFactor?: number; mobile?: boolean; userAgent?: string; reset?: boolean }): Promise<void> {
+  async emulate(opts: {
+    device?: string;
+    width?: number;
+    height?: number;
+    deviceScaleFactor?: number;
+    mobile?: boolean;
+    userAgent?: string;
+    reset?: boolean;
+  }): Promise<void> {
     await this.withRecovery(async (page) => {
       if (opts.reset) {
         await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
         return;
       }
       const d = opts.device ? DEVICE_PRESETS[opts.device] : undefined;
-      if (opts.device && !d) throw new Error(`unknown device preset "${opts.device}" (have: ${Object.keys(DEVICE_PRESETS).join(", ")})`);
+      if (opts.device && !d)
+        throw new Error(`unknown device preset "${opts.device}" (have: ${Object.keys(DEVICE_PRESETS).join(", ")})`);
       const width = d?.width ?? opts.width;
       const height = d?.height ?? opts.height;
       if (!width || !height) throw new Error("emulate needs a device preset or width+height");
       const mobile = d?.mobile ?? opts.mobile ?? false;
-      await page.setViewport({ width, height, deviceScaleFactor: d?.deviceScaleFactor ?? opts.deviceScaleFactor ?? 1, isMobile: mobile, hasTouch: mobile });
+      await page.setViewport({
+        width,
+        height,
+        deviceScaleFactor: d?.deviceScaleFactor ?? opts.deviceScaleFactor ?? 1,
+        isMobile: mobile,
+        hasTouch: mobile,
+      });
       const ua = d?.userAgent ?? opts.userAgent;
       if (ua) await page.setUserAgent(ua);
     }, "emulate");
@@ -339,7 +367,8 @@ export class PuppeteerBrowserController implements IBrowserController {
         await this.cdp.send("Network.clearBrowserCookies");
         try {
           const u = new URL(page.url());
-          if (u.protocol.startsWith("http")) await this.cdp.send("Storage.clearDataForOrigin", { origin: u.origin, storageTypes: "all" });
+          if (u.protocol.startsWith("http"))
+            await this.cdp.send("Storage.clearDataForOrigin", { origin: u.origin, storageTypes: "all" });
         } catch {
           /* opaque origin (about:blank/data:) */
         }
@@ -352,14 +381,22 @@ export class PuppeteerBrowserController implements IBrowserController {
     }, "clearStorage");
   }
 
-  async waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }> {
+  async waitFor(opts: {
+    selector?: string;
+    text?: string;
+    timeoutMs?: number;
+  }): Promise<{ ok: boolean; waitedMs: number }> {
     const timeout = opts.timeoutMs ?? 10_000;
     const start = Date.now();
     if (!opts.selector && !opts.text) throw new Error("waitFor needs a selector or text");
     try {
       await this.withRecovery(async (page) => {
         if (opts.selector) await page.waitForSelector(opts.selector, { timeout });
-        else await page.waitForFunction(`!!document.body && document.body.innerText.includes(${JSON.stringify(opts.text)})`, { timeout });
+        else
+          await page.waitForFunction(
+            `!!document.body && document.body.innerText.includes(${JSON.stringify(opts.text)})`,
+            { timeout },
+          );
       }, "waitFor");
       return { ok: true, waitedMs: Date.now() - start };
     } catch {

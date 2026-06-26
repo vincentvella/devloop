@@ -8,7 +8,7 @@
  * (devCmd/devCwd) and is a separate follow-up slice.
  */
 import { create } from "zustand";
-import type { Entry, Pane, Project, Ext, NativeInfo } from "./global";
+import type { Entry, Ext, NativeInfo, Pane, Project } from "./global";
 
 const dl = () => window.devloop;
 const MAX_ENTRIES = 2000;
@@ -72,6 +72,11 @@ export const useDevloopStore = create<DevloopState>((set, get) => ({
     await get().refreshProjects();
     set({ exts: await dl().extList() });
     dl().onPush((e) => get().appendEntry(e));
-    dl().onExtChanged(() => void dl().extList().then((exts) => set({ exts })));
+    dl().onExtChanged(
+      () =>
+        void dl()
+          .extList()
+          .then((exts) => set({ exts })),
+    );
   },
 }));

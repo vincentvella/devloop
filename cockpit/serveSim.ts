@@ -3,10 +3,17 @@
  * Simulator and serves its MJPEG stream. We consume its raw stream URL (from
  * /api) in an <img> inside a pane view, rather than loading serve-sim's full UI.
  */
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { serveSimSpawn, serveSimVendoredSpawn, SERVE_SIM_URL, SERVE_SIM_API, simInfoFromApi, type SimInfo } from "../src/simulator.ts";
+import {
+  SERVE_SIM_API,
+  SERVE_SIM_URL,
+  type SimInfo,
+  serveSimSpawn,
+  serveSimVendoredSpawn,
+  simInfoFromApi,
+} from "../src/simulator.ts";
 
 export class ServeSim {
   private proc?: ChildProcess;
@@ -42,7 +49,9 @@ export class ServeSim {
     }
     const runner = this.pickRunner();
     if (!runner) {
-      this.log("serve-sim: no vendored copy and no bun/node on PATH — can't start the simulator (reinstall, or install bun/node)");
+      this.log(
+        "serve-sim: no vendored copy and no bun/node on PATH — can't start the simulator (reinstall, or install bun/node)",
+      );
       return null;
     }
     const { cmd, args } = serveSimSpawn(runner);
@@ -88,7 +97,10 @@ export class ServeSim {
 
   private async info(): Promise<SimInfo | null> {
     try {
-      const api = (await (await fetch(SERVE_SIM_API, { signal: AbortSignal.timeout(3000) })).json()) as { device?: string; url?: string };
+      const api = (await (await fetch(SERVE_SIM_API, { signal: AbortSignal.timeout(3000) })).json()) as {
+        device?: string;
+        url?: string;
+      };
       return simInfoFromApi(api);
     } catch {
       return null;

@@ -24,6 +24,10 @@ export function metroBaseFromUrl(url: string | undefined | null): string | null 
 export function deriveAppMatch(appConfig: { name?: string; expo?: { name?: string } } | null, cwd: string): string {
   const name = appConfig?.expo?.name ?? appConfig?.name;
   if (typeof name === "string" && name.trim()) return name.trim();
-  const base = cwd.replace(/[/\\]+$/, "").split(/[/\\]/).pop() ?? "";
+  const base =
+    cwd
+      .replace(/[/\\]+$/, "")
+      .split(/[/\\]/)
+      .pop() ?? "";
   return base ? base.charAt(0).toUpperCase() + base.slice(1) : "";
 }

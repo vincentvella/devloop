@@ -1,14 +1,32 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { buildBundle, bundleToHtml } from "../src/bundle.ts";
 import type { LogEntry } from "../src/logBuffer.ts";
 
-const e = (over: Partial<LogEntry>): LogEntry => ({ seq: 0, ts: 1000, source: "browser", stream: "console", line: "", ...over });
+const e = (over: Partial<LogEntry>): LogEntry => ({
+  seq: 0,
+  ts: 1000,
+  source: "browser",
+  stream: "console",
+  line: "",
+  ...over,
+});
 
 test("buildBundle assembles diagnose + har + screenshots and strips screenshot images from logs", () => {
   const entries = [
     e({ stream: "console", line: "[error] boom", ts: 100 }),
-    e({ stream: "network", line: "500 GET /x", detail: { kind: "network", url: "http://h/x", method: "GET", status: 500 }, ts: 200 }),
-    e({ stream: "screenshot", line: "screenshot", detail: { image: "data:image/png;base64,AAAA" }, ts: 300, target: "pane-1" }),
+    e({
+      stream: "network",
+      line: "500 GET /x",
+      detail: { kind: "network", url: "http://h/x", method: "GET", status: 500 },
+      ts: 200,
+    }),
+    e({
+      stream: "screenshot",
+      line: "screenshot",
+      detail: { image: "data:image/png;base64,AAAA" },
+      ts: 300,
+      target: "pane-1",
+    }),
     e({ stream: "console", line: "[log] ok", ts: 400 }),
   ];
   const b = buildBundle(entries, { app: "myapp" });
@@ -24,12 +42,21 @@ test("buildBundle assembles diagnose + har + screenshots and strips screenshot i
 });
 
 test("buildBundle windowMs filters", () => {
-  const b = buildBundle([e({ stream: "pageerror", line: "old", ts: 1000 }), e({ stream: "pageerror", line: "new", ts: 9000 })], { windowMs: 2000, now: 10_000 });
+  const b = buildBundle(
+    [e({ stream: "pageerror", line: "old", ts: 1000 }), e({ stream: "pageerror", line: "new", ts: 9000 })],
+    { windowMs: 2000, now: 10_000 },
+  );
   expect(b.meta.counts.logs).toBe(1);
 });
 
 test("bundleToHtml is a self-contained report containing the error + a screenshot", () => {
-  const b = buildBundle([e({ stream: "pageerror", line: "Error: kaput", ts: 100 }), e({ stream: "screenshot", detail: { image: "data:image/png;base64,ZZZZ" }, ts: 200 })], {});
+  const b = buildBundle(
+    [
+      e({ stream: "pageerror", line: "Error: kaput", ts: 100 }),
+      e({ stream: "screenshot", detail: { image: "data:image/png;base64,ZZZZ" }, ts: 200 }),
+    ],
+    {},
+  );
   const html = bundleToHtml(b);
   expect(html).toContain("<html");
   expect(html.toLowerCase()).toContain("devloop");

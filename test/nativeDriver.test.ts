@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { idbDriver, adbDriver } from "../src/nativeDriver.ts";
+import { adbDriver, idbDriver } from "../src/nativeDriver.ts";
 
 // Capture the args each driver hands to its injected runner, and feed back canned stdout.
 function recorder(stdout = "") {
