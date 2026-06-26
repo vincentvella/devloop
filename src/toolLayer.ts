@@ -12,6 +12,7 @@ import { type LogBuffer, type LogSource } from "./logBuffer.ts";
 import { detectDevCommand, type DevServerLike } from "./devServer.ts";
 import { listProjects, addProject, removeProject, getProject } from "./registry.ts";
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
+import type { ExtListItem } from "./extensions.ts";
 import { isToolSupported, unsupportedToolMessage, supports, type Capability } from "./target.ts";
 import { toHar } from "./har.ts";
 import { diagnose } from "./diagnose.ts";
@@ -28,6 +29,20 @@ export interface ToolDeps {
    *  a simulator/emulator). Absent in stdio/daemon (Puppeteer is web-only), where the
    *  native_* tools report that the cockpit is required. */
   nativeControl?: NativeControl;
+  /** Chrome-extension management — cockpit-only (needs Electron sessions). Absent in
+   *  stdio/daemon, where the ext_* tools report that the cockpit is required. */
+  extControl?: ExtControl;
+}
+
+export interface ExtControl {
+  /** Loaded (enabled) + known-disabled extensions, for the toggle list. */
+  list(): ExtListItem[] | Promise<ExtListItem[]>;
+  /** Install from a Chrome Web Store id or URL. Returns the updated list. */
+  install(input: string): Promise<ExtListItem[]>;
+  /** Uninstall (store) or unload (unpacked) an extension by id. Returns the updated list. */
+  remove(id: string): Promise<ExtListItem[]>;
+  /** Enable/disable an extension without uninstalling. Returns the updated list. */
+  setEnabled(id: string, enabled: boolean): Promise<ExtListItem[]>;
 }
 
 export interface NativeControl {
@@ -56,6 +71,21 @@ export const TOOLS: Tool[] = [
       properties: { url: { type: "string" } },
       required: ["url"],
     },
+  },
+  {
+    name: "browser_back",
+    description: "Go back one entry in the browser history (no-op if there's nothing to go back to).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "browser_forward",
+    description: "Go forward one entry in the browser history (no-op if there's nothing to go forward to).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "browser_reload",
+    description: "Reload the current page. Pass hard:true to bypass the cache (cockpit only; ignored under Puppeteer).",
+    inputSchema: { type: "object", properties: { hard: { type: "boolean", description: "Ignore the cache (hard reload). Default false." } } },
   },
   {
     name: "browser_screenshot",
@@ -324,6 +354,11 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
   },
   {
+    name: "pane_set_label",
+    description: "Set a pane's display label (the tab name). Used to scope log queries by app name. (Cockpit only.)",
+    inputSchema: { type: "object", properties: { id: { type: "string" }, label: { type: "string" } }, required: ["id", "label"] },
+  },
+  {
     name: "dev_status",
     description: "Report whether the dev server is running, plus its cmd/cwd/pid.",
     inputSchema: { type: "object", properties: {} },
@@ -348,6 +383,26 @@ export const TOOLS: Tool[] = [
       "Build + launch the native dev build for the active pane (`expo run:ios` / `expo run:android`); output " +
       "streams to the timeline. `cwd` defaults to the active pane's project. Cockpit-only (needs the native toolchain).",
     inputSchema: { type: "object", properties: { platform: { type: "string", enum: ["ios", "android"] }, cwd: { type: "string" } }, required: ["platform"] },
+  },
+  {
+    name: "ext_list",
+    description: "List Chrome extensions (loaded + disabled): id, name, version, enabled. Cockpit only.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "ext_install",
+    description: "Install a Chrome extension from a Web Store id or URL. Returns the updated list. Cockpit only.",
+    inputSchema: { type: "object", properties: { input: { type: "string", description: "Extension id or Chrome Web Store URL." } }, required: ["input"] },
+  },
+  {
+    name: "ext_remove",
+    description: "Remove (uninstall/unload) a Chrome extension by id. Returns the updated list. Cockpit only.",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  },
+  {
+    name: "ext_set_enabled",
+    description: "Enable or disable a Chrome extension by id without uninstalling. Returns the updated list. Cockpit only.",
+    inputSchema: { type: "object", properties: { id: { type: "string" }, enabled: { type: "boolean" } }, required: ["id", "enabled"] },
   },
   {
     name: "repro",
@@ -555,6 +610,15 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
   switch (name) {
     case "browser_navigate":
       return json(await browser.navigate(args.url as string));
+    case "browser_back":
+      await browser.back();
+      return json({ ok: true });
+    case "browser_forward":
+      await browser.forward();
+      return json({ ok: true });
+    case "browser_reload":
+      await browser.reload(args.hard as boolean | undefined);
+      return json({ ok: true });
     case "browser_screenshot": {
       const shot = await browser.screenshot((args.fullPage as boolean) ?? false);
       return { content: [{ type: "image", data: shot.base64, mimeType: shot.mimeType }] };
@@ -717,6 +781,25 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       return json({ closed: asManager().closePane(args.id as string) });
     case "pane_pop":
       return json(asManager().popPane(args.id as string));
+    case "pane_set_label":
+      asManager().setLabel(args.id as string, args.label as string);
+      return json({ ok: true });
+    case "ext_list": {
+      if (!deps.extControl) throw new Error("extensions require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      return json({ extensions: await deps.extControl.list() });
+    }
+    case "ext_install": {
+      if (!deps.extControl) throw new Error("extensions require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      return json({ extensions: await deps.extControl.install(args.input as string) });
+    }
+    case "ext_remove": {
+      if (!deps.extControl) throw new Error("extensions require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      return json({ extensions: await deps.extControl.remove(args.id as string) });
+    }
+    case "ext_set_enabled": {
+      if (!deps.extControl) throw new Error("extensions require the Devloop cockpit (run the Electron app); the headless server is web-only");
+      return json({ extensions: await deps.extControl.setEnabled(args.id as string, args.enabled as boolean) });
+    }
     case "repro": {
       const waitFor = (args.waitFor as "settle" | "networkidle" | undefined) ?? "settle";
       const settleMs = (args.settleMs as number | undefined) ?? 1000;

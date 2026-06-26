@@ -330,6 +330,15 @@ export class ReactNativeController implements IBrowserController {
   async navigate(): Promise<{ url: string; status: number | null }> {
     return unsupported("navigate");
   }
+  back(): void {
+    unsupported("back");
+  }
+  forward(): void {
+    unsupported("forward");
+  }
+  reload(): void {
+    unsupported("reload");
+  }
   async hover(): Promise<void> {
     unsupported("hover");
   }

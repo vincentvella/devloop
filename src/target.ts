@@ -71,6 +71,9 @@ export function supports(kind: TargetKind, cap: Capability): boolean {
  * (get_logs, dev_*, diagnose, repro, export_*, pane_*) are target-agnostic. */
 export const TOOL_CAPABILITY: Readonly<Record<string, Capability>> = {
   browser_navigate: "navigate",
+  browser_back: "navigate",
+  browser_forward: "navigate",
+  browser_reload: "navigate",
   browser_screenshot: "screenshot",
   browser_eval: "evaluate",
   browser_click: "click",

@@ -216,6 +216,19 @@ export class PuppeteerBrowserController implements IBrowserController {
     }, `navigate(${url})`);
   }
 
+  async back(): Promise<void> {
+    await this.withRecovery((page) => page.goBack({ waitUntil: "domcontentloaded" }).then(() => {}), "back");
+  }
+
+  async forward(): Promise<void> {
+    await this.withRecovery((page) => page.goForward({ waitUntil: "domcontentloaded" }).then(() => {}), "forward");
+  }
+
+  async reload(_hard = false): Promise<void> {
+    // Puppeteer's reload has no cache-ignore flag; a plain reload is the closest equivalent.
+    await this.withRecovery((page) => page.reload({ waitUntil: "domcontentloaded" }).then(() => {}), "reload");
+  }
+
   async screenshot(fullPage = false): Promise<{ base64: string; mimeType: string }> {
     return this.withRecovery(async (page) => {
       const base64 = await page.screenshot({ encoding: "base64", fullPage, type: "png" });

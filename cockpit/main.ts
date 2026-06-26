@@ -341,14 +341,14 @@ function wireIpc(): void {
     await manager.ensureActive();
     return manager.setDevConfig(undefined, opts?.cmd || undefined, opts?.cwd || undefined);
   });
-  ipcMain.handle("devloop:reload", (_e, hard: boolean) => manager.reload(undefined, !!hard));
+  ipcMain.handle("devloop:reload", (_e, hard: boolean) => manager.reload(!!hard));
   ipcMain.handle("devloop:back", () => manager.back());
   ipcMain.handle("devloop:forward", () => manager.forward());
   // pane-targeted (popped windows drive their own pane)
   ipcMain.handle("devloop:navigateFor", (_e, id: string, url: string) => manager.navigateFor(id, url));
   ipcMain.handle("devloop:backFor", (_e, id: string) => manager.backFor(id));
   ipcMain.handle("devloop:forwardFor", (_e, id: string) => manager.forwardFor(id));
-  ipcMain.handle("devloop:reloadFor", (_e, id: string, hard: boolean) => manager.reload(id, !!hard));
+  ipcMain.handle("devloop:reloadFor", (_e, id: string, hard: boolean) => manager.reloadFor(id, !!hard));
   ipcMain.handle("devloop:setBoundsFor", (_e, id: string, rect) => manager.setBoundsFor(id, rect));
   ipcMain.handle("devloop:screenshotFor", async (_e, id: string) => {
     const shot = await manager.screenshotFor(id);
@@ -381,14 +381,7 @@ function wireIpc(): void {
   });
   // --- extensions ---
   ipcMain.handle("devloop:extList", () => extList());
-  ipcMain.handle("devloop:extInstall", async (_e, input: string) => {
-    const id = extensionIdFromInput(String(input));
-    if (!id) throw new Error("not a valid extension id or Chrome Web Store URL");
-    await installExtension(id, { session: extSession(), extensionsPath: EXT_DIR }); // downloads + loads into default
-    const dir = extDir(id);
-    if (dir) await loadExtIntoAll(dir); // mirror into every other per-project session (#27)
-    return extList();
-  });
+  ipcMain.handle("devloop:extInstall", (_e, input: string) => doExtInstall(String(input)));
   ipcMain.handle("devloop:extLoadUnpacked", async () => {
     const r = await dialog.showOpenDialog(shellWin!, { properties: ["openDirectory"], title: "Select an unpacked extension folder" });
     if (r.canceled || !r.filePaths[0]) return null;
@@ -401,38 +394,8 @@ function wireIpc(): void {
   });
   // Toggle an extension on/off without uninstalling — disable unloads it from the
   // session (files stay); enable reloads it from disk. Persisted across launches.
-  ipcMain.handle("devloop:extSetEnabled", async (_e, id: string, enabled: boolean) => {
-    const disabled = new Set(getDisabledExtensions());
-    if (enabled) {
-      const dir = extDir(id);
-      if (dir) await loadExtIntoAll(dir); // enable across every per-project session (#27)
-      disabled.delete(id);
-    } else {
-      await purgeExtFromAll(id); // disable across every session
-      disabled.add(id);
-    }
-    setDisabledExtensions([...disabled]);
-    return extList();
-  });
-  ipcMain.handle("devloop:extRemove", async (_e, id: string) => {
-    setDisabledExtensions(getDisabledExtensions().filter((x) => x !== id)); // forget any disabled flag
-    await purgeExtFromAll(id); // unload from every per-project session (#27), purging persisted settings
-    if (unpackedById.has(id)) {
-      const dir = unpackedById.get(id)!;
-      unpackedById.delete(id);
-      setUnpackedExtensions(getUnpackedExtensions().filter((p) => p !== dir));
-    } else {
-      try {
-        await uninstallExtension(id, { session: extSession(), extensionsPath: EXT_DIR }); // delete store files (once)
-      } catch {
-        /* store uninstall best-effort */
-      }
-    }
-    // Refresh an open Web Store window so its "Add to Chrome / Remove" button
-    // reflects the removal (mirrors electron-chrome-web-store's own uninstall path).
-    if (extWin && !extWin.isDestroyed()) extWin.webContents.send("chrome.management.onUninstalled", id);
-    return extList();
-  });
+  ipcMain.handle("devloop:extSetEnabled", (_e, id: string, enabled: boolean) => doExtSetEnabled(id, enabled));
+  ipcMain.handle("devloop:extRemove", (_e, id: string) => doExtRemove(id));
   ipcMain.handle("devloop:screenshot", async () => {
     const shot = await manager.screenshot(false);
     const active = manager.listPanes().find((p) => p.active);
@@ -619,6 +582,46 @@ async function purgeExtFromAll(id: string): Promise<void> {
   });
 }
 
+// Extension operations shared by the cockpit IPC handlers and the MCP ext_* tools.
+async function doExtInstall(input: string) {
+  const id = extensionIdFromInput(String(input));
+  if (!id) throw new Error("not a valid extension id or Chrome Web Store URL");
+  await installExtension(id, { session: extSession(), extensionsPath: EXT_DIR }); // downloads + loads into default
+  const dir = extDir(id);
+  if (dir) await loadExtIntoAll(dir); // mirror into every other per-project session (#27)
+  return extList();
+}
+async function doExtSetEnabled(id: string, enabled: boolean) {
+  const disabled = new Set(getDisabledExtensions());
+  if (enabled) {
+    const dir = extDir(id);
+    if (dir) await loadExtIntoAll(dir);
+    disabled.delete(id);
+  } else {
+    await purgeExtFromAll(id);
+    disabled.add(id);
+  }
+  setDisabledExtensions([...disabled]);
+  return extList();
+}
+async function doExtRemove(id: string) {
+  setDisabledExtensions(getDisabledExtensions().filter((x) => x !== id));
+  await purgeExtFromAll(id); // unload from every per-project session (#27), purging persisted settings
+  if (unpackedById.has(id)) {
+    const dir = unpackedById.get(id)!;
+    unpackedById.delete(id);
+    setUnpackedExtensions(getUnpackedExtensions().filter((p) => p !== dir));
+  } else {
+    try {
+      await uninstallExtension(id, { session: extSession(), extensionsPath: EXT_DIR });
+    } catch {
+      /* store uninstall best-effort */
+    }
+  }
+  if (extWin && !extWin.isDestroyed()) extWin.webContents.send("chrome.management.onUninstalled", id);
+  return extList();
+}
+
 async function initExtensions(): Promise<void> {
   await prepareSession(DEFAULT_PARTITION); // the default/Web Store session, set up before panes navigate
 }
@@ -759,6 +762,13 @@ async function main() {
         await doCloseAndroid();
       },
       build: async (platform, cwd) => doNativeBuild(platform as Platform, cwd),
+    },
+    // ext_* over MCP — same path as the cockpit's Settings "ext" row.
+    extControl: {
+      list: () => extList(),
+      install: (input) => doExtInstall(input),
+      remove: (id) => doExtRemove(id),
+      setEnabled: (id, enabled) => doExtSetEnabled(id, enabled),
     },
   });
 
@@ -1029,6 +1039,7 @@ async function runSelfTest() {
 
   // 9g) chrome extension: load the unpacked fixture into the panes' session; its content script marks pages.
   let extLoadedOk = false;
+  let extToolsOk = false;
   const extPath = [join(BASE, "../test/fixture-ext"), join(BASE, "test/fixture-ext")].find(existsSync);
   try {
     const loaded = await extSession().extensions.loadExtension(extPath!, { allowFileAccess: true });
@@ -1039,6 +1050,15 @@ async function runSelfTest() {
     const marked = JSON.parse((await handleTool("browser_eval", { expression: "String(document.documentElement.getAttribute('data-devloop-ext'))" })).content[0]!.text as string).value as string;
     extLoadedOk = listed && marked === "loaded";
     console.log(`SELFTEST extension: listed=${listed} contentScriptRan=${marked === "loaded"} ok=${extLoadedOk}`);
+
+    // ext_* MCP tools: list sees the fixture; set_enabled toggles its `enabled` flag.
+    type ExtRow = { id: string; enabled: boolean };
+    const toolList = JSON.parse((await handleTool("ext_list")).content[0]!.text as string).extensions as ExtRow[];
+    const toolSees = Array.isArray(toolList) && toolList.some((x) => x.id === loaded.id);
+    await handleTool("ext_set_enabled", { id: loaded.id, enabled: false });
+    const reEnabled = JSON.parse((await handleTool("ext_set_enabled", { id: loaded.id, enabled: true })).content[0]!.text as string).extensions as ExtRow[];
+    extToolsOk = toolSees && reEnabled.some((x) => x.id === loaded.id && x.enabled);
+    console.log(`SELFTEST ext_* tools: list=${toolSees} toggle=${extToolsOk}`);
   } catch (e) {
     console.log(`SELFTEST extension FAILED (path=${extPath}): ${e}`);
   }
@@ -1102,6 +1122,16 @@ async function runSelfTest() {
   const shotOk = typeof shotImg === "string" && shotImg.startsWith("data:image/png");
   console.log(`SELFTEST screenshot: present=${!!shotEntry} ok=${shotOk}`);
 
+  // 14) pane_set_label via the tool layer → reflected in pane_list.
+  let paneLabelOk = false;
+  const lblPanes = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string }[] }).panes;
+  if (lblPanes[0]) {
+    await handleTool("pane_set_label", { id: lblPanes[0].id, label: "smoke-label" });
+    const relisted = (JSON.parse((await handleTool("pane_list")).content[0]!.text as string) as { panes: { id: string; label?: string }[] }).panes;
+    paneLabelOk = relisted.some((p) => p.id === lblPanes[0]!.id && p.label === "smoke-label");
+  }
+  console.log(`SELFTEST pane_set_label: ok=${paneLabelOk}`);
+
   const checks: [string, boolean][] = [
     ["renderer api present", api === "object"],
     ["mcp-over-http repro", mcpReproOk],
@@ -1131,6 +1161,8 @@ async function runSelfTest() {
     ["diagnose (group + network)", diagnoseOk],
     ["export bundle", bundleOk],
     ["chrome extension (unpacked)", extLoadedOk],
+    ["ext_* MCP tools (list + set_enabled)", extToolsOk],
+    ["pane_set_label", paneLabelOk],
     ["web-store preload loads cleanly (no ESM require error)", !preloadErr],
     ["native_* MCP tools wired (native_close)", nativeToolsOk],
   ];

@@ -16,6 +16,10 @@ export interface ITargetController {
   readonly kind: TargetKind;
   start(): Promise<void>;
   navigate(url: string): Promise<{ url: string; status: number | null }>;
+  /** History navigation + reload for the active target (web only; no-op when unavailable). */
+  back(): Promise<void> | void;
+  forward(): Promise<void> | void;
+  reload(hard?: boolean): Promise<void> | void;
   screenshot(fullPage?: boolean): Promise<{ base64: string; mimeType: string }>;
   click(selector: string): Promise<void>;
   type(selector: string, text: string): Promise<void>;
@@ -67,4 +71,5 @@ export interface IBrowserManager extends ITargetController {
   selectPane(id: string): PaneInfo;
   closePane(id: string): boolean;
   popPane(id: string): PaneInfo;
+  setLabel(id: string, label: string): void;
 }

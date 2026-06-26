@@ -95,6 +95,18 @@ await callText("browser_emulate", { reset: true });
 const vp2 = JSON.parse((await J("browser_eval", { expression: "JSON.stringify({w:innerWidth})" })).value);
 check("emulate reset → wide viewport", vp2.w >= 1000);
 
+// --- history navigation (back/forward/reload) ---
+console.log("\n# navigation (back/forward/reload)");
+await callText("browser_navigate", { url: "data:text/html,<title>p1</title><h1>p1</h1>" });
+await callText("browser_navigate", { url: "data:text/html,<title>p2</title><h1>p2</h1>" });
+await callText("browser_back");
+await sleep(200);
+check("browser_back returns to the previous page", (await J("browser_eval", { expression: "document.title" })).value === "p1");
+await callText("browser_forward");
+await sleep(200);
+check("browser_forward advances to the next page", (await J("browser_eval", { expression: "document.title" })).value === "p2");
+check("browser_reload ok", (await J("browser_reload")).ok === true);
+
 // --- diagnose (group/dedupe errors) ---
 console.log("\n# diagnose");
 await callText("clear_logs");

@@ -223,6 +223,19 @@ export class ElectronBrowserController implements IBrowserController {
     return { url: this.wc.getURL(), status: this.lastDocStatus };
   }
 
+  back(): void {
+    if (this.wc.navigationHistory.canGoBack()) this.wc.navigationHistory.goBack();
+  }
+
+  forward(): void {
+    if (this.wc.navigationHistory.canGoForward()) this.wc.navigationHistory.goForward();
+  }
+
+  reload(hard = false): void {
+    if (hard) this.wc.reloadIgnoringCache();
+    else this.wc.reload();
+  }
+
   async screenshot(_fullPage = false): Promise<{ base64: string; mimeType: string }> {
     // Electron capturePage captures the visible viewport; fullPage is not supported here.
     const img = await this.wc.capturePage();

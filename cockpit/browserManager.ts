@@ -495,9 +495,16 @@ export class BrowserManager implements IBrowserManager {
     return this.paneOrActive(id).dev.status();
   }
 
-  reload(id: string | undefined, hard: boolean): void {
+  reload(hard = false): void {
     if (this.panes.size === 0) return;
-    const wc = this.paneOrActive(id).view.webContents;
+    const wc = this.paneOrActive().view.webContents;
+    if (hard) wc.reloadIgnoringCache();
+    else wc.reload();
+  }
+
+  reloadFor(id: string, hard = false): void {
+    const wc = this.panes.get(id)?.view.webContents;
+    if (!wc) return;
     if (hard) wc.reloadIgnoringCache();
     else wc.reload();
   }
