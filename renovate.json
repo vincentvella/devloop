@@ -5,6 +5,7 @@
   "timezone": "America/New_York",
   "prConcurrentLimit": 5,
   "labels": ["dependencies"],
+  "rangeStrategy": "bump",
   "packageRules": [
     {
       "description": "Auto-merge in-range minor/patch once all CI checks pass (smoke would block a bad puppeteer bump).",
