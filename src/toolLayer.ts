@@ -65,115 +65,160 @@ export function configureTools(d: ToolDeps): void {
 export const TOOLS: Tool[] = [
   {
     name: "browser_navigate",
-    description: "Navigate the browser to a URL. Returns the resolved URL and HTTP status.",
+    description:
+      "Navigate the active pane to a URL (full page load). Returns the resolved URL and HTTP status. " +
+      "Use browser_back / browser_forward to move through history, browser_reload to refresh the same URL.",
+    annotations: { openWorldHint: true, destructiveHint: false },
     inputSchema: {
       type: "object",
-      properties: { url: { type: "string" } },
+      properties: { url: { type: "string", description: "Absolute URL to load (e.g. http://localhost:3000/path)." } },
       required: ["url"],
     },
   },
   {
     name: "browser_back",
-    description: "Go back one entry in the browser history (no-op if there's nothing to go back to).",
+    description: "Go back one entry in the active pane's history (no-op if there's nothing to go back to). Pairs with browser_forward.",
+    annotations: { openWorldHint: true, idempotentHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "browser_forward",
-    description: "Go forward one entry in the browser history (no-op if there's nothing to go forward to).",
+    description: "Go forward one entry in the active pane's history (no-op if there's nothing to go forward to). Pairs with browser_back.",
+    annotations: { openWorldHint: true, idempotentHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "browser_reload",
-    description: "Reload the current page. Pass hard:true to bypass the cache (cockpit only; ignored under Puppeteer).",
-    inputSchema: { type: "object", properties: { hard: { type: "boolean", description: "Ignore the cache (hard reload). Default false." } } },
+    description: "Reload the active pane's current page. Use browser_navigate to change URL instead.",
+    annotations: { openWorldHint: true, idempotentHint: true },
+    inputSchema: { type: "object", properties: { hard: { type: "boolean", description: "Ignore the cache (hard reload). Default false. Cockpit only; ignored under Puppeteer." } } },
   },
   {
     name: "browser_screenshot",
-    description: "Capture a PNG screenshot of the current page.",
+    description: "Capture a PNG screenshot of the active page. To find/target elements, prefer browser_snapshot (returns selectors).",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: {
       type: "object",
-      properties: { fullPage: { type: "boolean", description: "Capture the full scrollable page (default false)." } },
+      properties: { fullPage: { type: "boolean", description: "Capture the full scrollable page, not just the viewport (default false)." } },
     },
   },
   {
     name: "browser_click",
-    description: "Click the element matching a CSS selector.",
+    description: "Click the element matching a CSS selector (real mouse click). For keyboard keys use browser_press; to only hover use browser_hover.",
+    annotations: { openWorldHint: true, destructiveHint: false },
     inputSchema: {
       type: "object",
-      properties: { selector: { type: "string" } },
+      properties: { selector: { type: "string", description: "CSS selector of the element to click (e.g. a `ref` from browser_snapshot)." } },
       required: ["selector"],
     },
   },
   {
     name: "browser_type",
-    description: "Type text into the element matching a CSS selector.",
+    description: "Type text into the element matching a CSS selector (focuses, then types). For single keys use browser_press; for <select> use browser_select.",
+    annotations: { openWorldHint: true, destructiveHint: false },
     inputSchema: {
       type: "object",
-      properties: { selector: { type: "string" }, text: { type: "string" } },
+      properties: {
+        selector: { type: "string", description: "CSS selector of the input/textarea to type into." },
+        text: { type: "string", description: "Text to type into the focused element." },
+      },
       required: ["selector", "text"],
     },
   },
   {
     name: "browser_eval",
-    description: "Evaluate a JavaScript expression in the page (via CDP) and return the value.",
+    description:
+      "Evaluate a JavaScript expression in the active page (via CDP) and return its value. Runs in the page's main world and can mutate page state. " +
+      "Prefer browser_snapshot for reading structure and browser_click/type for interactions.",
+    annotations: { openWorldHint: true, destructiveHint: false },
     inputSchema: {
       type: "object",
-      properties: { expression: { type: "string" } },
+      properties: { expression: { type: "string", description: "A JavaScript expression evaluated in the page; its result is returned (JSON-serializable values)." } },
       required: ["expression"],
     },
   },
   {
     name: "browser_hover",
-    description: "Hover the pointer over an element (triggers hover menus/tooltips).",
-    inputSchema: { type: "object", properties: { selector: { type: "string" } }, required: ["selector"] },
+    description: "Hover the pointer over an element to trigger hover menus/tooltips (does not click — use browser_click for that).",
+    annotations: { openWorldHint: true, destructiveHint: false },
+    inputSchema: { type: "object", properties: { selector: { type: "string", description: "CSS selector of the element to hover over." } }, required: ["selector"] },
   },
   {
     name: "browser_scroll",
-    description: "Scroll an element into view (selector), or the window to (x, y).",
-    inputSchema: { type: "object", properties: { selector: { type: "string" }, x: { type: "number" }, y: { type: "number" } } },
+    description: "Scroll an element into view (pass selector), or scroll the window to coordinates (pass x and y). Provide one or the other.",
+    annotations: { openWorldHint: true, destructiveHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: { type: "string", description: "CSS selector to scroll into view. Omit to scroll the window instead." },
+        x: { type: "number", description: "Window scroll-x in pixels (used when no selector)." },
+        y: { type: "number", description: "Window scroll-y in pixels (used when no selector)." },
+      },
+    },
   },
   {
     name: "browser_select",
-    description: "Set the value of a <select> (or input) and fire input/change. Pass the option's value.",
-    inputSchema: { type: "object", properties: { selector: { type: "string" }, value: { type: "string" } }, required: ["selector", "value"] },
+    description: "Set the value of a <select> (or input) and fire input/change events. For typing free text use browser_type.",
+    annotations: { openWorldHint: true, destructiveHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: { type: "string", description: "CSS selector of the <select> or input." },
+        value: { type: "string", description: "The option's value attribute (not its visible label) to select." },
+      },
+      required: ["selector", "value"],
+    },
   },
   {
     name: "browser_press",
-    description: "Press a key (e.g. Enter, Escape, Tab, ArrowDown). Optionally focus a selector first.",
-    inputSchema: { type: "object", properties: { key: { type: "string" }, selector: { type: "string" } }, required: ["key"] },
+    description: "Press a single key (e.g. Enter, Escape, Tab, ArrowDown) on the page. For typing text use browser_type.",
+    annotations: { openWorldHint: true, destructiveHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Key name to press, e.g. Enter, Escape, Tab, ArrowDown." },
+        selector: { type: "string", description: "Optional CSS selector to focus before pressing the key." },
+      },
+      required: ["key"],
+    },
   },
   {
     name: "browser_emulate",
     description:
-      "Emulate a device/viewport. Pass a `device` preset (iphone|ipad|pixel), or custom `width`+`height` (with optional `mobile`, `deviceScaleFactor`, `userAgent`). `reset: true` restores a desktop viewport.",
+      "Emulate a device/viewport on the active page. Pass a `device` preset, or custom `width`+`height`. `reset: true` restores a desktop viewport. " +
+      "For network conditions use browser_throttle instead.",
+    annotations: { openWorldHint: false, idempotentHint: true },
     inputSchema: {
       type: "object",
       properties: {
-        device: { type: "string", enum: ["iphone", "ipad", "pixel"] },
-        width: { type: "number" },
-        height: { type: "number" },
-        mobile: { type: "boolean" },
-        deviceScaleFactor: { type: "number" },
-        userAgent: { type: "string" },
-        reset: { type: "boolean" },
+        device: { type: "string", enum: ["iphone", "ipad", "pixel"], description: "Device preset to emulate. Use this OR width+height." },
+        width: { type: "number", description: "Custom viewport width in CSS pixels (with height)." },
+        height: { type: "number", description: "Custom viewport height in CSS pixels (with width)." },
+        mobile: { type: "boolean", description: "Emulate a mobile device (touch + mobile UA hints). Default false." },
+        deviceScaleFactor: { type: "number", description: "Device pixel ratio (e.g. 2 for retina). Default 1." },
+        userAgent: { type: "string", description: "Override the User-Agent string." },
+        reset: { type: "boolean", description: "Restore the default desktop viewport and clear emulation." },
       },
     },
   },
   {
     name: "browser_throttle",
-    description: "Throttle network conditions: slow-3g | fast-3g | offline | none (reset).",
-    inputSchema: { type: "object", properties: { profile: { type: "string", enum: ["slow-3g", "fast-3g", "offline", "none"] } }, required: ["profile"] },
+    description: "Throttle the active page's network conditions to a named profile. Use `none` to clear. For viewport/device emulation use browser_emulate.",
+    annotations: { openWorldHint: false, idempotentHint: true },
+    inputSchema: { type: "object", properties: { profile: { type: "string", enum: ["slow-3g", "fast-3g", "offline", "none"], description: "Network profile to apply; `none` removes throttling." } }, required: ["profile"] },
   },
   {
     name: "browser_clear_storage",
     description:
       "Clear the active page's storage — cookies, localStorage, IndexedDB, cache, service workers — for the current origin (set allOrigins to wipe the whole browser session). Use to log out or test a fresh-user flow; reload afterward.",
+    annotations: { destructiveHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: { allOrigins: { type: "boolean", description: "Wipe the entire session, not just the current origin." } } },
   },
   {
     name: "browser_wait_for_idle",
-    description: "Wait until network activity settles (no requests for idleMs). Returns { ok }.",
-    inputSchema: { type: "object", properties: { idleMs: { type: "number", description: "default 500" }, timeoutMs: { type: "number", description: "default 10000" } } },
+    description: "Wait until network activity settles (no requests for idleMs). Returns { ok }. To wait for a specific element/text use browser_wait_for.",
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    inputSchema: { type: "object", properties: { idleMs: { type: "number", description: "Quiet period with no requests that counts as idle, in ms (default 500)." }, timeoutMs: { type: "number", description: "Max time to wait before giving up, in ms (default 10000)." } } },
   },
   {
     name: "browser_snapshot",
@@ -181,13 +226,15 @@ export const TOOLS: Tool[] = [
       "Structured snapshot of the active page: url, title, and the interactive + landmark elements " +
       "(role, accessible name, value/state, heading level) each with a CSS selector `ref` you can pass " +
       "to browser_click / browser_type. Prefer this over a screenshot to find and target elements reliably.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "browser_wait_for",
     description:
       "Wait until a CSS selector appears or text is present on the page (e.g. after a navigation or async render). " +
-      "Returns { ok, waitedMs } — ok=false on timeout.",
+      "Returns { ok, waitedMs } — ok=false on timeout. To wait for the network to go quiet instead, use browser_wait_for_idle.",
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: {
       type: "object",
       properties: {
@@ -202,12 +249,14 @@ export const TOOLS: Tool[] = [
     description:
       "Return recent events from the unified buffer (server stdout/stderr + browser " +
       "console/network/pageerror), newest last. Filter by source, stream, grep, and " +
-      "tail incrementally with sinceSeq. Scope to one project's logs with `app`.",
+      "tail incrementally with sinceSeq. Scope to one project's logs with `app`. " +
+      "For events around a specific moment use get_logs_around; to triage errors first use diagnose.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: {
       type: "object",
       properties: {
-        source: { type: "string", enum: ["server", "browser", "native"] },
-        stream: { type: "string", description: "e.g. stdout, stderr, console, network, pageerror" },
+        source: { type: "string", enum: ["server", "browser", "native"], description: "Limit to one source: server, browser, or native." },
+        stream: { type: "string", description: "Limit to one stream, e.g. stdout, stderr, console, network, pageerror." },
         grep: { type: "string", description: "Case-insensitive regex (or substring if invalid)." },
         app: {
           type: "string",
@@ -226,6 +275,7 @@ export const TOOLS: Tool[] = [
       "THE correlation tool. Return ALL events (server + browser) within +/- windowMs of a " +
       "timestamp, time-ordered — e.g. the browser console error and the backend stack trace " +
       "from the same moment. Timestamps come from the `ts` field on any event.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: {
       type: "object",
       properties: {
@@ -239,19 +289,28 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "clear_logs",
-    description: "Clear the event buffer. Call before reproducing an issue for a clean window.",
+    description: "Clear the event buffer (irreversible). Call before reproducing an issue for a clean window. Note: repro clears for you unless clear=false.",
+    annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "export_bundle",
     description:
-      "Export a shareable bug-report bundle as one JSON object: the diagnose summary, the timeline (logs), captured screenshots, a HAR of network, and repro steps if provided. Optionally scope to an `app` / last `windowMs`.",
-    inputSchema: { type: "object", properties: { app: { type: "string" }, windowMs: { type: "number" } } },
+      "Export a shareable bug-report bundle as one JSON object: the diagnose summary, the timeline (logs), captured screenshots, a HAR of network, and repro steps if provided. For just the network log use export_har; for a quick triage use diagnose.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        app: { type: "string", description: "Scope to one app/project (pane label or id; see pane_list). Omit for all." },
+        windowMs: { type: "number", description: "Only include events from the last N ms (default: the whole buffer)." },
+      },
+    },
   },
   {
     name: "diagnose",
     description:
       "Triage what's broken right now: groups repeated errors (browser console/page errors + server errors) with counts, lists failed/4xx-5xx network requests, and returns a one-line summary. Optionally limit to the last `windowMs` and/or one `app`. Start here before digging through get_logs.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: {
       type: "object",
       properties: {
@@ -265,15 +324,17 @@ export const TOOLS: Tool[] = [
     description:
       "Export captured network requests as a HAR 1.2 document (importable into Chrome DevTools / Charles). " +
       "Covers ALL requests (the full network ring, independent of DEVLOOP_NET_THRESHOLD — bodies are kept for the " +
-      "curated subset: failures + status ≥ threshold). Optionally scope to one `app` (pane label/id).",
-    inputSchema: { type: "object", properties: { app: { type: "string" } } },
+      "curated subset: failures + status ≥ threshold). Optionally scope to one `app` (pane label/id). To browse requests in JSON use get_network.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    inputSchema: { type: "object", properties: { app: { type: "string", description: "Scope to one app/project (pane label or id; see pane_list). Omit for all." } } },
   },
   {
     name: "get_network",
     description:
       "List captured network requests (the full ring — every request, independent of DEVLOOP_NET_THRESHOLD, " +
       "unlike get_logs which shows only the curated timeline). Each row has method/url/status/timing/headers " +
-      "(bodies for the curated subset). Optionally `grep` the request line, scope to one `app`, and cap with `limit`.",
+      "(bodies for the curated subset). Optionally `grep` the request line, scope to one `app`, and cap with `limit`. For an importable HAR file use export_har.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: {
       type: "object",
       properties: {
@@ -289,7 +350,8 @@ export const TOOLS: Tool[] = [
       "Start a dev server and tee its logs into the buffer. Three ways to specify it: " +
       "(1) `project` — a saved registry project (resolves cmd/cwd); (2) explicit `cmd`+`cwd`; " +
       "(3) neither — `cwd` defaults to the server's directory and `cmd` is auto-detected from " +
-      "package.json (dev/develop/web/start/serve). Explicit cmd/cwd override the project's.",
+      "package.json (dev/develop/web/start/serve). Explicit cmd/cwd override the project's. Stop it with dev_stop; check it with dev_status.",
+    annotations: { openWorldHint: true, idempotentHint: false },
     inputSchema: {
       type: "object",
       properties: {
@@ -301,21 +363,24 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "dev_stop",
-    description: "Stop the running dev server (SIGTERM). Returns whether one was running.",
+    description: "Stop the running dev server (SIGTERM). Returns whether one was running. Start one with dev_start.",
+    annotations: { idempotentHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "project_list",
-    description: "List saved projects (name, cwd, cmd, url) from the registry.",
+    description: "List saved projects (name, cwd, cmd, url) from the registry. Add with project_add, remove with project_remove.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "project_add",
-    description: "Save (or replace) a project in the registry so you can dev_start it by name.",
+    description: "Save (or replace) a project in the registry so you can dev_start it by name. Replaces any existing project with the same name.",
+    annotations: { idempotentHint: true, destructiveHint: false, openWorldHint: false },
     inputSchema: {
       type: "object",
       properties: {
-        name: { type: "string" },
+        name: { type: "string", description: "Unique project name (used to dev_start it later)." },
         cwd: { type: "string", description: "Project directory." },
         cmd: { type: "string", description: "Dev command (optional; auto-detected if omitted)." },
         url: { type: "string", description: "Default URL to open in the browser pane (optional)." },
@@ -325,42 +390,50 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "project_remove",
-    description: "Remove a project from the registry by name.",
-    inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+    description: "Remove a saved project from the registry by name (irreversible; doesn't stop a running server). List names with project_list.",
+    annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    inputSchema: { type: "object", properties: { name: { type: "string", description: "Name of the saved project to remove (see project_list)." } }, required: ["name"] },
   },
   {
     name: "pane_list",
-    description: "List browser panes (multi-target). Each: id, url, active. The active pane is what browser_*/repro act on.",
+    description: "List browser panes (multi-target): each has id, url, active. The active pane is what browser_*/repro act on. Switch with pane_select. (Cockpit only.)",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "pane_new",
-    description: "Open a new browser pane and make it active. Optionally navigate it to a URL. (Cockpit only.)",
-    inputSchema: { type: "object", properties: { url: { type: "string" } } },
+    description: "Open a new browser pane and make it active. Optionally navigate it to a URL. To switch panes use pane_select; to close use pane_close. (Cockpit only.)",
+    annotations: { openWorldHint: true, idempotentHint: false },
+    inputSchema: { type: "object", properties: { url: { type: "string", description: "Optional URL to open in the new pane (else a blank pane)." } } },
   },
   {
     name: "pane_select",
-    description: "Make a pane active so subsequent browser_*/repro calls target it.",
-    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    description: "Make a pane active so subsequent browser_*/repro calls target it. Find ids with pane_list. (Cockpit only.)",
+    annotations: { idempotentHint: true, openWorldHint: false },
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "Id of the pane to activate (from pane_list)." } }, required: ["id"] },
   },
   {
     name: "pane_close",
-    description: "Close a browser pane by id.",
-    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    description: "Close a browser pane by id (irreversible). To detach a pane into its own window instead, use pane_pop. (Cockpit only.)",
+    annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "Id of the pane to close (from pane_list)." } }, required: ["id"] },
   },
   {
     name: "pane_pop",
-    description: "Detach a pane into its own standalone window (so you can view targets side-by-side).",
-    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    description: "Detach a pane into its own standalone window (to view targets side-by-side). Closing that window re-docks the pane; pane_close removes it. (Cockpit only.)",
+    annotations: { idempotentHint: false, openWorldHint: false },
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "Id of the pane to pop out (from pane_list)." } }, required: ["id"] },
   },
   {
     name: "pane_set_label",
-    description: "Set a pane's display label (the tab name). Used to scope log queries by app name. (Cockpit only.)",
-    inputSchema: { type: "object", properties: { id: { type: "string" }, label: { type: "string" } }, required: ["id", "label"] },
+    description: "Set a pane's display label (the tab name); also what `app` filters match in get_logs/diagnose. (Cockpit only.)",
+    annotations: { idempotentHint: true, openWorldHint: false },
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "Id of the pane to label (from pane_list)." }, label: { type: "string", description: "New display label (e.g. the project name)." } }, required: ["id", "label"] },
   },
   {
     name: "dev_status",
-    description: "Report whether the dev server is running, plus its cmd/cwd/pid.",
+    description: "Report whether the dev server is running, plus its cmd/cwd/pid. Start/stop with dev_start/dev_stop.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -369,40 +442,61 @@ export const TOOLS: Tool[] = [
       "Open a native target for the active pane (Expo/React Native): the iOS simulator or the Android device " +
       "mirror. browser_* (snapshot/click/type/scroll/press/screenshot) then drive the native app via idb/adb, " +
       "and JS + native logs stream to the timeline. Cockpit-only (needs the Electron app + a booted simulator/" +
-      "emulator). Returns ok:false with a reason if the device/tooling isn't ready.",
-    inputSchema: { type: "object", properties: { platform: { type: "string", enum: ["ios", "android"] } }, required: ["platform"] },
+      "emulator). Returns ok:false with a reason if the device/tooling isn't ready. Build the app first with native_build; close with native_close.",
+    annotations: { openWorldHint: true, idempotentHint: true },
+    inputSchema: { type: "object", properties: { platform: { type: "string", enum: ["ios", "android"], description: "Which native target to open: ios (simulator) or android (emulator mirror)." } }, required: ["platform"] },
   },
   {
     name: "native_close",
-    description: "Close the active native target; browser_* route back to the pane's web content. Cockpit-only.",
+    description: "Close the active native target; browser_* route back to the pane's web content. Open one with native_open. Cockpit-only.",
+    annotations: { idempotentHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "native_build",
     description:
       "Build + launch the native dev build for the active pane (`expo run:ios` / `expo run:android`); output " +
-      "streams to the timeline. `cwd` defaults to the active pane's project. Cockpit-only (needs the native toolchain).",
-    inputSchema: { type: "object", properties: { platform: { type: "string", enum: ["ios", "android"] }, cwd: { type: "string" } }, required: ["platform"] },
+      "streams to the timeline. After it boots, use native_open to drive it. Cockpit-only (needs the native toolchain).",
+    annotations: { openWorldHint: true, idempotentHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        platform: { type: "string", enum: ["ios", "android"], description: "Which platform to build: ios or android." },
+        cwd: { type: "string", description: "Project directory to build; defaults to the active pane's project." },
+      },
+      required: ["platform"],
+    },
   },
   {
     name: "ext_list",
-    description: "List Chrome extensions (loaded + disabled): id, name, version, enabled. Cockpit only.",
+    description: "List Chrome extensions (loaded + disabled): id, name, version, enabled. Install with ext_install, toggle with ext_set_enabled. Cockpit only.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "ext_install",
-    description: "Install a Chrome extension from a Web Store id or URL. Returns the updated list. Cockpit only.",
-    inputSchema: { type: "object", properties: { input: { type: "string", description: "Extension id or Chrome Web Store URL." } }, required: ["input"] },
+    description: "Install a Chrome extension from a Web Store id or URL (downloads from the Web Store). Returns the updated list. Remove with ext_remove. Cockpit only.",
+    annotations: { openWorldHint: true, idempotentHint: true },
+    inputSchema: { type: "object", properties: { input: { type: "string", description: "Extension id (32 chars) or a Chrome Web Store URL." } }, required: ["input"] },
   },
   {
     name: "ext_remove",
-    description: "Remove (uninstall/unload) a Chrome extension by id. Returns the updated list. Cockpit only.",
-    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    description: "Remove (uninstall/unload) a Chrome extension by id (irreversible for store extensions). To keep it but turn it off, use ext_set_enabled. Cockpit only.",
+    annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "Extension id to remove (see ext_list)." } }, required: ["id"] },
   },
   {
     name: "ext_set_enabled",
-    description: "Enable or disable a Chrome extension by id without uninstalling. Returns the updated list. Cockpit only.",
-    inputSchema: { type: "object", properties: { id: { type: "string" }, enabled: { type: "boolean" } }, required: ["id", "enabled"] },
+    description: "Enable or disable a Chrome extension by id without uninstalling. Returns the updated list. To uninstall entirely, use ext_remove. Cockpit only.",
+    annotations: { idempotentHint: true, openWorldHint: false },
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Extension id to toggle (see ext_list)." },
+        enabled: { type: "boolean", description: "true to enable, false to disable." },
+      },
+      required: ["id", "enabled"],
+    },
   },
   {
     name: "repro",
@@ -412,6 +506,7 @@ export const TOOLS: Tool[] = [
       "to land, then returns EVERYTHING that happened on both sides across the whole sequence, " +
       "plus per-step results and an errors summary (console errors, page errors, failed/4xx-5xx " +
       "network). Use a sequence for flows like navigate → click → type → click submit.",
+    annotations: { openWorldHint: true, destructiveHint: false },
     inputSchema: {
       type: "object",
       properties: {
