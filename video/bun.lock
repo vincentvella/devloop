@@ -6,8 +6,8 @@
       "name": "devloop-video",
       "dependencies": {
         "@remotion/cli": "^4.0.483",
-        "react": "^19.0.0",
-        "react-dom": "^19.0.0",
+        "react": "^19.2.7",
+        "react-dom": "^19.2.7",
         "remotion": "^4.0.0",
       },
       "devDependencies": {
