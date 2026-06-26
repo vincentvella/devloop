@@ -16,6 +16,7 @@ import { PuppeteerBrowserController } from "./browser.ts";
 import { configureTools } from "./toolLayer.ts";
 import { buildMcpServer } from "./mcpServer.ts";
 import { startHttpMcp } from "./httpMcp.ts";
+import { writeDaemonState, clearDaemonState, readDaemonState, pidAlive, httpReachable } from "./daemonState.ts";
 
 const log = (m: string) => process.stderr.write(`[devloop-daemon] ${m}\n`);
 
@@ -45,10 +46,34 @@ export async function runDaemon(): Promise<void> {
   }
 
   const port = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
-  const { server } = await startHttpMcp({ buildServer: () => buildMcpServer("devloop-daemon"), port, log });
+
+  // Optional idle-shutdown: exit once the last client disconnects (off by default).
+  const idleMs = Number(process.env.DEVLOOP_DAEMON_IDLE_MS ?? 0);
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const { server, port: bound } = await startHttpMcp({
+    buildServer: () => buildMcpServer("devloop-daemon"),
+    port,
+    log,
+    onSessionsChanged: (count) => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = undefined;
+      }
+      if (idleMs > 0 && count === 0) {
+        log(`no clients connected — idle shutdown in ${idleMs}ms`);
+        idleTimer = setTimeout(() => void shutdown(), idleMs);
+      }
+    },
+  });
+
+  // Advertise ourselves so stdio clients (and --status/--stop) can find us.
+  writeDaemonState({ pid: process.pid, port: bound, url: `http://localhost:${bound}/mcp`, startedAt: new Date().toISOString() });
   log("daemon ready — connect MCP clients via HTTP/SSE at /mcp");
 
   const shutdown = async () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    clearDaemonState();
     server.close();
     devServer.stop();
     await browser.close();
@@ -56,4 +81,32 @@ export async function runDaemon(): Promise<void> {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+}
+
+/** `daemon --status` — report whether a daemon is running (via the state file + probe). */
+export async function daemonStatus(): Promise<void> {
+  const s = readDaemonState();
+  if (s && pidAlive(s.pid) && (await httpReachable(s.url))) {
+    process.stdout.write(`devloop daemon running — pid ${s.pid}, ${s.url} (since ${s.startedAt})\n`);
+  } else {
+    if (s) clearDaemonState(); // stale
+    process.stdout.write("devloop daemon not running\n");
+  }
+}
+
+/** `daemon --stop` — SIGTERM a running daemon and clear its state. */
+export async function daemonStop(): Promise<void> {
+  const s = readDaemonState();
+  if (!s || !pidAlive(s.pid)) {
+    clearDaemonState();
+    process.stdout.write("devloop daemon not running\n");
+    return;
+  }
+  try {
+    process.kill(s.pid, "SIGTERM");
+    process.stdout.write(`stopped devloop daemon (pid ${s.pid})\n`);
+  } catch (err) {
+    process.stdout.write(`failed to stop daemon (pid ${s.pid}): ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+  clearDaemonState();
 }

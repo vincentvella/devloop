@@ -29,6 +29,7 @@ const SHOWCASE_URL = "https://devloop.build";
 async function captureWindow(app: ElectronApplication, win: Page, path: string): Promise<void> {
   const b = await app.evaluate(({ BrowserWindow }) => {
     const w = BrowserWindow.getAllWindows()[0];
+    if (!w) return { x: 0, y: 0, width: 0, height: 0 };
     w.show();
     w.focus();
     w.moveTop();

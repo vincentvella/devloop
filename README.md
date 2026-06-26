@@ -191,6 +191,25 @@ claude mcp add --transport http devloop http://localhost:7333/mcp
 
 Same backend + env vars as stdio (defaults headless; set `DEVLOOP_HEADLESS=false` to watch), and it auto-picks a free port from `DEVLOOP_HTTP_PORT` (default 7333). Each client gets its own MCP session but shares the same backend, so one agent's `dev_start` / navigation shows up on another's `get_logs`. (The Electron cockpit serves the very same HTTP transport — the daemon is just the headless version of it.)
 
+Manage the daemon's lifecycle:
+
+```sh
+devloop-mcp daemon --status        # is one running? (pid + url)
+devloop-mcp daemon --stop          # SIGTERM the running daemon
+DEVLOOP_DAEMON_IDLE_MS=60000 devloop-mcp daemon   # auto-exit 60s after the last client disconnects
+```
+
+### Shared mode — auto-connect from stdio (no separate daemon step)
+
+Don't want to manage a daemon by hand? Launch the **stdio** server in shared mode and it will **bridge to a daemon automatically** — connecting to a running one, or spawning + detaching one if none exists — instead of starting its own browser. So every session transparently shares one browser/timeline:
+
+```sh
+claude mcp add devloop --scope user -- npx -y devloop-mcp --shared
+# or set DEVLOOP_DAEMON=1 in the MCP server env
+```
+
+The stdio process becomes a thin proxy (it speaks stdio to the client, forwarding tools to the daemon over HTTP). The daemon advertises itself in `$DEVLOOP_HOME/daemon.json` so other sessions find it. If anything goes wrong (daemon won't start, etc.) it **falls back to a normal local instance**, so a session never just dies. Without `--shared` / `DEVLOOP_DAEMON=1`, behavior is unchanged: one browser per session.
+
 ## When MCP is blocked (enterprise sandbox) — drive Devloop via [mcporter](https://mcporter.sh)
 
 Some sandboxed/enterprise setups don't let an agent register or spawn MCP servers (or block the MCP transport) but **do** allow running shell commands. [`mcporter`](https://www.npmjs.com/package/mcporter) bridges that gap: it calls any MCP server's tools as plain CLI commands, so the agent invokes Devloop through **Bash** instead of an MCP client.

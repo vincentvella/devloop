@@ -9,6 +9,12 @@
  *
  * stdout is reserved for the MCP protocol. Everything human-facing → stderr.
  *
+ * Shared mode (opt-in: `--shared` or DEVLOOP_DAEMON=1): instead of spawning its own
+ * browser, the stdio launch bridges to a long-running daemon (auto-spawning one if
+ * none is running) so many sessions share one browser/timeline (#round2.1). Falls
+ * back to a local instance on any failure. Subcommands: `daemon`, `daemon --status`,
+ * `daemon --stop`.
+ *
  * Config via env: DEVLOOP_HEADLESS, DEVLOOP_CHROME_PATH, DEVLOOP_NET_THRESHOLD,
  * DEVLOOP_ACTION_TIMEOUT, DEVLOOP_NAV_TIMEOUT, DEVLOOP_LOG_CAPACITY, and the
  * optional boot auto-start DEVLOOP_DEV_CMD / DEVLOOP_DEV_CWD.
@@ -59,12 +65,30 @@ async function runStdio(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (process.argv.slice(2).includes("daemon")) {
-    const { runDaemon } = await import("./daemon.ts"); // long-running shared HTTP/SSE server (#22)
-    await runDaemon();
-  } else {
-    await runStdio();
+  const args = process.argv.slice(2);
+
+  if (args.includes("daemon")) {
+    const daemon = await import("./daemon.ts"); // long-running shared HTTP/SSE server (#22)
+    if (args.includes("--status")) return daemon.daemonStatus();
+    if (args.includes("--stop")) return daemon.daemonStop();
+    return daemon.runDaemon();
   }
+
+  // Shared mode (opt-in): bridge this stdio session to a daemon instead of spawning a
+  // second browser. Auto-spawns a daemon if none is running; on any failure, fall back
+  // to a normal local stdio instance so the session never just dies.
+  const shared = args.includes("--shared") || process.env.DEVLOOP_DAEMON === "1";
+  if (shared) {
+    try {
+      const { ensureDaemon, bridgeStdioToDaemon } = await import("./daemonClient.ts");
+      const state = await ensureDaemon();
+      await bridgeStdioToDaemon(state.url);
+      return;
+    } catch (err) {
+      process.stderr.write(`[devloop] shared mode unavailable (${err instanceof Error ? err.message : err}); using a local instance\n`);
+    }
+  }
+  await runStdio();
 }
 
 main().catch((err) => {

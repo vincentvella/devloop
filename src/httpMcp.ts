@@ -38,7 +38,14 @@ export interface HttpMcp {
  * Binds `port`, or the next free port within `tries` (so a stray instance never wedges
  * startup). Resolves once listening.
  */
-export async function startHttpMcp(opts: { buildServer: () => Server; port: number; tries?: number; log?: (m: string) => void }): Promise<HttpMcp> {
+export async function startHttpMcp(opts: {
+  buildServer: () => Server;
+  port: number;
+  tries?: number;
+  log?: (m: string) => void;
+  /** Called with the live session count whenever a session opens or closes (for idle-shutdown). */
+  onSessionsChanged?: (count: number) => void;
+}): Promise<HttpMcp> {
   const transports = new Map<string, StreamableHTTPServerTransport>();
 
   const server = createServer(async (req, res) => {
@@ -58,10 +65,12 @@ export async function startHttpMcp(opts: { buildServer: () => Server; port: numb
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (id) => {
             transports.set(id, transport!);
+            opts.onSessionsChanged?.(transports.size);
           },
         });
         transport.onclose = () => {
           if (transport!.sessionId) transports.delete(transport!.sessionId);
+          opts.onSessionsChanged?.(transports.size);
         };
         await opts.buildServer().connect(transport);
       }
