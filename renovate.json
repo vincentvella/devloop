@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", ":dependencyDashboard"],
+  "schedule": ["before 9am on monday"],
+  "timezone": "America/New_York",
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Auto-merge in-range minor/patch once all CI checks pass (smoke would block a bad puppeteer bump).",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true,
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Group the cockpit UI deps into one PR.",
+      "matchPackageNames": ["react", "react-dom", "@radix-ui/**", "lucide-react", "tailwindcss", "@tailwindcss/cli", "zustand"],
+      "groupName": "cockpit UI"
+    },
+    {
+      "description": "Majors get a standalone PR and a human (e.g. puppeteer/electron/typescript).",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "addLabels": ["major"]
+    }
+  ],
+  "vulnerabilityAlerts": { "labels": ["security"], "automerge": false }
+}

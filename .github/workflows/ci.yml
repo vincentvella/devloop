@@ -15,6 +15,8 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Audit runtime dependencies (what `npx devloop-mcp` ships)
+        run: bun audit --prod # devDeps (electron/build chain, MCP SDK) carry unfixable transitive advisories; scope the gate to runtime
       - name: Typecheck (core + renderer)
         run: bun run typecheck
       - name: Unit tests

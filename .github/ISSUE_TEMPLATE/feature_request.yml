@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a capability or improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that Devloop makes hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed solution
+      description: What would you like it to do? A tool, a cockpit affordance, a config — whatever fits.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / workarounds
+      description: What you do today instead, and why it falls short.

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions — ideas, questions, show-and-tell
+    url: https://github.com/vincentvella/devloop/discussions
+    about: Propose or upvote features, ask questions, or share how you use Devloop.

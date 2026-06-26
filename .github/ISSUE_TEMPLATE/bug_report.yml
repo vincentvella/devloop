@@ -1,0 +1,37 @@
+name: Bug report
+description: Something in Devloop (MCP server, daemon, or cockpit) isn't working.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where?
+      options:
+        - stdio MCP (npx devloop-mcp)
+        - daemon (HTTP/SSE)
+        - Electron cockpit
+        - native target (iOS/Android)
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`devloop-mcp --version` or the cockpit's About, and your OS."
+      placeholder: "0.6.2 · macOS 15"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what you got. Include the tool call(s) if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / repro
+      description: Relevant timeline output, a `repro` result, or steps to reproduce. Paste as text.
+      render: shell
