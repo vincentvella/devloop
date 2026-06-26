@@ -89,6 +89,35 @@ jobs:
             npm publish --access public
           fi
 
+  # Publish server.json to the official MCP Registry via GitHub Actions OIDC —
+  # no token/secret (the io.github.vincentvella namespace is authorized by the
+  # OIDC token's repo owner). Runs after npm so the published package carries the
+  # matching mcpName the registry validates. Independent of installers/Latest.
+  mcp-registry:
+    runs-on: ubuntu-latest
+    needs: npm
+    permissions:
+      id-token: write # mint the OIDC token the registry verifies
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install mcp-publisher
+        run: |
+          url=$(gh api repos/modelcontextprotocol/registry/releases/latest \
+            --jq '.assets[] | select(.name=="mcp-publisher_linux_amd64.tar.gz") | .browser_download_url')
+          curl -fsSL "$url" | tar -xz mcp-publisher
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish to the MCP Registry (OIDC; skip if this version is already published)
+        run: |
+          V="$(grep -m1 '"version"' server.json | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
+          if curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.vincentvella/devloop" | grep -q "\"version\":\"$V\""; then
+            echo "io.github.vincentvella/devloop@$V already in the registry — skipping."
+            exit 0
+          fi
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
+
   # All installers uploaded → flip the draft electron-builder created into a
   # published Latest release. Gated on `installers` only (not npm), so the
   # installers ship as Latest even if the independent npm publish hiccups.
