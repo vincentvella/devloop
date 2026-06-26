@@ -101,7 +101,7 @@ jobs:
             echo "electron binary missing — install attempt $i"; node node_modules/electron/install.js || true; sleep 3
           done
           test -f node_modules/electron/path.txt
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24 # the driver runs under node (TS type-stripping needs >= 22.18)
       - name: GUI end-to-end (Playwright + Electron)
