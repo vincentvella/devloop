@@ -37,6 +37,34 @@ try {
   }
   check("androidTap issues without error", tapOk);
 
+  // #17 on Android: a fetch in the app's JS should become a network row via the
+  // injected XHR interceptor (the same Hermes/CDP path as iOS — see reactNativeNet.ts).
+  await win.evaluate(() =>
+    (window as any).devloop.repro({
+      action: {
+        kind: "eval",
+        expression: "fetch('https://example.com/').then(function(r){return r.text()}).catch(function(){})",
+      },
+      settleMs: 1500,
+    }),
+  );
+  let netRow: { line?: string; detail?: { mimeType?: string; durationMs?: number } } | undefined;
+  for (let i = 0; i < 12 && !netRow; i++) {
+    const rows = (await win.evaluate(() => (window as any).devloop.getLogs({ stream: "network", limit: 50 }))) as {
+      line?: string;
+      detail?: { mimeType?: string; durationMs?: number };
+    }[];
+    netRow = rows.find((e) => e.line?.includes("example.com"));
+    if (!netRow) await win.waitForTimeout(400);
+  }
+  check(
+    "RN network request captured on Android (XHR interceptor)",
+    !!netRow,
+    netRow
+      ? `${netRow.line} (${netRow.detail?.mimeType ?? "?"}, ${netRow.detail?.durationMs ?? "?"}ms)`
+      : "no network row",
+  );
+
   await win.evaluate(() => (window as any).devloop.closeAndroid());
   await app.close();
 } finally {

@@ -271,12 +271,14 @@ async function doCloseAndroid(): Promise<void> {
   if (active) manager.setNativeController(active.id, undefined);
 }
 
-function doNativeBuild(platform: Platform, cwd?: string): { started: boolean; detail?: string } {
+function doNativeBuild(platform: Platform, cwd?: string, eas?: boolean): { started: boolean; detail?: string } {
   const active = manager.listPanes().find((p) => p.active);
   const root = cwd || active?.dev?.cwd;
   if (!root || !platform) return { started: false, detail: "no project cwd — set the pane's project or pass cwd" };
-  runNativeBuild({ buffer, projectRoot: root, platform }); // streams to the timeline; fingerprint recorded on success
-  return { started: true, detail: `building ${platform} in ${root}` };
+  const mode = eas ? "eas" : "local";
+  // streams to the timeline; a local build records a fingerprint on success, an EAS cloud build doesn't.
+  runNativeBuild({ buffer, projectRoot: root, platform, mode });
+  return { started: true, detail: `building ${platform} ${eas ? "in the EAS cloud" : `in ${root}`}` };
 }
 
 /** Best-effort native-log process match from a project's Expo config. */
@@ -883,7 +885,7 @@ async function main() {
         await doCloseSimulator();
         await doCloseAndroid();
       },
-      build: async (platform, cwd) => doNativeBuild(platform as Platform, cwd),
+      build: async (platform, cwd, eas) => doNativeBuild(platform as Platform, cwd, eas),
     },
     // ext_* over MCP — same path as the cockpit's Settings "ext" row.
     extControl: {

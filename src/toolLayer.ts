@@ -50,8 +50,9 @@ export interface NativeControl {
   open(platform: "ios" | "android"): Promise<{ ok: boolean; summary?: string }>;
   /** Close the active native target; browser_* route back to the web pane. */
   close(): Promise<void>;
-  /** Build + launch the native dev build (expo run:<platform>); streams to the timeline. */
-  build(platform: "ios" | "android", cwd?: string): Promise<{ started: boolean; detail?: string }>;
+  /** Build + launch the native dev build; streams to the timeline. `eas` runs a
+   *  cloud build (`eas build`) instead of a local `expo run:<platform>`. */
+  build(platform: "ios" | "android", cwd?: string, eas?: boolean): Promise<{ started: boolean; detail?: string }>;
 }
 
 let deps: ToolDeps;
@@ -368,7 +369,13 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
         throw new Error(
           "native builds require the Devloop cockpit (run the Electron app); the headless server is web-only",
         );
-      return json(await deps.nativeControl.build(args.platform as "ios" | "android", args.cwd as string | undefined));
+      return json(
+        await deps.nativeControl.build(
+          args.platform as "ios" | "android",
+          args.cwd as string | undefined,
+          args.eas as boolean | undefined,
+        ),
+      );
     }
     case "project_list":
       return json({ projects: listProjects() });

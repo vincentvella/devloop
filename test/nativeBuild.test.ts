@@ -4,6 +4,7 @@ import {
   buildCommand,
   buildStatusLabel,
   fingerprintStatus,
+  recommendBuildMode,
   resolveNativeInfo,
 } from "../src/nativeBuild.ts";
 
@@ -21,6 +22,22 @@ test("buildCommand defaults to bunx expo run:<platform>", () => {
 
 test("buildCommand honors npm package manager", () => {
   expect(buildCommand("ios", { packageManager: "npm" })).toEqual({ cmd: "npx", args: ["expo", "run:ios"] });
+});
+
+test("buildCommand mode eas → an EAS cloud build (default development profile)", () => {
+  expect(buildCommand("android", { mode: "eas" })).toEqual({
+    cmd: "bunx",
+    args: ["eas-cli", "build", "--platform", "android", "--profile", "development", "--non-interactive"],
+  });
+  expect(buildCommand("ios", { mode: "eas", easProfile: "preview", packageManager: "npm" })).toEqual({
+    cmd: "npx",
+    args: ["eas-cli", "build", "--platform", "ios", "--profile", "preview", "--non-interactive"],
+  });
+});
+
+test("recommendBuildMode falls back to EAS only when the local toolchain isn't ready", () => {
+  expect(recommendBuildMode(true)).toBe("local");
+  expect(recommendBuildMode(false)).toBe("eas");
 });
 
 test("fingerprintStatus: fresh / stale / unknown", () => {

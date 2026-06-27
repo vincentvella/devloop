@@ -60,7 +60,7 @@ test("runNativeBuild streams output to the timeline and reports failure", async 
   const result = await handle.done;
 
   const lines = buffer.query({ source: "server" }).map((e) => e.line);
-  expect(lines[0]).toContain("building ios: bunx expo run:ios");
+  expect(lines[0]).toContain("building ios locally: bunx expo run:ios");
   expect(lines).toContain("Planning build");
   expect(lines).toContain("Compiling Caliburr");
   expect(lines).toContain("Linking"); // chunk-split line reassembled

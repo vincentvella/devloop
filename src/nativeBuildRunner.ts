@@ -10,7 +10,7 @@
  */
 import { execFile, spawn } from "node:child_process";
 import type { LogBuffer } from "./logBuffer.ts";
-import { buildCommand, type Platform } from "./nativeBuild.ts";
+import { type BuildMode, buildCommand, type Platform } from "./nativeBuild.ts";
 import { setProjectFingerprint } from "./registry.ts";
 
 /**
@@ -60,13 +60,19 @@ export function runNativeBuild(opts: {
   buffer: LogBuffer;
   projectRoot: string;
   platform: Platform;
+  /** `local` = `expo run:<platform>` (needs the toolchain); `eas` = EAS cloud build. */
+  mode?: BuildMode;
+  /** EAS profile (mode "eas"); defaults to "development". */
+  easProfile?: string;
   /** Test seam — defaults to node child_process spawn. */
   spawnImpl?: typeof spawn;
 }): BuildHandle {
   const { buffer, projectRoot, platform } = opts;
-  const { cmd, args } = buildCommand(platform);
+  const mode: BuildMode = opts.mode ?? "local";
+  const { cmd, args } = buildCommand(platform, { mode, easProfile: opts.easProfile });
   const spawnFn = opts.spawnImpl ?? spawn;
-  buffer.push("server", "build", `[devloop] building ${platform}: ${cmd} ${args.join(" ")}`);
+  const where = mode === "eas" ? "in the EAS cloud" : "locally";
+  buffer.push("server", "build", `[devloop] building ${platform} ${where}: ${cmd} ${args.join(" ")}`);
 
   const proc = spawnFn(cmd, args, { cwd: projectRoot });
   let partial = "";
@@ -84,7 +90,9 @@ export function runNativeBuild(opts: {
       const ok = code === 0;
       buffer.push("server", "build", `[devloop] build ${ok ? "succeeded" : `failed (exit ${code})`}`);
       let fingerprint: string | null | undefined;
-      if (ok) {
+      // Only a local build installs a binary here, so only it gets a staleness
+      // baseline; an EAS cloud build produces a remote artifact you install later.
+      if (ok && mode !== "eas") {
         fingerprint = await computeFingerprint(projectRoot);
         if (fingerprint) {
           setProjectFingerprint(projectRoot, fingerprint);

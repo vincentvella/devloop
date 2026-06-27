@@ -449,7 +449,8 @@ export const TOOLS: Tool[] = [
     name: "native_build",
     purpose:
       "Build + launch the native dev build for the active pane (`expo run:ios` / `expo run:android`); output streams to the timeline.",
-    behavior: "Cockpit-only (needs the native toolchain).",
+    behavior:
+      "Cockpit-only. A local build needs the native toolchain (Xcode for iOS, Android SDK + JDK for Android); set `eas:true` to build in the EAS cloud instead when no local toolchain is available.",
     alternatives: "After it boots, use native_open to drive it.",
     annotations: { openWorldHint: true, idempotentHint: false },
     params: {
@@ -460,6 +461,11 @@ export const TOOLS: Tool[] = [
         required: true,
       },
       cwd: { type: "string", description: "Project directory to build; defaults to the active pane's project." },
+      eas: {
+        type: "boolean",
+        description:
+          "Build in the EAS cloud (`eas build`, development profile) instead of a local `expo run` — the fallback when there's no local native toolchain.",
+      },
     },
   }),
   defineTool({
