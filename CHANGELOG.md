@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.7.1] - 2026-06-27
+
+### Added
+
+- **EAS cloud-build fallback** — `native_build({ platform, eas: true })` builds in the EAS cloud (`eas build`, development profile) instead of a local `expo run`, for when there's no local native toolchain.
+
+### Changed
+
+- **Cockpit decomposition** — `cockpit/main.ts` (~1540 lines) split into focused modules: `selftest/*` (the integration suite), `extensions.ts`, `nativeTargets.ts`, and `ipc.ts` (the 61 IPC channels), behind factories. `main.ts` is now ~380 lines (window creation + boot + lifecycle). Structural only — no behavior change.
+
+### Fixed
+
+- Hardened the cockpit selftest's `interactions (select/press/hover)` step against a CI timing flake (wait for the doc to be interactive, then retry the idempotent actions).
+
 ## [0.7.0] - 2026-06-26
 
 ### Added
@@ -233,7 +247,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/vincentvella/devloop/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/vincentvella/devloop/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/vincentvella/devloop/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/vincentvella/devloop/compare/v0.6.0...v0.6.1
