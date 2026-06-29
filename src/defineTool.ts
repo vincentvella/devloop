@@ -49,8 +49,9 @@ export interface ToolSpec {
   params?: Record<string, ParamSpec>;
 }
 
-/** Build an MCP Tool (description + inputSchema) from a structured spec. */
-export function defineTool(spec: ToolSpec): Tool {
+/** Build an MCP Tool (description + inputSchema) from a structured spec. The `const`
+ *  generic preserves the literal `name`, so TOOLS yields a precise `ToolName` union. */
+export function defineTool<const S extends ToolSpec>(spec: S): Tool & { name: S["name"] } {
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   for (const [name, p] of Object.entries(spec.params ?? {})) {
@@ -72,5 +73,5 @@ export function defineTool(spec: ToolSpec): Tool {
     description,
     ...(spec.annotations ? { annotations: spec.annotations } : {}),
     inputSchema: { type: "object", properties, ...(required.length ? { required } : {}) },
-  } as Tool;
+  } as Tool & { name: S["name"] };
 }

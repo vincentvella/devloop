@@ -15,6 +15,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { clearDaemonState, type DaemonState, httpReachable, pidAlive, readDaemonState } from "./daemonState.ts";
+import { VERSION } from "./version.ts";
 
 const log = (m: string) => process.stderr.write(`[devloop] ${m}\n`);
 
@@ -61,10 +62,10 @@ export async function ensureDaemon(timeoutMs = 20_000): Promise<DaemonState> {
  * session — graceful per-client teardown — and exits, leaving the daemon running).
  */
 export async function bridgeStdioToDaemon(url: string): Promise<void> {
-  const client = new Client({ name: "devloop-bridge", version: "0.6.0" }, { capabilities: {} });
+  const client = new Client({ name: "devloop-bridge", version: VERSION }, { capabilities: {} });
   await client.connect(new StreamableHTTPClientTransport(new URL(url)));
 
-  const proxy = new Server({ name: "devloop-mcp", version: "0.6.0" }, { capabilities: { tools: {} } });
+  const proxy = new Server({ name: "devloop-mcp", version: VERSION }, { capabilities: { tools: {} } });
   proxy.setRequestHandler(ListToolsRequestSchema, async () => await client.listTools());
   proxy.setRequestHandler(CallToolRequestSchema, async (req) =>
     client.callTool({ name: req.params.name, arguments: (req.params.arguments ?? {}) as Record<string, unknown> }),

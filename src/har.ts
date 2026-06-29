@@ -4,6 +4,7 @@
  * always logged; set the threshold to 0 to capture every response for a full HAR).
  */
 import type { LogEntry } from "./logBuffer.ts";
+import { VERSION } from "./version.ts";
 
 export interface NetDetail {
   kind: "network";
@@ -33,7 +34,7 @@ export function toHar(entries: LogEntry[]): unknown {
   return {
     log: {
       version: "1.2",
-      creator: { name: "devloop", version: "0.1" },
+      creator: { name: "devloop", version: VERSION },
       entries: net.map((e) => {
         const d = e.detail;
         const reqBody = d.requestBody;
