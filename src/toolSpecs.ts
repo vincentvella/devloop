@@ -4,7 +4,6 @@
  * generated from TDQS-aligned fields. handleTool() in toolLayer.ts dispatches by
  * name; this file owns only the schemas/prose. See src/defineTool.ts.
  */
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { defineTool } from "./defineTool.ts";
 
 // Shared schema for a single repro action (reused by `actions[]` and `action`).
@@ -25,7 +24,7 @@ const ACTION_PROPS: Record<string, unknown> = {
   timeoutMs: { type: "number", description: "for kind=wait" },
 };
 
-export const TOOLS: Tool[] = [
+export const TOOLS = [
   defineTool({
     name: "browser_navigate",
     purpose: "Navigate the active pane to a URL (full page load).",
@@ -540,3 +539,14 @@ export const TOOLS: Tool[] = [
     },
   }),
 ];
+
+/** Union of every tool name, derived from TOOLS so it can't drift from the schemas. */
+export type ToolName = (typeof TOOLS)[number]["name"];
+
+const TOOL_NAMES: ReadonlySet<string> = new Set(TOOLS.map((t) => t.name));
+
+/** Runtime guard: is `name` a known tool? Narrows `string` → `ToolName` so handleTool's
+ *  switch is exhaustiveness-checked (a new tool without a handler fails typecheck). */
+export function isToolName(name: string): name is ToolName {
+  return TOOL_NAMES.has(name);
+}

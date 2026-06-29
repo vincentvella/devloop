@@ -17,6 +17,7 @@ import { toHar } from "./har.ts";
 import type { LogBuffer, LogSource } from "./logBuffer.ts";
 import { addProject, getProject, listProjects, removeProject } from "./registry.ts";
 import { type Capability, isToolSupported, supports, unsupportedToolMessage } from "./target.ts";
+import { isToolName } from "./toolSpecs.ts";
 
 export interface ToolDeps {
   buffer: LogBuffer;
@@ -200,6 +201,7 @@ function resolveTargets(app: string | undefined): string[] | undefined {
 
 export async function handleTool(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
   const { buffer, browser, devServer } = deps;
+  if (!isToolName(name)) throw new Error(`Unknown tool: ${name}`);
   // Gate browser_* tools on the active target's capabilities (e.g. a React Native
   // target supports eval+screenshot but not snapshot/click yet) so an agent gets a
   // clear message instead of a substrate error. Agnostic tools pass through.
@@ -515,7 +517,11 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
         entries,
       });
     }
-    default:
-      throw new Error(`Unknown tool: ${name}`);
+    default: {
+      // Exhaustiveness: once every ToolName is cased above, `name` is `never` here.
+      // Add a tool to toolSpecs.ts without a handler and this fails `bun run typecheck`.
+      const _exhaustive: never = name;
+      throw new Error(`Unhandled tool: ${String(_exhaustive)}`);
+    }
   }
 }
