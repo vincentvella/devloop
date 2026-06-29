@@ -109,7 +109,7 @@ bun run app          # build + launch the Electron cockpit
 bun run start        # or run the stdio MCP directly
 ```
 
-## Tools (37)
+## Tools (45)
 
 **Dev server** — runtime, no per-project registration needed
 - `dev_start({ project?, cmd?, cwd? })` — start a dev server and tee its logs. Specify it three ways: a saved registry `project`; explicit `cmd`+`cwd`; or neither (`cwd` defaults to the server's dir, `cmd` auto-detected from `package.json` scripts: `dev`/`develop`/`web`/`start`/`serve`).
@@ -124,6 +124,7 @@ bun run start        # or run the stdio MCP directly
 
 **Browser control** — act on the active pane
 - `browser_navigate({ url })`
+- `browser_back()` · `browser_forward()` · `browser_reload({ hard? })` — history nav + reload (the browser bar's ←/→/⟲; `hard` ignores cache).
 - `browser_screenshot({ fullPage? })` → PNG image
 - `browser_click({ selector })`
 - `browser_type({ selector, text })`
@@ -162,6 +163,13 @@ bun run start        # or run the stdio MCP directly
 - `pane_select({ id })` — make a pane active.
 - `pane_close({ id })`.
 - `pane_pop({ id })` — detach a pane into its own standalone window (side-by-side targets).
+- `pane_set_label({ id, label })` — rename a pane (same as double-clicking the tab).
+
+**Extensions** — Chrome extension management (cockpit only)
+- `ext_list()` — installed extensions: `{ id, name, version, enabled }`.
+- `ext_install({ idOrUrl })` — install by Chrome Web Store id/URL.
+- `ext_remove({ id })` — uninstall.
+- `ext_set_enabled({ id, enabled })` — enable/disable without uninstalling.
 
 ### Console arguments
 
@@ -185,6 +193,7 @@ Then, in any project: *"dev_start and repro a navigate to /projects"*. `dev_star
 | `DEVLOOP_ACTION_TIMEOUT` | `10000` | Cap (ms) on interactions — a wedged page fails fast instead of hanging. |
 | `DEVLOOP_NAV_TIMEOUT` | `30000` | Cap (ms) on navigations. |
 | `DEVLOOP_LOG_CAPACITY` | `5000` | Max buffered events. |
+| `DEVLOOP_NET_RING` | `3000` | Max requests held in the full-capture network ring (`get_network` / `export_har`), independent of `DEVLOOP_NET_THRESHOLD`. |
 | `DEVLOOP_DEV_CMD` / `DEVLOOP_DEV_CWD` | _(none)_ | Optional dev-server auto-start on boot (normally use `dev_start`). |
 | `DEVLOOP_HOME` | `~/.devloop` | Registry location. |
 
@@ -344,8 +353,7 @@ New features are built **test-first** against this harness. Code is linted + for
 
 ## Where to take it next
 
-- **Daemon auto-connect + lifecycle** — the stdio entry detects a running daemon and bridges to it (vs spawning a second browser); `daemon --status`/`--stop`; graceful per-client + idle teardown. Makes "many agents, one instance" the seamless default.
-- **Full MCP parity** — the last cockpit-only affordances as tools: extension management (`ext_*`) + `browser_back`/`forward`/`reload` + `pane_set_label`.
-- **Android parity round-out** — verify RN network capture on Android live; an `eas build` fallback when there's no local native toolchain.
+- **EAS Build fallback** — an `eas build` path for native builds when there's no local toolchain (Android especially), surfaced in the **Settings → native readiness** preflight.
+- **Configurable snapshot depth** — let `browser_snapshot` override the 250-element cap for dense UIs (data tables, long forms).
 
-_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer **and** Electron panes — recover from renderer crash) · **network request/response bodies** (capped, base64-decoded, on logged Electron entries) · project registry (with saved repro steps) · session persistence · single-window Electron cockpit — tabbed panes, collapsible toolbar + timeline, pop-out, project-named tabs · per-pane dev servers, configure-once (auto-saved) · auto-navigate from logs · pane persistence + restore (no "assume running") · **React 19 + Tailwind v4 + Radix + lucide-react** renderer · browser bar (back/forward/reload + live address) · segmented logs/repro panel · **pop-out windows with their own browser chrome** · screenshot → timeline (thumbnail + lightbox) · dev failed-state indicator · project picker (open-on-pick) + folder browse · visual repro builder · MCP-over-HTTP · clean process-group teardown + crash watchdog · Electron security-warning suppression · **native targets (Expo / React Native iOS)** — Web·iOS switcher, separate bundler/build (`expo run:ios` with `@expo/fingerprint` staleness), source-mapped Hermes JS logs over CDP, `simctl` native device logs on the timeline, and a **vendored, offline live interactive iOS simulator** embedded in the pane · **agent-driven native interactions** — `browser_snapshot` of the UIKit a11y tree + `browser_click`/`type`/`scroll`/`press` via idb (by `pt:x,y` ref or label), replayable through `repro`, with a **Settings → native readiness** preflight · per-pane Chrome extension load/toggle + an in-store **"Add to Devloop"** install button · **in-app update banner** (download progress + restart) · **Android target** (Web·iOS·Android switch, adb-driven snapshot/tap via `uiautomator`, `logcat` on the timeline, a live `screencap` mirror, `expo run:android`) · **RN network capture** (injected XHR hook → `network` rows) · **full network-capture ring** (complete HAR + `get_network`, threshold-independent) · **viewport/throttle picker** UI · **per-project session partitions** (same-origin isolation) · **shared HTTP/SSE daemon** (`devloop-mcp daemon` — many agents, one instance) · **native open/build over MCP** (`native_open`/`native_close`/`native_build`)._
+_Done: unified browser+server timeline · `get_logs_around` correlation · `repro` one-shot + action sequences (results rendered inline) · `waitFor: networkidle` · structured console args · bounded interaction timeouts · self-healing re-acquire (Puppeteer **and** Electron panes — recover from renderer crash) · **network request/response bodies** (capped, base64-decoded, on logged Electron entries) · project registry (with saved repro steps) · session persistence · single-window Electron cockpit — tabbed panes, collapsible toolbar + timeline, pop-out, project-named tabs · per-pane dev servers, configure-once (auto-saved) · auto-navigate from logs · pane persistence + restore (no "assume running") · **React 19 + Tailwind v4 + Radix + lucide-react** renderer · browser bar (back/forward/reload + live address) · segmented logs/repro panel · **pop-out windows with their own browser chrome** · screenshot → timeline (thumbnail + lightbox) · dev failed-state indicator · project picker (open-on-pick) + folder browse · visual repro builder · MCP-over-HTTP · clean process-group teardown + crash watchdog · Electron security-warning suppression · **native targets (Expo / React Native iOS)** — Web·iOS switcher, separate bundler/build (`expo run:ios` with `@expo/fingerprint` staleness), source-mapped Hermes JS logs over CDP, `simctl` native device logs on the timeline, and a **vendored, offline live interactive iOS simulator** embedded in the pane · **agent-driven native interactions** — `browser_snapshot` of the UIKit a11y tree + `browser_click`/`type`/`scroll`/`press` via idb (by `pt:x,y` ref or label), replayable through `repro`, with a **Settings → native readiness** preflight · per-pane Chrome extension load/toggle + an in-store **"Add to Devloop"** install button · **in-app update banner** (download progress + restart) · **Android target** (Web·iOS·Android switch, adb-driven snapshot/tap via `uiautomator`, `logcat` on the timeline, a live `screencap` mirror, `expo run:android`) · **RN network capture** (injected XHR hook → `network` rows) · **full network-capture ring** (complete HAR + `get_network`, threshold-independent) · **viewport/throttle picker** UI · **per-project session partitions** (same-origin isolation) · **shared HTTP/SSE daemon** (`devloop-mcp daemon` — many agents, one instance) · **native open/build over MCP** (`native_open`/`native_close`/`native_build`) · **shared-mode stdio auto-connect** (the stdio entry bridges to a running daemon — or spawns one — and falls back to a local instance) · **full MCP parity** (extension management `ext_*`, `browser_back`/`forward`/`reload`, `pane_set_label`)._
