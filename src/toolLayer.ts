@@ -185,7 +185,7 @@ function asManager(): IBrowserManager {
  * case-insensitively, exact-first then substring. Returns undefined (no filter)
  * if there's no multi-pane manager or nothing matches.
  */
-function resolveTargets(app: string | undefined): string[] | undefined {
+export function resolveTargets(app: string | undefined): string[] | undefined {
   if (!app) return undefined;
   const b = deps.browser as Partial<IBrowserManager>;
   if (typeof b.listPanes !== "function") return undefined; // single-pane (stdio) — nothing to scope
