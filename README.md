@@ -109,6 +109,36 @@ bun run app          # build + launch the Electron cockpit
 bun run start        # or run the stdio MCP directly
 ```
 
+## Use it from your coding agent
+
+Once it's registered, drop this into your **`CLAUDE.md`** (or any agent's rules file) so the agent drives features through Devloop and **verifies them live** instead of reasoning from the code alone:
+
+```md
+## Devloop — use it for any web/mobile feature work
+
+When you build, test, or debug a feature that runs in a **browser** or an **Expo /
+React Native** app, drive it through **devloop** instead of reasoning from the code
+alone. It puts the dev-server logs and the live browser/device on one correlated
+timeline, so you can see what actually happened.
+
+- **Start the loop:** `dev_start` (auto-detects the dev command), then
+  `browser_navigate` to the page — or `native_open` for an iOS/Android target.
+- **Act, then verify — don't assume:** after a change, reproduce it with `repro`
+  (a navigate/click/type sequence) and read the result. Never claim a fix works
+  without exercising it in the running app.
+- **Find/target elements** with `browser_snapshot` (returns clickable `ref`
+  selectors) — prefer it over screenshots.
+- **When something breaks:** `diagnose` first (groups errors + failed requests),
+  then `get_logs_around` a timestamp to line up the browser console error with the
+  matching server stack trace from the same moment. `get_network` / `export_har`
+  for request detail.
+- **Definition of done:** the feature is verified live in devloop — no console or
+  page errors, the expected network calls succeeded, the UI reflects the change —
+  not just "the code looks right."
+
+Register once: `claude mcp add devloop --scope user -- npx -y devloop-mcp`
+```
+
 ## Tools (45)
 
 **Dev server** — runtime, no per-project registration needed
