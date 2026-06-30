@@ -664,8 +664,8 @@ export class BrowserManager implements IBrowserManager {
   evaluate(expression: string) {
     return this.routed().evaluate(expression);
   }
-  snapshot() {
-    return this.routed().snapshot();
+  snapshot(limit?: number) {
+    return this.routed().snapshot(limit);
   }
   pick() {
     return this.active().pick(); // web-only element picker (DOM overlay)

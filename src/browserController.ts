@@ -28,8 +28,8 @@ export interface ITargetController {
   select(selector: string, value: string): Promise<void>;
   press(key: string, selector?: string): Promise<void>;
   evaluate(expression: string): Promise<unknown>;
-  /** Structured page snapshot (roles + names + usable selectors) for agents. */
-  snapshot(): Promise<PageSnapshot>;
+  /** Structured page snapshot (roles + names + usable selectors) for agents. `limit` caps elements (default 250). */
+  snapshot(limit?: number): Promise<PageSnapshot>;
   /** Wait until a selector appears or text is present. */
   waitFor(opts: { selector?: string; text?: string; timeoutMs?: number }): Promise<{ ok: boolean; waitedMs: number }>;
   /** Clear cookies/localStorage/IndexedDB/cache for the current origin (or the whole session). */

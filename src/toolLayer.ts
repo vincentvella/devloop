@@ -273,7 +273,7 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
         return json({ ok: false });
       }
     case "browser_snapshot":
-      return json(await browser.snapshot());
+      return json(await browser.snapshot(args.limit as number | undefined));
     case "browser_wait_for":
       return json(
         await browser.waitFor({
