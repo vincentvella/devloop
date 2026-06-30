@@ -213,9 +213,17 @@ export const TOOLS = [
     name: "browser_snapshot",
     purpose:
       "Capture a structured snapshot of the active page: url, title, and the interactive + landmark elements (role, accessible name, value/state, heading level), each with a CSS selector `ref`.",
-    behavior: "Pass a returned `ref` to browser_click / browser_type.",
+    behavior:
+      "Pass a returned `ref` to browser_click / browser_type. Caps at 250 elements by default (raise `limit` for dense pages); `truncated:true` means the cap was hit.",
     alternatives: "Prefer this over browser_screenshot to find and target elements reliably.",
     annotations: { readOnlyHint: true, openWorldHint: false },
+    params: {
+      limit: {
+        type: "number",
+        description:
+          "Max elements to return (default 250). Raise it for dense pages (large tables / long forms) where the default truncates the snapshot.",
+      },
+    },
   }),
   defineTool({
     name: "browser_wait_for",

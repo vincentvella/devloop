@@ -319,7 +319,8 @@ export class ReactNativeController implements IBrowserController {
     return p;
   }
 
-  async snapshot(): Promise<PageSnapshot> {
+  async snapshot(_limit?: number): Promise<PageSnapshot> {
+    // The native a11y tree (UIKit / uiautomator) isn't capped like the web DOM, so `limit` is a no-op here.
     return this.driver().snapshot(this.url);
   }
 

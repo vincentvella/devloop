@@ -20,7 +20,7 @@ import { DEVICE_PRESETS, THROTTLE } from "./emulation.ts";
 import type { NetDetail } from "./har.ts";
 import type { LogBuffer, LogEntry } from "./logBuffer.ts";
 import { scrollJs, selectJs } from "./pageActions.ts";
-import { type PageSnapshot, SNAPSHOT_JS } from "./pageSnapshot.ts";
+import { type PageSnapshot, snapshotJs } from "./pageSnapshot.ts";
 import { attachResolvedStack } from "./sourcemap.ts";
 
 /** Cap a captured body/string to keep the buffer light. */
@@ -315,8 +315,8 @@ export class PuppeteerBrowserController implements IBrowserController {
     }, "evaluate");
   }
 
-  async snapshot(): Promise<PageSnapshot> {
-    return (await this.evaluate(SNAPSHOT_JS)) as PageSnapshot;
+  async snapshot(limit?: number): Promise<PageSnapshot> {
+    return (await this.evaluate(snapshotJs(limit))) as PageSnapshot;
   }
 
   async emulate(opts: {

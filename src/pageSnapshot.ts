@@ -23,9 +23,18 @@ export interface PageSnapshot {
   truncated?: boolean;
 }
 
-/** Expression (IIFE) returning a PageSnapshot. Runs in the page main world. */
-export const SNAPSHOT_JS = String.raw`(() => {
-  const MAX = 250, NAMELEN = 120;
+/** Default element cap for a snapshot. Override per call (browser_snapshot's `limit`)
+ *  or globally via DEVLOOP_SNAPSHOT_MAX. */
+export const DEFAULT_SNAPSHOT_MAX = (() => {
+  const n = Math.floor(Number(process.env.DEVLOOP_SNAPSHOT_MAX));
+  return Number.isFinite(n) && n > 0 ? n : 250;
+})();
+
+/** Build the snapshot IIFE with a given element cap. Runs in the page main world. */
+export function snapshotJs(max: number = DEFAULT_SNAPSHOT_MAX): string {
+  const cap = Number.isFinite(max) && max > 0 ? Math.floor(max) : DEFAULT_SNAPSHOT_MAX;
+  return String.raw`(() => {
+  const MAX = ${cap}, NAMELEN = 120;
   const esc = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : s;
   const vis = (el) => {
     if (!el.getClientRects().length) return false;
@@ -87,3 +96,7 @@ export const SNAPSHOT_JS = String.raw`(() => {
   }
   return { url: location.href, title: document.title, nodes: out, truncated };
 })()`;
+}
+
+/** The snapshot expression at the default cap (back-compat for callers that don't tune it). */
+export const SNAPSHOT_JS = snapshotJs();
