@@ -132,6 +132,16 @@ export class DevServer implements DevServerLike {
         process.stderr.write(`[dev:${stream}] ${line}\n`); // mirror to operator
       }
     });
+    // Flush any trailing partial line when the stream closes. Crash output
+    // (Segmentation fault / EADDRINUSE / an uncaught-exception dump) often lacks
+    // a final newline, and that last line is usually the most diagnostic one —
+    // without this it's silently dropped from the buffer and stderr.
+    src.on("end", () => {
+      if (!partial) return;
+      this.buffer.push("server", stream, partial, undefined, this.target);
+      process.stderr.write(`[dev:${stream}] ${partial}\n`);
+      partial = "";
+    });
   }
 
   status(): DevStatus {
