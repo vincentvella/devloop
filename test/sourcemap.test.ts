@@ -54,3 +54,27 @@ test("resolveStackString returns null when nothing maps", async () => {
   const fetchImpl = (async () => new Response("no map here", { status: 200 })) as unknown as typeof fetch;
   expect(await resolveStackString(`Error: x\n    at f (http://h/x.js:1:1)`, createResolver(fetchImpl))).toBeNull();
 });
+
+test("createResolver evicts the least-recently-used map past the cache cap", async () => {
+  const fetches = new Map<string, number>();
+  const fetchImpl = (async (u: string | URL) => {
+    const url = String(u);
+    fetches.set(url, (fetches.get(url) ?? 0) + 1);
+    return new Response(jsWithInlineMap(), { status: 200 }); // inline map → one fetch per url
+  }) as unknown as typeof fetch;
+  const r = createResolver(fetchImpl, 2); // tiny cap so 3 urls overflow
+
+  await r.resolve("http://h/a.js", 1, 10); // fetch a → cache [a]
+  await r.resolve("http://h/b.js", 1, 10); // fetch b → cache [a,b]
+  await r.resolve("http://h/a.js", 1, 10); // HIT a (no fetch); a becomes MRU → cache [b,a]
+  expect(fetches.get("http://h/a.js")).toBe(1);
+
+  await r.resolve("http://h/c.js", 1, 10); // fetch c; over cap → evict oldest (b) → cache [a,c]
+  expect(fetches.get("http://h/b.js")).toBe(1); // b fetched once so far
+
+  await r.resolve("http://h/b.js", 1, 10); // b was evicted → re-fetch
+  expect(fetches.get("http://h/b.js")).toBe(2); // proves eviction
+
+  await r.resolve("http://h/c.js", 1, 10); // c still cached → no re-fetch
+  expect(fetches.get("http://h/c.js")).toBe(1); // proves recent entries stay warm
+});

@@ -68,16 +68,29 @@ async function loadMap(jsUrl: string, fetchImpl: typeof fetch): Promise<TraceMap
   return new TraceMap(JSON.parse(rawMap));
 }
 
-/** A resolver that fetches each bundle's source map once (cached) and maps positions. */
-export function createResolver(fetchImpl: typeof fetch = fetch): Resolver {
+/**
+ * A resolver that fetches each bundle's source map once (cached) and maps positions.
+ * The cache is a bounded LRU (default 100): long daemon/cockpit sessions hit many
+ * hash-versioned bundle URLs (hot reloads) and each TraceMap can be several MB, so an
+ * unbounded cache would grow without limit. Most-recently-used maps stay warm; the
+ * least-recently-used is evicted past the cap.
+ */
+export function createResolver(fetchImpl: typeof fetch = fetch, maxCache = 100): Resolver {
   const cache = new Map<string, Promise<TraceMap | null>>();
   const mapFor = (url: string) => {
-    if (!cache.has(url))
-      cache.set(
-        url,
-        loadMap(url, fetchImpl).catch(() => null),
-      );
-    return cache.get(url)!;
+    const hit = cache.get(url);
+    if (hit) {
+      cache.delete(url); // re-insert to mark most-recently-used
+      cache.set(url, hit);
+      return hit;
+    }
+    const p = loadMap(url, fetchImpl).catch(() => null);
+    cache.set(url, p);
+    if (cache.size > maxCache) {
+      const oldest = cache.keys().next().value; // least-recently-used (insertion order)
+      if (oldest !== undefined) cache.delete(oldest);
+    }
+    return p;
   };
   return {
     async resolve(url, line, column) {
