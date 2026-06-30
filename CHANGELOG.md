@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.8.0] - 2026-06-30
+
+### Added
+
+- **Configurable `browser_snapshot` cap** — a `limit` parameter (default 250, override globally via `DEVLOOP_SNAPSHOT_MAX`) so dense tables / long forms aren't silently truncated. Still emits `truncated` when the cap is hit.
+
+### Fixed
+
+- **Advertised MCP version is read from `package.json`** — it was hardcoded and stale (`0.5.2` / `0.6.0`), so every connecting client (and the daemon bridge) saw the wrong version; the HAR `creator` version is sourced from it too.
+- **Dev-server crash output is no longer dropped** — `DevServer` now flushes the final partial line when the stream closes, so crash output without a trailing newline (segfault / `EADDRINUSE` / uncaught-exception dumps) reaches the timeline.
+- **The daemon can't hang or OOM on a bad request** — the HTTP transport's body reader settles on a socket `error` and caps bodies at 4 MB (responds `400`), instead of leaving the handler (and its response) suspended forever.
+- **Bounded source-map cache** — the resolver's `TraceMap` cache is now an LRU (default 100), so long daemon/cockpit sessions don't leak memory across hash-versioned bundle URLs.
+
+### Changed
+
+- **Compile-time tool-dispatch safety** — `defineTool` preserves literal tool names and `handleTool`'s switch is exhaustiveness-checked, so adding a tool to `toolSpecs.ts` without a handler now fails `bun run typecheck`.
+- Dependency bumps: **Remotion 4.0.484** (`remotion` + `@remotion/cli`).
+
+### Tooling
+
+- Large unit-test expansion (no Chrome/Electron needed): `handleTool` dispatch (browser / pane / dev-server / logs / repro), the Puppeteer controller (recovery · console enrichment · network listeners), `daemonState`, `resolveTargets`, the `DevServer` lifecycle, the `httpMcp` body reader, the source-map LRU, and a version-drift guard.
+
+### Docs
+
+- README: corrected the tool count (37 → **45**), documented the 8 previously-undocumented tools (`browser_back`/`forward`/`reload`, `pane_set_label`, `ext_*`) and `DEVLOOP_NET_RING`, and moved shipped items out of "Where to take it next".
+
 ## [0.7.1] - 2026-06-27
 
 ### Added
@@ -247,7 +273,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/vincentvella/devloop/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/vincentvella/devloop/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/vincentvella/devloop/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/vincentvella/devloop/compare/v0.6.1...v0.6.2
