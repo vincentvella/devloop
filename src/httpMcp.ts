@@ -14,10 +14,24 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 
-function readBody(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve) => {
+/**
+ * Read + JSON-parse the request body. Rejects on a stream `error` (a dropped/reset
+ * socket otherwise leaves the Promise — and the handler + `res` — hung forever) or
+ * if the body exceeds `MAX` (a runaway body would otherwise accumulate in memory and
+ * could OOM the shared daemon). Malformed JSON resolves to `undefined` (the caller
+ * treats that as "no valid session"). Exported for unit testing.
+ */
+export function readBody(req: IncomingMessage): Promise<unknown> {
+  const MAX = 4 * 1024 * 1024; // 4 MB
+  return new Promise((resolve, reject) => {
     let data = "";
-    req.on("data", (c) => (data += c));
+    req.on("data", (c) => {
+      data += c;
+      if (data.length > MAX) {
+        req.destroy();
+        reject(new Error("request body too large"));
+      }
+    });
     req.on("end", () => {
       try {
         resolve(JSON.parse(data));
@@ -25,6 +39,7 @@ function readBody(req: IncomingMessage): Promise<unknown> {
         resolve(undefined);
       }
     });
+    req.on("error", reject);
   });
 }
 
@@ -59,7 +74,15 @@ export async function startHttpMcp(opts: {
     const sid = req.headers["mcp-session-id"] as string | undefined;
 
     if (req.method === "POST") {
-      const body = await readBody(req);
+      let body: unknown;
+      try {
+        body = await readBody(req);
+      } catch {
+        // Stream error or oversized body — answer instead of leaking the response.
+        res.statusCode = 400;
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        return res.end(JSON.stringify({ error: "invalid or oversized request body" }));
+      }
       let transport = sid ? transports.get(sid) : undefined;
       if (!transport && isInitializeRequest(body)) {
         transport = new StreamableHTTPServerTransport({
