@@ -149,6 +149,21 @@
       </section>
 
       <section>
+        <h2>Make your agent reach for it</h2>
+        <p class="tag" style="font-size:14px;margin-bottom:14px">Drop this in your <code>CLAUDE.md</code> (or any agent's rules file) so it drives features through Devloop and <strong>verifies them live</strong> — instead of guessing from the code:</p>
+        <pre><code>For browser or Expo / React Native feature work, use **devloop**:
+- dev_start, then browser_navigate (or native_open for iOS/Android).
+- After a change, reproduce it with `repro` and read the result —
+  never claim a fix works without exercising it in the running app.
+- browser_snapshot for clickable element refs; `diagnose` +
+  get_logs_around to line up a console error with the matching
+  server stack trace from the same moment.
+- Done = verified live in devloop: no console/page errors, the
+  expected network calls succeeded, the UI reflects the change.</code></pre>
+        <p class="tag" style="font-size:13px">The full copy-paste block is in the <a href="https://github.com/vincentvella/devloop#use-it-from-your-coding-agent">README</a>.</p>
+      </section>
+
+      <section>
         <h2>Or run the cockpit</h2>
         <p class="tag" style="font-size:14px;margin-bottom:14px">A desktop app: tabbed browser panes (and Expo iOS/Android targets) beside a unified, filterable timeline, a repro builder, an element picker, and pop-out browser windows. Grab your platform:</p>
         <div class="dl">
