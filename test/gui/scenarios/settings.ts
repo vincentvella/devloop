@@ -3,7 +3,7 @@ import { check, closeWrench, DARK_READER, PANE_PARTITION, RUN_EXT_E2E } from "..
 
 export async function projectRegistry(_app: ElectronApplication, win: Page): Promise<void> {
   await win.getByLabel("pane settings — project & dev server").click();
-  await win.getByTitle("save the active pane as a project (rename on its tab)").click();
+  await win.getByTitle("save this pane as a reusable project (also names its tab)").click();
   await win.waitForTimeout(400);
   // The saved project (named from the pane label) appears in the project picker.
   const opts = await win.locator(".settings select option").allTextContents();
