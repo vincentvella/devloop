@@ -174,6 +174,132 @@ function DoctorSection({ title, report }: { title: string; report?: Readiness })
   );
 }
 
+/** The + launcher: start a new pane. Left = open a saved project (→ new pane);
+ *  right = create a new project (→ new pane); plus a blank-pane escape hatch.
+ *  Its open-state MUST be in the overlay() trigger or it renders behind the pane. */
+function Launcher({
+  open,
+  onOpenChange,
+  projects,
+  onOpenProject,
+  onCreateProject,
+  onBlankPane,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  projects: Project[];
+  onOpenProject: (name: string) => Promise<void>;
+  onCreateProject: (p: { name: string; cmd: string; cwd: string }) => Promise<void>;
+  onBlankPane: () => Promise<void>;
+}): ReactNode {
+  const [name, setName] = useState("");
+  const [cmd, setCmd] = useState("");
+  const [cwd, setCwd] = useState("");
+  const reset = () => {
+    setName("");
+    setCmd("");
+    setCwd("");
+  };
+  const close = () => {
+    reset();
+    onOpenChange(false);
+  };
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="modal-overlay" />
+        <Dialog.Content className="modal-content modal-wide" aria-describedby={undefined}>
+          <Dialog.Title className="modal-title">
+            <Plus size={14} /> New pane
+          </Dialog.Title>
+          <div className="launcher">
+            <div className="launcher-col">
+              <div className="modal-section">open a saved project</div>
+              {projects.length === 0 ? (
+                <div className="ext-empty">No saved projects yet — save one from a pane's 🔧.</div>
+              ) : (
+                <div className="project-list">
+                  {projects.map((p) => (
+                    <button
+                      key={p.name}
+                      type="button"
+                      className="project-row"
+                      title={p.cwd}
+                      onClick={() => void onOpenProject(p.name).then(close)}
+                    >
+                      <span className="project-name">{p.name}</span>
+                      <span className="project-cwd">{p.cwd}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="launcher-col">
+              <div className="modal-section">create a project</div>
+              <label className="field">
+                <span>name</span>
+                <input
+                  placeholder="my-app (defaults to the folder name)"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>dev cmd</span>
+                <input
+                  placeholder="blank = auto-detect from package.json"
+                  value={cmd}
+                  onChange={(e) => setCmd(e.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>folder</span>
+                <span className="field-row">
+                  <input placeholder="project folder (cwd)" value={cwd} onChange={(e) => setCwd(e.target.value)} />
+                  <button
+                    type="button"
+                    title="browse for the project folder"
+                    onClick={async () => {
+                      const dir = await dl().pickFolder();
+                      if (dir) setCwd(dir);
+                    }}
+                  >
+                    <FolderOpen size={14} />
+                  </button>
+                </span>
+              </label>
+              <button
+                type="button"
+                className="labeled btn-block btn-primary"
+                disabled={!cwd.trim()}
+                onClick={() =>
+                  void onCreateProject({ name: name.trim(), cmd: cmd.trim(), cwd: cwd.trim() }).then(close)
+                }
+              >
+                <Plus size={13} /> create + open
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="labeled btn-block"
+            data-testid="pane-blank"
+            onClick={() => void onBlankPane().then(close)}
+          >
+            open a blank pane
+          </button>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 // --- helpers ---------------------------------------------------------------
 function normalizeUrl(input: string): string {
   const v = input.trim();
@@ -376,6 +502,7 @@ function App() {
   const exts = useDevloopStore((s) => s.exts);
   const setExts = useDevloopStore((s) => s.setExts);
   const refreshProjects = useDevloopStore((s) => s.refreshProjects);
+  const projects = useDevloopStore((s) => s.projects);
   const appendEntries = useDevloopStore((s) => s.appendEntries);
   const clearEntries = useDevloopStore((s) => s.clearEntries);
   const [filter, setFilter] = useState("");
@@ -403,6 +530,7 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(460);
   const [dragging, setDragging] = useState(false);
   const [selProject, setSelProject] = useState("");
+  const [launcherOpen, setLauncherOpen] = useState(false); // + → open/create a project (or a blank pane)
   const [devCmd, setDevCmd] = useState("");
   const [devCwd, setDevCwd] = useState("");
   const [url, setUrl] = useState("");
@@ -516,8 +644,10 @@ function App() {
   // modal must detach it first or it renders behind. Keep EVERY Dialog.Root's
   // open-state in this condition — a missing one silently hides behind the pane.
   useEffect(() => {
-    void dl().overlay(lightbox !== null || wrenchOpen || settingsOpen || doctorOpen || nativePick !== null);
-  }, [lightbox, wrenchOpen, settingsOpen, doctorOpen, nativePick]);
+    void dl().overlay(
+      lightbox !== null || wrenchOpen || settingsOpen || doctorOpen || nativePick !== null || launcherOpen,
+    );
+  }, [lightbox, wrenchOpen, settingsOpen, doctorOpen, nativePick, launcherOpen]);
 
   // Probe whether the active pane's project is a native (Expo/RN) target — drives
   // the target switcher + build control. Runs on cwd change (not just wrench-open)
@@ -715,6 +845,32 @@ function App() {
     setSelProject(name);
   }, [devCwd, devCmd, url, steps, refreshProjects]);
 
+  // + launcher actions — each opens a NEW pane (paneNew activates it, then we act on it).
+  const openProjectInNewPane = useCallback(
+    async (projName: string) => {
+      await dl().paneNew();
+      await dl().openProject(projName);
+      const a = (await dl().panes()).find((p) => p.active);
+      if (a) await dl().paneSetLabel(a.id, projName); // name the new tab after the project
+      await refreshPanes();
+    },
+    [refreshPanes],
+  );
+  const createProjectInNewPane = useCallback(
+    async ({ name: projName, cmd, cwd }: { name: string; cmd: string; cwd: string }) => {
+      const nm = projName || cwd.split("/").filter(Boolean).pop();
+      if (!nm || !cwd) return;
+      await dl().projectAdd({ name: nm, cwd, cmd: cmd || undefined });
+      await refreshProjects();
+      await openProjectInNewPane(nm);
+    },
+    [refreshProjects, openProjectInNewPane],
+  );
+  const openBlankPane = useCallback(async () => {
+    await dl().paneNew();
+    await refreshPanes();
+  }, [refreshPanes]);
+
   const toggleChip = (key: string) =>
     setChips((cur) => {
       const next = new Set(cur);
@@ -789,7 +945,7 @@ function App() {
                 </span>
               </span>
             ))}
-            <span className="tab add" data-testid="pane-add" onClick={() => void dl().paneNew().then(refreshPanes)}>
+            <span className="tab add" data-testid="pane-add" onClick={() => setLauncherOpen(true)}>
               <Plus size={13} /> pane
             </span>
           </div>
@@ -1142,6 +1298,16 @@ function App() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* + launcher — open/create a project into a new pane, or a blank pane. */}
+      <Launcher
+        open={launcherOpen}
+        onOpenChange={setLauncherOpen}
+        projects={projects}
+        onOpenProject={openProjectInNewPane}
+        onCreateProject={createProjectInNewPane}
+        onBlankPane={openBlankPane}
+      />
 
       {/* Wrench — settings for the active pane (project + dev server). */}
       <Dialog.Root open={wrenchOpen} onOpenChange={setWrenchOpen}>

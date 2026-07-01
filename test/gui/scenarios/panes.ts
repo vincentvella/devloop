@@ -1,12 +1,22 @@
 import type { ElectronApplication, Page } from "playwright-core";
-import { activePane, check, closeWrench, FIXTURE, panes, setDevConfig, tabCount, waitForActive } from "../harness.ts";
+import {
+  activePane,
+  check,
+  closeWrench,
+  FIXTURE,
+  newBlankPane,
+  panes,
+  setDevConfig,
+  tabCount,
+  waitForActive,
+} from "../harness.ts";
 
 export async function shellAndPanes(_app: ElectronApplication, win: Page): Promise<void> {
   await win.waitForSelector('[data-testid="pane-add"]', { timeout: 20_000 });
   check("shell renderer mounts", true);
 
   const before = await tabCount(win);
-  await win.click('[data-testid="pane-add"]');
+  await newBlankPane(win);
   await win.waitForFunction((n) => document.querySelectorAll(".tab:not(.add)").length === n + 1, before, {
     timeout: 10_000,
   });
@@ -38,7 +48,7 @@ export async function shellAndPanes(_app: ElectronApplication, win: Page): Promi
 
 export async function multiPane(_app: ElectronApplication, win: Page): Promise<void> {
   const firstUrl = (await activePane(win))?.url || "";
-  await win.click('[data-testid="pane-add"]'); // new pane becomes active
+  await newBlankPane(win); // new pane becomes active
   await setDevConfig(win, "node server.mjs", FIXTURE);
   await closeWrench(win);
   await win.getByLabel("start / stop dev server").click();

@@ -15,6 +15,14 @@ export async function projectRegistry(_app: ElectronApplication, win: Page): Pro
     names.map((p) => p.name).join(","),
   );
   await closeWrench(win);
+
+  // The + launcher lists the saved project(s). (Opening one into a new pane uses the
+  // same paneNew path exercised by newBlankPane; skip the dev-server spawn here.)
+  await win.click('[data-testid="pane-add"]');
+  await win.locator(".launcher").waitFor({ timeout: 10_000 });
+  const listed = await win.locator(".project-row").count();
+  check("the + launcher lists saved projects", listed > 0, `rows=${listed}`);
+  await win.keyboard.press("Escape");
 }
 
 export async function settingsAndExtensions(app: ElectronApplication, win: Page): Promise<void> {
