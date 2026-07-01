@@ -3,7 +3,7 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!video", "!site", "!assets", "!test/fixture", "!**/*.d.ts"]
+    "includes": ["**", "!video", "!site", "!assets", "!test/fixture", "!test/fixtures", "!**/*.d.ts"]
   },
   "css": {
     "parser": { "tailwindDirectives": true }

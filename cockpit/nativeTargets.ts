@@ -5,15 +5,15 @@
  * shell window are assigned during main() boot, after this handle is built.
  */
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import type { BrowserWindow } from "electron";
 import { usableSerials } from "../src/adb.ts";
 import { adbBinary } from "../src/androidLog.ts";
 import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
+import { readAppJsonPlatforms, resolvedExpoPlatforms } from "../src/expoConfig.ts";
 import type { LogBuffer } from "../src/logBuffer.ts";
-import { type Platform, resolveNativeInfo, supportsWebTarget } from "../src/nativeBuild.ts";
+import { type Platform, resolveNativeInfo, webTargetForProject } from "../src/nativeBuild.ts";
 import { computeFingerprint, runNativeBuild } from "../src/nativeBuildRunner.ts";
 import {
   type AndroidBuildProbe,
@@ -37,46 +37,6 @@ import { detectTargetKind } from "../src/target.ts";
 import type { BrowserManager } from "./browserManager.ts";
 import type { NativeObservability } from "./nativeObservability.ts";
 import type { ServeSim } from "./serveSim.ts";
-
-const execFileP = promisify(execFile);
-
-// Resolved Expo platforms via `expo config` — authoritative (honors app.config.ts +
-// app.json + Expo defaults), unlike a static app.json read. Cached per cwd, keyed on
-// the config files' mtime so edits invalidate it. Only run for projects that actually
-// have `expo` installed (a bare-RN dir would make bunx fetch expo for nothing).
-const platformsCache = new Map<string, { key: number; platforms: string[] | null }>();
-
-function configMtime(cwd: string): number {
-  let m = 0;
-  for (const f of ["app.config.ts", "app.config.js", "app.config.mjs", "app.json", "package.json"]) {
-    try {
-      m = Math.max(m, statSync(join(cwd, f)).mtimeMs);
-    } catch {
-      /* missing — ignore */
-    }
-  }
-  return m;
-}
-
-async function resolvedExpoPlatforms(cwd: string): Promise<string[] | null> {
-  const key = configMtime(cwd);
-  const hit = platformsCache.get(cwd);
-  if (hit && hit.key === key) return hit.platforms;
-  let platforms: string[] | null = null;
-  try {
-    const { stdout } = await execFileP("bunx", ["expo", "config", "--json", "--type", "public"], {
-      cwd,
-      timeout: 8000,
-      maxBuffer: 32 * 1024 * 1024,
-    });
-    const cfg = JSON.parse(stdout);
-    if (Array.isArray(cfg?.platforms)) platforms = cfg.platforms;
-  } catch {
-    /* no expo / eval error / timeout → caller falls back to the static heuristic */
-  }
-  platformsCache.set(cwd, { key, platforms });
-  return platforms;
-}
 
 export interface NativeTargetsDeps {
   getManager: () => BrowserManager;
@@ -330,20 +290,15 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     const kind = detectTargetKind({ dependencies: deps, ...probe });
     if (kind !== "react-native")
       return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
-    // Web target: platforms resolved by `expo config` are authoritative (honors
-    // app.config.ts + app.json + Expo defaults). Fall back to a static app.json read,
-    // then to react-native-web, when expo config isn't available.
-    let declaredPlatforms = deps.expo ? await resolvedExpoPlatforms(cwd) : null;
-    if (!declaredPlatforms) {
-      try {
-        const appJson = JSON.parse(readFileSync(join(cwd, "app.json"), "utf8"));
-        const p = appJson?.expo?.platforms ?? appJson?.platforms;
-        if (Array.isArray(p)) declaredPlatforms = p;
-      } catch {
-        /* app.config.(ts|js) or no app.json → fall back to installed deps */
-      }
-    }
-    const webCapable = supportsWebTarget(deps, declaredPlatforms);
+    // Web target: expo config's platforms win (authoritative — honors app.config.ts),
+    // else app.json's platforms, else react-native-web presence. Only run expo config
+    // for projects with `expo` installed (a bare-RN dir would make bunx fetch it).
+    const expoConfigPlatforms = deps.expo ? await resolvedExpoPlatforms(cwd) : null;
+    const webCapable = webTargetForProject({
+      expoConfigPlatforms,
+      appJsonPlatforms: readAppJsonPlatforms(cwd),
+      deps,
+    });
     const iosCapable = process.platform === "darwin"; // iOS simulator + idb are macOS-only
     const current = await computeFingerprint(cwd);
     return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd), webCapable, iosCapable);

@@ -1,4 +1,5 @@
 node_modules/
+test/fixtures/expo/bun.lock
 out/
 out.next.*/
 out.prev.*/

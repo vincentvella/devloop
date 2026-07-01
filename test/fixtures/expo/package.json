@@ -1,0 +1,5 @@
+{
+  "name": "devloop-expo-fixtures",
+  "private": true,
+  "workspaces": ["web-inferred", "web-excluded", "web-explicit"]
+}
