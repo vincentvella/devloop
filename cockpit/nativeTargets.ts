@@ -14,6 +14,7 @@ import { adbBinary } from "../src/androidLog.ts";
 import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
 import { resolveAppId } from "../src/appIdentity.ts";
 import { projectInputsHash, readAppJsonPlatforms, resolvedExpoPlatforms } from "../src/expoConfig.ts";
+import { idbButtonArgs } from "../src/idb.ts";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import { type Platform, resolveNativeInfo, webTargetForProject } from "../src/nativeBuild.ts";
 import { computeFingerprint, runNativeBuild } from "../src/nativeBuildRunner.ts";
@@ -236,19 +237,66 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     if (active) getManager().setNativeController(active.id, undefined);
   }
 
+  /** UDID of the booted iOS simulator — idb needs the real udid (simctl takes `booted`). */
+  async function bootedUdid(): Promise<string | null> {
+    try {
+      const { stdout } = await execFileP("xcrun", ["simctl", "list", "devices", "booted"], { timeout: 5000 });
+      return stdout.match(/\(([0-9A-F-]{36})\) \(Booted\)/i)?.[1] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether an app id is installed on the active device. */
+  async function appInstalled(appId: string, platform: "ios" | "android"): Promise<boolean> {
+    try {
+      if (platform === "ios") {
+        await execFileP("xcrun", ["simctl", "get_app_container", "booted", appId, "app"], { timeout: 5000 });
+        return true;
+      }
+      return (await runAdb(["shell", "pm", "path", appId])).trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Press Home so a swap to an uninstalled app doesn't leave the previous app on screen. */
+  async function goHome(platform: "ios" | "android"): Promise<void> {
+    try {
+      if (platform === "android") {
+        await runAdb(["shell", "input", "keyevent", "KEYCODE_HOME"]);
+        return;
+      }
+      const udid = await bootedUdid();
+      if (udid) await execFileP("idb", idbButtonArgs(udid, "HOME"));
+    } catch {
+      /* best-effort — Home is a nicety, not worth surfacing a failure */
+    }
+  }
+
   /** Foreground the pane's app on the active device so the preview follows a pane swap.
-   *  App id is resolved statically (app.json → the generated native project); a no-op if
-   *  it can't be resolved or the app isn't installed — a friendly timeline note, no error. */
+   *  App id is resolved statically (app.json → the generated native project). If the app
+   *  isn't installed (or can't be resolved), send the device Home instead of leaving the
+   *  previous pane's app on screen — with a friendly timeline note, never an error. */
   async function foregroundApp(cwd: string | undefined, platform: "ios" | "android"): Promise<void> {
     if (!cwd) return;
-    const appId = resolveAppId(cwd, platform);
-    if (!appId) {
-      log(`app-focus: couldn't resolve the ${platform} app id for ${cwd}`);
-      return;
-    }
     const active = getManager()
       .listPanes()
       .find((p) => p.active);
+    const appId = resolveAppId(cwd, platform);
+    if (!appId || !(await appInstalled(appId, platform))) {
+      await goHome(platform);
+      buffer.push(
+        "native",
+        "log",
+        appId
+          ? `app-focus: ${appId} isn't installed on the ${platform} device — showing Home (build it for this project)`
+          : `app-focus: couldn't resolve the ${platform} app id for ${cwd} — showing Home`,
+        undefined,
+        active?.id,
+      );
+      return;
+    }
     try {
       if (platform === "ios") await execFileP("xcrun", ["simctl", "launch", "booted", appId], { timeout: 8000 });
       else await runAdb(["shell", "monkey", "-p", appId, "-c", "android.intent.category.LAUNCHER", "1"]);

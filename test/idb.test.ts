@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  idbButtonArgs,
   idbDescribeAllArgs,
   idbKeyArgs,
   idbSwipeArgs,
@@ -38,6 +39,7 @@ test("idb arg builders", () => {
     "0.5",
   ]);
   expect(idbKeyArgs(UDID, 40)).toEqual(["ui", "key", "--udid", UDID, "40"]);
+  expect(idbButtonArgs(UDID, "HOME")).toEqual(["ui", "button", "HOME", "--udid", UDID]);
   expect(idbDescribeAllArgs(UDID)).toEqual(["ui", "describe-all", "--udid", UDID, "--json"]);
 });
 

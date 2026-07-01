@@ -61,6 +61,9 @@ export function idbSwipeArgs(
 /** A HID keycode (e.g. 40 = Return, 42 = Backspace). */
 export const idbKeyArgs = (udid: string, keycode: number): string[] => ["ui", "key", "--udid", udid, String(keycode)];
 
+/** A hardware button press: HOME, LOCK, SIDE_BUTTON, SIRI, APPLE_PAY. */
+export const idbButtonArgs = (udid: string, button: string): string[] => ["ui", "button", button, "--udid", udid];
+
 export const idbDescribeAllArgs = (udid: string): string[] => ["ui", "describe-all", "--udid", udid, "--json"];
 
 /** USB-HID keycodes for the keys browser_press exposes (RN/native). */
