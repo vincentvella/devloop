@@ -19,7 +19,7 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, nativeImage, shell } from "electron";
 
@@ -150,6 +150,15 @@ function log(msg: string): void {
 
 // --- boot ------------------------------------------------------------------
 async function main() {
+  // Key the state dir on environment so a dev build or the selftest never mutates the
+  // installed app's real ~/.devloop. Respect an explicit DEVLOOP_HOME (gui harness /
+  // power users); packaged prod falls through to the ~/.devloop default.
+  if (!process.env.DEVLOOP_HOME) {
+    if (SELFTEST) process.env.DEVLOOP_HOME = mkdtempSync(join(tmpdir(), "devloop-selftest-home-"));
+    else if (!app.isPackaged) process.env.DEVLOOP_HOME = join(homedir(), ".devloop-dev");
+  }
+  log(`state: DEVLOOP_HOME=${process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop")}`);
+
   if (SELFTEST) {
     app.dock?.hide();
     // Hermetic profile: an isolated Chromium userData dir so the headless run never
