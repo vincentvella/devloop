@@ -525,6 +525,7 @@ function App() {
   const nativeInfo = useDevloopStore((s) => s.nativeInfo);
   const [detecting, setDetecting] = useState(false); // probing a project's targets (expo config + fingerprint)
   const [building, setBuilding] = useState(false);
+  const [switching, setSwitching] = useState<string | null>(null); // bringing up a native device (iOS sim / Android mirror)
   const [viewTarget, setViewTarget] = useState("web"); // Expo: which target the pane shows (web | ios)
   const [sidebarHidden, setSidebarHidden] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(460);
@@ -586,9 +587,16 @@ function App() {
     })();
     const offPanes = dl().onPanesChanged(() => void refreshPanes());
     const offUpdate = dl().onUpdate((s) => setUpdate(s));
+    // A native build just finished → re-detect so the ⚠ staleness badge refreshes.
+    const offNative = dl().onNativeRefresh((cwd) => {
+      void dl()
+        .nativeInfo(cwd)
+        .then((info) => useDevloopStore.getState().setNativeInfo(info));
+    });
     return () => {
       offPanes();
       offUpdate();
+      offNative();
     };
   }, [refreshPanes]);
 
@@ -682,10 +690,21 @@ function App() {
     async (t: string) => {
       const prev = viewTarget;
       setViewTarget(t);
-      if (prev === "ios" && t !== "ios") await dl().closeSimulator();
-      if (prev === "android" && t !== "android") await dl().closeAndroid();
-      if (t === "ios") await dl().openSimulator();
-      else if (t === "android") await dl().openAndroid();
+      try {
+        if (prev === "ios" && t !== "ios") await dl().closeSimulator();
+        if (prev === "android" && t !== "android") await dl().closeAndroid();
+        // The device preview (serve-sim / adb mirror) takes a few seconds to come up —
+        // flag it so the toolbar can show an "initializing…" indicator meanwhile.
+        if (t === "ios") {
+          setSwitching("iOS");
+          await dl().openSimulator();
+        } else if (t === "android") {
+          setSwitching("Android");
+          await dl().openAndroid();
+        }
+      } finally {
+        setSwitching(null);
+      }
     },
     [viewTarget],
   );
@@ -1036,6 +1055,11 @@ function App() {
                 </button>
               ))}
             </div>
+          )}
+          {switching && (
+            <span className="detecting" title={`bringing up the ${switching} device — this can take a few seconds`}>
+              <span className="detecting-spinner" /> initializing {switching}…
+            </span>
           )}
           {!detecting && nativeInfo?.isNative && (viewTarget === "ios" || viewTarget === "android") && (
             <>
