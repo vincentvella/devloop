@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.9.0] - 2026-07-01
+
+### Added
+- Native **target switcher** in the browser bar — Web / iOS / Android for Expo & React Native projects. The Web target is resolved authoritatively via `expo config` (honors `app.config.ts`), backed by a persisted, content-hashed detection cache so it's instant after the first resolve; a "detecting project…" indicator shows while detection runs.
+- **`+` launcher** — open or create a project directly into a new pane.
+- **`bun run app`** now watches, rebuilds, and relaunches the cockpit on source changes (no more stale builds).
+- **native_doctor** — re-check native readiness without kicking off a build; a local-first Android build-readiness doctor (the EAS cloud path is gone).
+
+### Changed
+- The pane **wrench** now edits *that pane only*; opening another project is the `+` button.
+
+### Fixed
+- Target-switcher flicker from stale async detection results.
+- Atomic build swap — no window where a partial build is on disk.
+- Saving a project updates the pane's tab name immediately.
+- State is isolated per environment (dev / packaged / selftest); dead unpacked-extension entries self-heal.
+- Startup IPC race (the pane manager is created before IPC registration); the Doctor modal + native picker detach the pane so they aren't hidden behind it; pane project/dev inputs no longer clip.
+
+### Tooling
+- Target-detection test matrix + opt-in Expo fixtures.
+
+### Docs
+- Clarified that devloop diagnoses toolchain gaps but never installs; added a "use it from your coding agent" guide.
+
 ## [0.8.0] - 2026-06-30
 
 ### Added
@@ -273,7 +297,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/vincentvella/devloop/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vincentvella/devloop/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/vincentvella/devloop/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/vincentvella/devloop/compare/v0.6.2...v0.7.0
