@@ -1,5 +1,7 @@
 node_modules/
 out/
+out.next.*/
+out.prev.*/
 dist/
 /release/
 *.tsbuildinfo
