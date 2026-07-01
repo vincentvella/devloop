@@ -1,6 +1,6 @@
 {
   "name": "devloop-mcp",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "mcpName": "io.github.vincentvella/devloop",
   "description": "Unified dev-loop: one MCP server exposing browser control + dev-server logs on a correlated timeline. Headless (stdio) or Electron cockpit (HTTP).",
   "type": "module",

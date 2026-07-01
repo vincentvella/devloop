@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.9.1] - 2026-07-01
+
+### Added
+- Swapping panes while an iOS sim / Android mirror is up now foregrounds that pane's app on the device; if the app isn't installed it goes to the Home screen instead of leaving the previous pane's app on screen.
+- An "initializing iOS/Android…" indicator while the simulator / mirror comes up.
+
+### Fixed
+- The native-build ⚠ staleness badge now clears after a successful build (it had been compared against a cached fingerprint that the build didn't refresh).
+
 ## [0.9.0] - 2026-07-01
 
 ### Added
@@ -297,7 +306,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/vincentvella/devloop/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/vincentvella/devloop/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vincentvella/devloop/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/vincentvella/devloop/compare/v0.7.0...v0.7.1
