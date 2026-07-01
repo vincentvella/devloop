@@ -256,8 +256,11 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
       const probe = probeAndroidBuild();
       if (!androidBuildReady(probe)) return { started: false, detail: androidBuildSummary(probe) };
     }
-    // streams to the timeline; records a fingerprint on success.
-    runNativeBuild({ buffer, projectRoot: root, platform });
+    // streams to the timeline; records a fingerprint on success. On completion, nudge the
+    // renderer to re-detect so the staleness ⚠ badge refreshes (fingerprint is now current).
+    void runNativeBuild({ buffer, projectRoot: root, platform }).done.finally(() =>
+      getShellWin()?.webContents.send("devloop:nativeRefresh", root),
+    );
     return { started: true, detail: `building ${platform} in ${root}` };
   }
 

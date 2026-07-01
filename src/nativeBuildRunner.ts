@@ -11,7 +11,7 @@
 import { execFile, spawn } from "node:child_process";
 import type { LogBuffer } from "./logBuffer.ts";
 import { buildCommand, type Platform } from "./nativeBuild.ts";
-import { setProjectFingerprint } from "./registry.ts";
+import { getNativeCache, setNativeCache, setProjectFingerprint } from "./registry.ts";
 
 /**
  * Node `-e` args that compute a project's fingerprint using the project's OWN
@@ -89,6 +89,10 @@ export function runNativeBuild(opts: {
         fingerprint = await computeFingerprint(projectRoot);
         if (fingerprint) {
           setProjectFingerprint(projectRoot, fingerprint);
+          // Keep the detection cache's fingerprint in sync so the ⚠ staleness badge clears —
+          // VEL-60 caches `current` keyed on the config hash, which a build doesn't change.
+          const cached = getNativeCache(projectRoot);
+          if (cached) setNativeCache(projectRoot, { ...cached, fingerprint });
           buffer.push("server", "build", `[devloop] recorded native fingerprint ${fingerprint.slice(0, 12)}…`);
         }
       }
