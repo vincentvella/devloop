@@ -10,6 +10,7 @@ import { type ElectronApplication, _electron as electron, type Page } from "play
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const FIXTURE = join(ROOT, "test", "fixtures", "web-app");
+export const NATIVE_FIXTURE = join(ROOT, "test", "fixtures", "native-app");
 export const PANE_PARTITION = "persist:devloop-panes";
 export const DARK_READER = "eimadpbcbfnmbkopoojfekhnkhdbieeh";
 export const RUN_EXT_E2E = process.env.GUI_EXT_E2E === "1"; // opt-in: hits the real Chrome Web Store (network)

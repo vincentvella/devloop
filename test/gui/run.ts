@@ -39,6 +39,7 @@ const { logsFilter, screenshot, repro, manualNavigation, emulateThrottle, projec
   await import("./scenarios/timeline.ts");
 const { projectRegistry, settingsAndExtensions, storeInjectedButton } = await import("./scenarios/settings.ts");
 const { updateFeedback } = await import("./scenarios/updates.ts");
+const { nativeTargets } = await import("./scenarios/nativeTargets.ts");
 const { persistence } = await import("./scenarios/persistence.ts");
 
 async function main(): Promise<void> {
@@ -70,6 +71,7 @@ async function main(): Promise<void> {
     await run("settings & extensions", () => settingsAndExtensions(a, win));
     await run("store injected button", () => storeInjectedButton(a, win));
     await run("update feedback", () => updateFeedback(a, win));
+    await run("native target switcher", () => nativeTargets(a, win));
 
     await app.close();
     app = undefined;
