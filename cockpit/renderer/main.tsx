@@ -523,7 +523,6 @@ function App() {
   const [netProfile, setNetProfile] = useState("none"); // #25 throttle picker (web)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
   const nativeInfo = useDevloopStore((s) => s.nativeInfo);
-  const refreshNativeInfo = useDevloopStore((s) => s.refreshNativeInfo);
   const [building, setBuilding] = useState(false);
   const [viewTarget, setViewTarget] = useState("web"); // Expo: which target the pane shows (web | ios)
   const [sidebarHidden, setSidebarHidden] = useState(false);
@@ -653,18 +652,26 @@ function App() {
   // the target switcher + build control. Runs on cwd change (not just wrench-open)
   // so the browser bar can show the Web/iOS switcher for Expo projects.
   useEffect(() => {
+    const setNativeInfo = useDevloopStore.getState().setNativeInfo;
     if (!devCwd) {
-      useDevloopStore.getState().setNativeInfo(null);
+      setNativeInfo(null);
       return;
     }
     let live = true;
-    void refreshNativeInfo(devCwd).then((info) => {
-      if (live && info?.targets?.length && !info.targets.includes(viewTarget)) setViewTarget(info.targets[0]!);
-    });
+    // Guard the store write too, not just setViewTarget: nativeInfo spawns `expo config`,
+    // so calls across cwd/pane switches can resolve out of order — drop the stale ones,
+    // else a superseded project's targets clobber the current pane (the Web-flicker bug).
+    void dl()
+      .nativeInfo(devCwd)
+      .then((info) => {
+        if (!live) return;
+        setNativeInfo(info);
+        if (info?.targets?.length && !info.targets.includes(viewTarget)) setViewTarget(info.targets[0]!);
+      });
     return () => {
       live = false;
     };
-  }, [devCwd, refreshNativeInfo]);
+  }, [devCwd]);
 
   // Switch an Expo project's view target: Web (browser pane) ↔ iOS (simulator) ↔ Android (mirror).
   const switchTarget = useCallback(
