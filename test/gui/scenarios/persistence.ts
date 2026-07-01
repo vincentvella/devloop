@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { check, launchReady } from "../harness.ts";
+import { check, launchReady, newBlankPane } from "../harness.ts";
 
 /** Persistence/restore needs an app restart, so it runs its own launch cycle with a
  *  shared DEVLOOP_HOME (panes.json lives there) but a fresh Chromium profile. */
@@ -11,7 +11,7 @@ export async function persistence(): Promise<void> {
   const ud2 = mkdtempSync(join(tmpdir(), "devloop-gui-ud-"));
   try {
     let { app, win } = await launchReady(home, ud1);
-    await win.click('[data-testid="pane-add"]');
+    await newBlankPane(win);
     await win.waitForTimeout(300);
     // Double-click to open the inline rename editor; retry — on a slow runner the
     // first dblclick can land before the tab is interactive (the editor never opens

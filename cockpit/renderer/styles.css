@@ -658,6 +658,74 @@
   .modal-content .settings {
     gap: 10px;
   }
+  /* + launcher: wide modal, saved-projects list | create-project form */
+  .modal-wide {
+    width: min(720px, 94vw);
+  }
+  .launcher {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+  .launcher-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 320px;
+    overflow: auto;
+  }
+  .project-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+    text-align: left;
+    padding: 8px 10px;
+    border: 1px solid var(--color-edge);
+    border-radius: 8px;
+    background: var(--color-raise);
+    color: var(--color-fg);
+    cursor: pointer;
+  }
+  .project-row:hover {
+    border-color: var(--color-accent);
+    background: var(--color-bg);
+  }
+  .project-name {
+    font-weight: 600;
+  }
+  .project-cwd {
+    font-size: 11px;
+    color: var(--color-dim);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .field > span {
+    font-size: 12px;
+    color: var(--color-dim);
+  }
+  .field-row {
+    display: flex;
+    gap: 6px;
+  }
+  .field-row input {
+    flex: 1;
+    min-width: 0;
+  }
   /* full-width primary action (e.g. browse the Web Store) */
   .btn-block {
     width: 100%;

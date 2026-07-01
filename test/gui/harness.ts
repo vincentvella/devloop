@@ -150,3 +150,9 @@ export async function closeWrench(win: Page): Promise<void> {
     .waitFor({ state: "hidden" })
     .catch(() => {});
 }
+
+/** Add a pane the way a user does now: the + opens the launcher, then "open a blank pane". */
+export async function newBlankPane(win: Page): Promise<void> {
+  await win.click('[data-testid="pane-add"]');
+  await win.click('[data-testid="pane-blank"]');
+}
