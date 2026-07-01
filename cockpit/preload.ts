@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("devloop", {
   openSimulator: () => ipcRenderer.invoke("devloop:openSimulator"),
   closeSimulator: () => ipcRenderer.invoke("devloop:closeSimulator"),
   androidEnv: () => ipcRenderer.invoke("devloop:androidEnv"),
+  androidBuild: () => ipcRenderer.invoke("devloop:androidBuild"),
   openAndroid: () => ipcRenderer.invoke("devloop:openAndroid"),
   closeAndroid: () => ipcRenderer.invoke("devloop:closeAndroid"),
   androidTap: (x: number, y: number) => ipcRenderer.invoke("devloop:androidTap", x, y),

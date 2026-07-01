@@ -13,6 +13,9 @@ import { projectName } from "../src/devServer.ts";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import type { Platform } from "../src/nativeBuild.ts";
 import {
+  androidBuildChecks,
+  androidBuildReady,
+  androidBuildSummary,
   androidEnvChecks,
   androidEnvReady,
   androidEnvSummary,
@@ -93,6 +96,10 @@ export function registerIpc(deps: RegisterIpcDeps): void {
   ipcMain.handle("devloop:androidEnv", () => {
     const probe = native.probeAndroidEnv();
     return { ready: androidEnvReady(probe), checks: androidEnvChecks(probe), summary: androidEnvSummary(probe) };
+  });
+  ipcMain.handle("devloop:androidBuild", () => {
+    const probe = native.probeAndroidBuild();
+    return { ready: androidBuildReady(probe), checks: androidBuildChecks(probe), summary: androidBuildSummary(probe) };
   });
   ipcMain.handle("devloop:openAndroid", () => native.doOpenAndroid());
   ipcMain.handle("devloop:closeAndroid", async () => {

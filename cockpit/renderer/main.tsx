@@ -353,6 +353,7 @@ function App() {
     ready: boolean;
     checks: { label: string; ok: boolean; fix?: string }[];
   } | null>(null);
+  const [androidBuild, setAndroidBuild] = useState<NativeEnv>(null);
   const [emuDevice, setEmuDevice] = useState("responsive"); // #25 viewport picker (web)
   const [netProfile, setNetProfile] = useState("none"); // #25 throttle picker (web)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
@@ -429,6 +430,7 @@ function App() {
   // whenever the settings modal opens or the iOS target is shown.
   useEffect(() => {
     if (settingsOpen || viewTarget === "ios" || nativeInfo?.isNative) void dl().nativeEnv().then(setNativeEnv);
+    if (settingsOpen && nativeInfo?.isNative) void dl().androidBuild().then(setAndroidBuild);
   }, [settingsOpen, viewTarget, nativeInfo?.isNative]);
 
   // Android readiness, refreshed when its target is shown (drives the warn bar).
@@ -1284,6 +1286,16 @@ function App() {
               )}
               <div className="modal-section">native (iOS) readiness</div>
               <NativeReadiness data={nativeEnv} onRecheck={() => void dl().nativeEnv().then(setNativeEnv)} />
+
+              {nativeInfo?.isNative && (
+                <>
+                  <div className="modal-section">Android build toolchain</div>
+                  <NativeReadiness
+                    data={androidBuild}
+                    onRecheck={() => void dl().androidBuild().then(setAndroidBuild)}
+                  />
+                </>
+              )}
 
               <div className="modal-section">updates</div>
               <button

@@ -10,7 +10,7 @@
  */
 import { execFile, spawn } from "node:child_process";
 import type { LogBuffer } from "./logBuffer.ts";
-import { type BuildMode, buildCommand, type Platform } from "./nativeBuild.ts";
+import { buildCommand, type Platform } from "./nativeBuild.ts";
 import { setProjectFingerprint } from "./registry.ts";
 
 /**
@@ -60,19 +60,13 @@ export function runNativeBuild(opts: {
   buffer: LogBuffer;
   projectRoot: string;
   platform: Platform;
-  /** `local` = `expo run:<platform>` (needs the toolchain); `eas` = EAS cloud build. */
-  mode?: BuildMode;
-  /** EAS profile (mode "eas"); defaults to "development". */
-  easProfile?: string;
   /** Test seam — defaults to node child_process spawn. */
   spawnImpl?: typeof spawn;
 }): BuildHandle {
   const { buffer, projectRoot, platform } = opts;
-  const mode: BuildMode = opts.mode ?? "local";
-  const { cmd, args } = buildCommand(platform, { mode, easProfile: opts.easProfile });
+  const { cmd, args } = buildCommand(platform);
   const spawnFn = opts.spawnImpl ?? spawn;
-  const where = mode === "eas" ? "in the EAS cloud" : "locally";
-  buffer.push("server", "build", `[devloop] building ${platform} ${where}: ${cmd} ${args.join(" ")}`);
+  buffer.push("server", "build", `[devloop] building ${platform} locally: ${cmd} ${args.join(" ")}`);
 
   const proc = spawnFn(cmd, args, { cwd: projectRoot });
   let partial = "";
@@ -90,9 +84,8 @@ export function runNativeBuild(opts: {
       const ok = code === 0;
       buffer.push("server", "build", `[devloop] build ${ok ? "succeeded" : `failed (exit ${code})`}`);
       let fingerprint: string | null | undefined;
-      // Only a local build installs a binary here, so only it gets a staleness
-      // baseline; an EAS cloud build produces a remote artifact you install later.
-      if (ok && mode !== "eas") {
+      // A successful build installs the binary, so record the staleness baseline.
+      if (ok) {
         fingerprint = await computeFingerprint(projectRoot);
         if (fingerprint) {
           setProjectFingerprint(projectRoot, fingerprint);
