@@ -127,9 +127,19 @@
   }
   .field-label {
     flex: none;
-    width: 44px;
+    width: 52px;
     text-align: right;
     color: var(--color-dim);
+  }
+  .modal-hint {
+    color: var(--color-dim);
+    font-size: 12px;
+    line-height: 1.5;
+    margin-bottom: 2px;
+  }
+  .modal-hint strong {
+    color: var(--color-fg);
+    font-weight: 600;
   }
 
   .tabs {
