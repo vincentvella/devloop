@@ -734,6 +734,7 @@ function App() {
       url: url.trim() || undefined,
       steps,
     });
+    if (a) await dl().paneSetLabel(a.id, name); // reflect the saved project's name on its tab
     await refreshProjects();
     setSelProject(name);
   }, [devCwd, devCmd, url, steps, refreshProjects]);
@@ -1176,13 +1177,13 @@ function App() {
             </Dialog.Title>
             <div className="settings">
               <div className="modal-hint">
-                Point this pane at a project — pick a <strong>saved</strong> one below, or set the dev{" "}
-                <strong>command</strong> + <strong>folder</strong> manually (leave the command blank to auto-detect from{" "}
-                <code>package.json</code>). Changes save automatically; then press <strong>▶</strong> in the top bar to
-                start the dev server.
+                <strong>Open</strong> a saved project above, or set the dev <strong>command</strong> +{" "}
+                <strong>folder</strong> (leave the command blank to auto-detect from <code>package.json</code>) — these
+                auto-save to the pane, and <strong>▶</strong> in the top bar starts the dev server.{" "}
+                <strong>Save as project</strong> keeps this setup in the picker and names the tab.
               </div>
               <div className="row">
-                <span className="field-label">project</span>
+                <span className="field-label">open</span>
                 <select value={selProject} onChange={(e) => void openProject(e.target.value)}>
                   <option value="">— open a saved project —</option>
                   {projects.map((p) => (
@@ -1191,13 +1192,6 @@ function App() {
                     </option>
                   ))}
                 </select>
-                <button
-                  className="labeled"
-                  title="save the active pane as a project (rename on its tab)"
-                  onClick={() => void saveProject()}
-                >
-                  <Save size={13} /> save
-                </button>
               </div>
               <div className="row">
                 <span className="field-label">dev cmd</span>
@@ -1238,6 +1232,13 @@ function App() {
                   </span>
                 </div>
               )}
+              <button
+                className="labeled btn-block"
+                title="save this pane as a reusable project (also names its tab)"
+                onClick={() => void saveProject()}
+              >
+                <Save size={13} /> save as project
+              </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
