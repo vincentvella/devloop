@@ -175,8 +175,11 @@ async function main() {
   log("app ready; creating windows");
   createWindows();
 
-  // Subsystem handles — built with lazy getters because `manager`/`shellWin` are
-  // assigned later in this function, but consumers (IPC, MCP tools) wire up now.
+  // Subsystem handles. `shellWin` exists (createWindows, above). We create the pane
+  // manager NOW — synchronously, before registerIpc and before the first `await` — so
+  // the renderer's mount-time IPC (panes/setBounds/overlay) always finds it ready
+  // instead of racing an undefined `manager`. getManager()/getShellWin() stay lazy so
+  // all the wiring reads uniformly.
   const exts = createExtensionManager({ BASE, log, getShellWin: () => shellWin });
   const native = createNativeTargets({
     getManager: () => manager,
@@ -186,6 +189,27 @@ async function main() {
     buffer,
     log,
   });
+
+  // Created up-front (see above); it does not navigate until start() below, which
+  // stays after initExtensions so extensions load before the first pane navigates.
+  manager = new BrowserManager(
+    buffer,
+    {
+      networkErrorThreshold: Number(process.env.DEVLOOP_NET_THRESHOLD ?? 400),
+      actionTimeoutMs: Number(process.env.DEVLOOP_ACTION_TIMEOUT ?? 10_000),
+    },
+    SELFTEST,
+    {
+      indexPath: join(BASE, "renderer/index.html"),
+      preloadPath: join(BASE, "preload.cjs"),
+      simPreloadPath: join(BASE, "simPreload.cjs"),
+    },
+    exts.prepareSession, // #27: load extensions into each per-project session before its pane navigates
+  );
+  manager.attachTo(shellWin!);
+  manager.onChange = () => {
+    if (shellWin && !shellWin.isDestroyed()) shellWin.webContents.send("devloop:panesChanged");
+  };
 
   registerIpc({
     buffer,
@@ -206,25 +230,6 @@ async function main() {
   void updater.check();
   await exts.initExtensions(); // load extensions into the panes' session before panes navigate
   log("starting browser manager (first pane)");
-
-  manager = new BrowserManager(
-    buffer,
-    {
-      networkErrorThreshold: Number(process.env.DEVLOOP_NET_THRESHOLD ?? 400),
-      actionTimeoutMs: Number(process.env.DEVLOOP_ACTION_TIMEOUT ?? 10_000),
-    },
-    SELFTEST,
-    {
-      indexPath: join(BASE, "renderer/index.html"),
-      preloadPath: join(BASE, "preload.cjs"),
-      simPreloadPath: join(BASE, "simPreload.cjs"),
-    },
-    exts.prepareSession, // #27: load extensions into each per-project session before its pane navigates
-  );
-  manager.attachTo(shellWin!);
-  manager.onChange = () => {
-    if (shellWin && !shellWin.isDestroyed()) shellWin.webContents.send("devloop:panesChanged");
-  };
   await manager.start();
   log("manager started");
   if (SELFTEST) {
