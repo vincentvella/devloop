@@ -66,3 +66,13 @@ test("project fingerprints round-trip per cwd", () => {
   reg.setProjectFingerprint("/proj/a", "hash-a2"); // overwrite
   expect(reg.getProjectFingerprint("/proj/a")).toBe("hash-a2");
 });
+
+test("native detection cache round-trips per cwd + persists to disk", () => {
+  expect(reg.getNativeCache("/proj/x")).toBeUndefined();
+  reg.setNativeCache("/proj/x", { hash: "h1", platforms: ["ios", "web"], fingerprint: "fp1" });
+  reg.setNativeCache("/proj/y", { hash: "h2", platforms: null, fingerprint: null });
+  expect(reg.getNativeCache("/proj/x")).toEqual({ hash: "h1", platforms: ["ios", "web"], fingerprint: "fp1" });
+  expect(reg.getNativeCache("/proj/y")?.platforms).toBeNull();
+  reg.setNativeCache("/proj/x", { hash: "h3", platforms: ["web"], fingerprint: "fp3" }); // overwrite
+  expect(reg.getNativeCache("/proj/x")?.hash).toBe("h3");
+});
