@@ -1,0 +1,7 @@
+{
+  "expo": {
+    "name": "web-explicit",
+    "slug": "web-explicit",
+    "platforms": ["ios", "android", "web"]
+  }
+}

@@ -6,6 +6,7 @@ import {
   fingerprintStatus,
   resolveNativeInfo,
   supportsWebTarget,
+  webTargetForProject,
 } from "../src/nativeBuild.ts";
 
 test("availablePlatforms reflects prebuilt native dirs, iOS first", () => {
@@ -96,4 +97,36 @@ test("resolveNativeInfo: view targets — web added only when webCapable, iOS ga
   ]);
   expect(resolveNativeInfo("react-native", { hasIosDir: true }, null, null, false, false).targets).toEqual(["android"]);
   expect(resolveNativeInfo("web", {}, null, null, true).targets).toEqual([]); // not native → no targets
+});
+
+test("webTargetForProject: expo config platforms are authoritative over app.json + deps", () => {
+  const rnw = { expo: "*", "react-native-web": "*", "react-dom": "*" };
+  // caliburr shape — app.config.ts resolves web ON → Web target
+  expect(webTargetForProject({ expoConfigPlatforms: ["ios", "android", "web"], deps: rnw })).toBe(true);
+  // bonfire shape — app.config.ts excludes web even though react-native-web is installed → no Web
+  expect(webTargetForProject({ expoConfigPlatforms: ["ios", "android"], deps: rnw })).toBe(false);
+  // expo config wins over a contradictory app.json
+  expect(
+    webTargetForProject({
+      expoConfigPlatforms: ["ios", "android"],
+      appJsonPlatforms: ["ios", "android", "web"],
+      deps: rnw,
+    }),
+  ).toBe(false);
+});
+
+test("webTargetForProject: falls back to app.json platforms when expo config is unavailable", () => {
+  const rnw = { expo: "*", "react-native-web": "*" };
+  expect(
+    webTargetForProject({ expoConfigPlatforms: null, appJsonPlatforms: ["ios", "android", "web"], deps: rnw }),
+  ).toBe(true);
+  expect(webTargetForProject({ expoConfigPlatforms: null, appJsonPlatforms: ["ios", "android"], deps: rnw })).toBe(
+    false,
+  );
+});
+
+test("webTargetForProject: falls back to react-native-web when nothing declares platforms", () => {
+  expect(webTargetForProject({ deps: { expo: "*", "react-native-web": "*" } })).toBe(true);
+  expect(webTargetForProject({ deps: { expo: "*" } })).toBe(false); // managed Expo without rnw → no web
+  expect(webTargetForProject({ deps: {} })).toBe(false); // bare RN → no web
 });

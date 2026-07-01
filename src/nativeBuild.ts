@@ -86,6 +86,19 @@ export function supportsWebTarget(deps: Record<string, string>, declaredPlatform
   return !!deps["react-native-web"];
 }
 
+/** The Web-target decision for a project, from the strongest available signal:
+ *  `expo config`'s resolved platforms (authoritative — honors app.config.ts) >
+ *  app.json's platforms > react-native-web presence. Pure — the cockpit gathers the
+ *  signals (spawns expo config, reads app.json + deps) and calls this. */
+export function webTargetForProject(sig: {
+  expoConfigPlatforms?: readonly string[] | null;
+  appJsonPlatforms?: readonly string[] | null;
+  deps: Record<string, string>;
+}): boolean {
+  const declared = sig.expoConfigPlatforms ?? sig.appJsonPlatforms ?? null;
+  return supportsWebTarget(sig.deps, declared);
+}
+
 /**
  * What the cockpit needs to render the build control for a project: whether it's
  * a native target, which platforms to offer, and the staleness badge. Pure — the
