@@ -1174,6 +1174,12 @@ function App() {
               <Wrench size={14} /> {active?.label ?? "pane"} — project & dev
             </Dialog.Title>
             <div className="settings">
+              <div className="modal-hint">
+                Point this pane at a project — pick a <strong>saved</strong> one below, or set the dev{" "}
+                <strong>command</strong> + <strong>folder</strong> manually (leave the command blank to auto-detect from{" "}
+                <code>package.json</code>). Changes save automatically; then press <strong>▶</strong> in the top bar to
+                start the dev server.
+              </div>
               <div className="row">
                 <span className="field-label">project</span>
                 <select value={selProject} onChange={(e) => void openProject(e.target.value)}>
@@ -1193,15 +1199,26 @@ function App() {
                 </button>
               </div>
               <div className="row">
-                <span className="field-label">dev</span>
+                <span className="field-label">dev cmd</span>
                 <input
-                  placeholder="cmd (blank = auto-detect)"
+                  placeholder="blank = auto-detect from package.json"
+                  title="The command that starts the dev server. Leave blank to auto-detect from package.json scripts (dev / develop / web / start / serve)."
                   value={devCmd}
                   onChange={(e) => setDevCmd(e.target.value)}
                   onBlur={() => void applyDevConfig(devCmd, devCwd)}
                 />
+              </div>
+              <div className="row">
+                <span className="field-label">folder</span>
+                <input
+                  placeholder="project folder (cwd)"
+                  title="The project directory the dev server runs in (its cwd)."
+                  value={devCwd}
+                  onChange={(e) => setDevCwd(e.target.value)}
+                  onBlur={() => void applyDevConfig(devCmd, devCwd)}
+                />
                 <button
-                  title="browse for project folder"
+                  title="browse for the project folder"
                   onClick={async () => {
                     const dir = await dl().pickFolder();
                     if (!dir) return;
@@ -1211,12 +1228,6 @@ function App() {
                 >
                   <FolderOpen size={14} />
                 </button>
-                <input
-                  placeholder="project folder (cwd)"
-                  value={devCwd}
-                  onChange={(e) => setDevCwd(e.target.value)}
-                  onBlur={() => void applyDevConfig(devCmd, devCwd)}
-                />
               </div>
               {nativeInfo?.isNative && (
                 <div className="row">

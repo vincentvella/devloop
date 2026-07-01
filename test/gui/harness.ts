@@ -126,7 +126,7 @@ export async function launchReady(
  *  automation across panes; a human typing + tabbing doesn't hit it. */
 export async function setDevConfig(win: Page, cmd: string, cwd: string): Promise<void> {
   await win.getByLabel("pane settings — project & dev server").click();
-  const cmdI = win.locator('input[placeholder="cmd (blank = auto-detect)"]');
+  const cmdI = win.locator('input[placeholder="blank = auto-detect from package.json"]');
   const cwdI = win.locator('input[placeholder="project folder (cwd)"]');
   await cmdI.waitFor({ timeout: 10_000 });
   await cmdI.fill(cmd);
@@ -146,7 +146,7 @@ export async function setDevConfig(win: Page, cmd: string, cwd: string): Promise
 export async function closeWrench(win: Page): Promise<void> {
   await win.keyboard.press("Escape");
   await win
-    .locator('input[placeholder="cmd (blank = auto-detect)"]')
+    .locator('input[placeholder="blank = auto-detect from package.json"]')
     .waitFor({ state: "hidden" })
     .catch(() => {});
 }
