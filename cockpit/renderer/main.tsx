@@ -513,11 +513,12 @@ function App() {
     if (el && atBottom) el.scrollTop = el.scrollHeight;
   }, [entries, atBottom]);
 
-  // The browser pane is a native view layered above the DOM, so any DOM overlay
-  // (lightbox or a settings modal) must detach it first or it renders behind.
+  // The browser/native pane is a native view layered above the DOM, so any DOM
+  // modal must detach it first or it renders behind. Keep EVERY Dialog.Root's
+  // open-state in this condition — a missing one silently hides behind the pane.
   useEffect(() => {
-    void dl().overlay(lightbox !== null || wrenchOpen || settingsOpen);
-  }, [lightbox, wrenchOpen, settingsOpen]);
+    void dl().overlay(lightbox !== null || wrenchOpen || settingsOpen || doctorOpen || nativePick !== null);
+  }, [lightbox, wrenchOpen, settingsOpen, doctorOpen, nativePick]);
 
   // Probe whether the active pane's project is a native (Expo/RN) target — drives
   // the target switcher + build control. Runs on cwd change (not just wrench-open)
