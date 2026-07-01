@@ -249,6 +249,13 @@ export function createExtensionManager(deps: ExtensionManagerDeps) {
       log(`extensions: store load failed: ${e}`);
     }
     for (const dir of getUnpackedExtensions()) {
+      // Self-heal: a tracked unpacked dir that no longer exists (deleted, or stale
+      // test state) gets pruned from the registry instead of failing every boot.
+      if (!existsSync(join(dir, "manifest.json"))) {
+        setUnpackedExtensions(getUnpackedExtensions().filter((p) => p !== dir));
+        log(`extensions: pruned missing unpacked extension (${dir})`);
+        continue;
+      }
       try {
         const ext = await ses.extensions.loadExtension(dir, { allowFileAccess: true });
         unpackedById.set(ext.id, dir);
