@@ -24,8 +24,6 @@ interface DevloopState {
   refreshPanes: () => Promise<Pane[]>;
 
   setNativeInfo: (info: NativeInfo | null) => void;
-  /** Probe a project dir's native-build info (or clear when no cwd). Returns it for target sync. */
-  refreshNativeInfo: (cwd: string) => Promise<NativeInfo | null>;
 
   setEntries: (entries: Entry[]) => void;
   appendEntry: (e: Entry) => void;
@@ -53,11 +51,6 @@ export const useDevloopStore = create<DevloopState>((set, get) => ({
   },
 
   setNativeInfo: (nativeInfo) => set({ nativeInfo }),
-  refreshNativeInfo: async (cwd) => {
-    const info = await dl().nativeInfo(cwd);
-    set({ nativeInfo: info });
-    return info;
-  },
 
   setEntries: (entries) => set({ entries }),
   appendEntry: (e) => set((s) => ({ entries: [...s.entries.slice(-(MAX_ENTRIES - 1)), e] })),
