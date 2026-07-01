@@ -115,6 +115,11 @@ export interface DevloopApi {
     checks: { label: string; ok: boolean; fix?: string }[];
     summary: string;
   }>;
+  doctor: () => Promise<{
+    ios: { ready: boolean; checks: { label: string; ok: boolean; fix?: string }[]; summary: string };
+    androidInteractions: { ready: boolean; checks: { label: string; ok: boolean; fix?: string }[]; summary: string };
+    androidBuild: { ready: boolean; checks: { label: string; ok: boolean; fix?: string }[]; summary: string };
+  }>;
   openAndroid: () => Promise<{ ok: boolean; serial?: string; summary?: string }>;
   closeAndroid: () => Promise<{ ok: boolean }>;
   androidTap: (x: number, y: number) => Promise<void>;

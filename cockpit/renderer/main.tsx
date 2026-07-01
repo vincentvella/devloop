@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Bug,
   Camera,
+  Copy,
   Crosshair,
   Eraser,
   ExternalLink,
@@ -22,6 +23,7 @@ import {
   Save,
   Settings,
   Square,
+  Stethoscope,
   Wrench,
   X,
 } from "lucide-react";
@@ -134,6 +136,41 @@ function NativeReadiness({ data, onRecheck }: { data: NativeEnv; onRecheck: () =
         <RefreshCw size={13} /> re-check
       </button>
     </div>
+  );
+}
+
+type Readiness = { ready: boolean; checks: { label: string; ok: boolean; fix?: string }[]; summary: string };
+type DoctorData = { ios: Readiness; androidInteractions: Readiness; androidBuild: Readiness } | null;
+
+/** One readiness group in the Doctor modal: a ✓/✗ row per check, with a copy-the-fix
+ *  button for anything missing. Devloop copies the command — it never runs it. */
+function DoctorSection({ title, report }: { title: string; report?: Readiness }): ReactNode {
+  return (
+    <>
+      <div className="modal-section">{title}</div>
+      {!report ? (
+        <div className="ext-empty">checking…</div>
+      ) : (
+        report.checks.map((c) => (
+          <div key={c.label} className={`native-check ${c.ok ? "ok" : "bad"}`}>
+            <span className="native-mark">{c.ok ? "✓" : "✗"}</span>
+            <span className="native-label">{c.label}</span>
+            {!c.ok && c.fix && (
+              <>
+                <code className="native-fix">{c.fix}</code>
+                <button
+                  className="copy-fix"
+                  title="copy the fix command (Devloop won't run it)"
+                  onClick={() => void navigator.clipboard?.writeText(c.fix ?? "")}
+                >
+                  <Copy size={12} />
+                </button>
+              </>
+            )}
+          </div>
+        ))
+      )}
+    </>
   );
 }
 
@@ -354,6 +391,8 @@ function App() {
     checks: { label: string; ok: boolean; fix?: string }[];
   } | null>(null);
   const [androidBuild, setAndroidBuild] = useState<NativeEnv>(null);
+  const [doctorOpen, setDoctorOpen] = useState(false);
+  const [doctorData, setDoctorData] = useState<DoctorData>(null);
   const [emuDevice, setEmuDevice] = useState("responsive"); // #25 viewport picker (web)
   const [netProfile, setNetProfile] = useState("none"); // #25 throttle picker (web)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
@@ -437,6 +476,11 @@ function App() {
   useEffect(() => {
     if (viewTarget === "android") void dl().androidEnv().then(setAndroidEnv);
   }, [viewTarget]);
+
+  // The Doctor modal: fetch all three readiness reports whenever it opens.
+  useEffect(() => {
+    if (doctorOpen) void dl().doctor().then(setDoctorData);
+  }, [doctorOpen]);
 
   // Transient update states clear themselves; downloading/downloaded persist until acted on.
   useEffect(() => {
@@ -791,6 +835,11 @@ function App() {
             >
               <Settings size={15} />
             </IconBtn>
+            {nativeInfo?.isNative && (
+              <IconBtn tip="native readiness doctor" onClick={() => setDoctorOpen(true)}>
+                <Stethoscope size={15} />
+              </IconBtn>
+            )}
             {nativeInfo?.isNative && nativeEnv && !nativeEnv.ready && (
               <span className="icon-badge" title="native readiness check failed" />
             )}
@@ -918,7 +967,7 @@ function App() {
       )}
 
       {viewTarget === "ios" && nativeEnv && !nativeEnv.ready && (
-        <div className="native-warn" onClick={() => setSettingsOpen(true)} title="open Settings → native readiness">
+        <div className="native-warn" onClick={() => setDoctorOpen(true)} title="open the native readiness doctor">
           ⚠ Native taps & snapshot need idb —{" "}
           {nativeEnv.checks
             .filter((c) => !c.ok)
@@ -928,7 +977,7 @@ function App() {
         </div>
       )}
       {viewTarget === "android" && androidEnv && !androidEnv.ready && (
-        <div className="native-warn" title="Android readiness">
+        <div className="native-warn" onClick={() => setDoctorOpen(true)} title="open the native readiness doctor">
           ⚠ Android needs{" "}
           {androidEnv.checks
             .filter((c) => !c.ok)
@@ -1313,6 +1362,30 @@ function App() {
                 onClick={() => void dl().reportBug()}
               >
                 <Bug size={13} /> report a bug
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Doctor — native readiness (iOS + Android interactions + Android build), copy-the-fix (never runs it). */}
+      <Dialog.Root open={doctorOpen} onOpenChange={setDoctorOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="modal-overlay" />
+          <Dialog.Content className="modal-content" aria-describedby={undefined}>
+            <Dialog.Title className="modal-title">
+              <Stethoscope size={14} /> Native readiness
+            </Dialog.Title>
+            <div className="settings">
+              <DoctorSection title="iOS interactions" report={doctorData?.ios} />
+              <DoctorSection title="Android interactions" report={doctorData?.androidInteractions} />
+              <DoctorSection title="Android build toolchain" report={doctorData?.androidBuild} />
+              <button
+                className="labeled"
+                title="re-run all readiness checks"
+                onClick={() => void dl().doctor().then(setDoctorData)}
+              >
+                <RefreshCw size={13} /> re-check
               </button>
             </div>
           </Dialog.Content>

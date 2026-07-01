@@ -471,6 +471,15 @@ export const TOOLS = [
     },
   }),
   defineTool({
+    name: "native_doctor",
+    purpose:
+      "Report native readiness without building or opening anything: iOS simulator interactions, Android device interactions, and the Android local build toolchain — each a ✓/✗ checklist with the fix for anything missing.",
+    behavior:
+      "Cockpit-only, read-only. Re-probes live each call — run it after installing a missing tool to confirm it's resolved before native_build / native_open, or proactively before a long build. Returns { ios, androidInteractions, androidBuild }, each { ready, checks, summary }.",
+    alternatives: "native_build to build; native_open to drive a device.",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }),
+  defineTool({
     name: "ext_list",
     purpose: "List Chrome extensions (loaded + disabled): id, name, version, enabled. (Cockpit only.)",
     alternatives: "Install with ext_install, toggle with ext_set_enabled.",
