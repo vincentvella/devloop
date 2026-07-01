@@ -27,38 +27,17 @@ export function availablePlatforms(probe: NativeProbe): Platform[] {
 export type PackageManager = "bun" | "npm";
 
 /**
- * How to build: `local` runs `expo run:<platform>` (needs the native toolchain —
- * Xcode for iOS, Android SDK + JDK for Android); `eas` runs an EAS **cloud** build
- * (`eas build`), the fallback when there's no local toolchain.
+ * The command to build + install a dev build for a platform: `expo run:<platform>`
+ * (needs the local toolchain — Xcode for iOS, Android SDK + JDK for Android).
+ * Devloop is local-first: there's no cloud-build path — a missing toolchain is
+ * diagnosed by the readiness doctor (see nativeEnv.ts) so the user can fix it.
  */
-export type BuildMode = "local" | "eas";
-
-/** Default EAS profile — a dev client, which Devloop needs for the Hermes CDP attach. */
-export const DEFAULT_EAS_PROFILE = "development";
-
-/** The command to build a dev build for a platform — locally, or in the EAS cloud. */
 export function buildCommand(
   platform: Platform,
-  opts: { packageManager?: PackageManager; mode?: BuildMode; easProfile?: string } = {},
+  opts: { packageManager?: PackageManager } = {},
 ): { cmd: string; args: string[] } {
   const runner = opts.packageManager === "npm" ? "npx" : "bunx";
-  if (opts.mode === "eas") {
-    const profile = opts.easProfile || DEFAULT_EAS_PROFILE;
-    return {
-      cmd: runner,
-      args: ["eas-cli", "build", "--platform", platform, "--profile", profile, "--non-interactive"],
-    };
-  }
   return { cmd: runner, args: ["expo", `run:${platform}`] };
-}
-
-/**
- * Pick a build mode: build locally when the native toolchain is ready, else fall
- * back to an EAS cloud build. Callers pass whether the local toolchain can build
- * for the platform (from the cockpit's readiness preflight).
- */
-export function recommendBuildMode(localToolchainReady: boolean): BuildMode {
-  return localToolchainReady ? "local" : "eas";
 }
 
 export type FingerprintStatus = "fresh" | "stale" | "unknown";

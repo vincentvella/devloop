@@ -122,3 +122,69 @@ export function androidEnvSummary(p: AndroidEnvProbe): string {
   if (!issues.length) return "Android interactions ready (adb + booted device)";
   return `Android interactions unavailable — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`;
 }
+
+// --- Android BUILD-toolchain readiness (for a local `expo run:android`) ------
+//
+// Building (vs just driving) Android needs a full local toolchain: a discoverable
+// SDK, its platform-tools (`adb`), and a JDK for Gradle. Devloop is local-first, so
+// when a build can't run we diagnose exactly what's missing + how to fix it — no
+// cloud-build fallback.
+
+export interface AndroidBuildProbe {
+  /** `adb` resolvable — the SDK platform-tools are installed. */
+  adb: boolean;
+  /** A JDK on PATH (`java`) — Gradle needs it to compile. */
+  jdk: boolean;
+  /** `$ANDROID_HOME` or `$ANDROID_SDK_ROOT` points at the SDK. */
+  androidHome: boolean;
+}
+
+export function androidBuildIssues(p: AndroidBuildProbe): NativeEnvIssue[] {
+  const issues: NativeEnvIssue[] = [];
+  if (!p.androidHome)
+    issues.push({
+      what: "ANDROID_HOME not set",
+      fix: "set $ANDROID_HOME (or $ANDROID_SDK_ROOT) to your SDK, e.g. export ANDROID_HOME=$HOME/Library/Android/sdk",
+    });
+  if (!p.adb)
+    issues.push({
+      what: "Android SDK platform-tools (adb) not found",
+      fix: "install the SDK — Android Studio ▸ SDK Manager, or `brew install --cask android-platform-tools`",
+    });
+  if (!p.jdk)
+    issues.push({
+      what: "no JDK found (java)",
+      fix: "install a JDK 17 (`brew install openjdk@17`), then put it on PATH / set JAVA_HOME",
+    });
+  return issues;
+}
+
+export const androidBuildReady = (p: AndroidBuildProbe): boolean => androidBuildIssues(p).length === 0;
+
+export function androidBuildChecks(p: AndroidBuildProbe): NativeEnvCheck[] {
+  return [
+    {
+      label: "ANDROID_HOME / SDK path",
+      ok: p.androidHome,
+      fix: p.androidHome ? undefined : "Set $ANDROID_HOME (or $ANDROID_SDK_ROOT) to your SDK",
+    },
+    {
+      label: "SDK platform-tools (adb)",
+      ok: p.adb,
+      fix: p.adb
+        ? undefined
+        : "Install the Android SDK (Android Studio SDK Manager, or `brew install --cask android-platform-tools`)",
+    },
+    {
+      label: "JDK (java)",
+      ok: p.jdk,
+      fix: p.jdk ? undefined : "Install a JDK 17 (`brew install openjdk@17`) and set JAVA_HOME",
+    },
+  ];
+}
+
+export function androidBuildSummary(p: AndroidBuildProbe): string {
+  const issues = androidBuildIssues(p);
+  if (!issues.length) return "Android build toolchain ready (SDK + adb + JDK)";
+  return `can't build Android locally — ${issues.map((i) => `${i.what} → ${i.fix}`).join("; ")}`;
+}

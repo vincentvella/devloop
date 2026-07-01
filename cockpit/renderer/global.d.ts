@@ -110,6 +110,11 @@ export interface DevloopApi {
   openSimulator: () => Promise<{ ok: boolean }>;
   closeSimulator: () => Promise<{ ok: boolean }>;
   androidEnv: () => Promise<{ ready: boolean; checks: { label: string; ok: boolean; fix?: string }[]; summary: string }>;
+  androidBuild: () => Promise<{
+    ready: boolean;
+    checks: { label: string; ok: boolean; fix?: string }[];
+    summary: string;
+  }>;
   openAndroid: () => Promise<{ ok: boolean; serial?: string; summary?: string }>;
   closeAndroid: () => Promise<{ ok: boolean }>;
   androidTap: (x: number, y: number) => Promise<void>;

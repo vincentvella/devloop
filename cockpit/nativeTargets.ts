@@ -15,7 +15,10 @@ import type { LogBuffer } from "../src/logBuffer.ts";
 import { type Platform, resolveNativeInfo } from "../src/nativeBuild.ts";
 import { computeFingerprint, runNativeBuild } from "../src/nativeBuildRunner.ts";
 import {
+  type AndroidBuildProbe,
   type AndroidEnvProbe,
+  androidBuildReady,
+  androidBuildSummary,
   androidEnvIssues,
   androidEnvSummary,
   type NativeEnvProbe,
@@ -85,6 +88,27 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
       /* no adb / SDK */
     }
     return { adb: adbOk, bootedDevice: serials.length > 0 };
+  }
+
+  /** Probe the Android BUILD toolchain (for a local `expo run:android`): a
+   *  discoverable SDK (`$ANDROID_HOME`), its platform-tools (`adb`), and a JDK. */
+  function probeAndroidBuild(): AndroidBuildProbe {
+    const onPath = (cmd: string): boolean => {
+      try {
+        execFileSync("/usr/bin/which", [cmd], { stdio: "ignore" });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    let adb = false;
+    try {
+      execFileSync(adbBinary(), ["--version"], { stdio: "ignore", timeout: 5000 });
+      adb = true;
+    } catch {
+      /* no adb / SDK platform-tools */
+    }
+    return { adb, jdk: onPath("java"), androidHome: !!(process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT) };
   }
 
   /** First usable Android serial, or null. */
@@ -202,16 +226,21 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     if (active) getManager().setNativeController(active.id, undefined);
   }
 
-  function doNativeBuild(platform: Platform, cwd?: string, eas?: boolean): { started: boolean; detail?: string } {
+  function doNativeBuild(platform: Platform, cwd?: string): { started: boolean; detail?: string } {
     const active = getManager()
       .listPanes()
       .find((p) => p.active);
     const root = cwd || active?.dev?.cwd;
     if (!root || !platform) return { started: false, detail: "no project cwd — set the pane's project or pass cwd" };
-    const mode = eas ? "eas" : "local";
-    // streams to the timeline; a local build records a fingerprint on success, an EAS cloud build doesn't.
-    runNativeBuild({ buffer, projectRoot: root, platform, mode });
-    return { started: true, detail: `building ${platform} ${eas ? "in the EAS cloud" : `in ${root}`}` };
+    // Local-first: if the Android toolchain isn't set up, don't spawn a doomed build —
+    // return the doctor's checklist of exactly what to install.
+    if (platform === "android") {
+      const probe = probeAndroidBuild();
+      if (!androidBuildReady(probe)) return { started: false, detail: androidBuildSummary(probe) };
+    }
+    // streams to the timeline; records a fingerprint on success.
+    runNativeBuild({ buffer, projectRoot: root, platform });
+    return { started: true, detail: `building ${platform} in ${root}` };
   }
 
   /** Best-effort native-log process match from a project's Expo config. */
@@ -257,6 +286,7 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     doNativeBuild,
     probeNativeEnv,
     probeAndroidEnv,
+    probeAndroidBuild,
     firstAndroidSerial,
     runAdb,
     appMatchFor,

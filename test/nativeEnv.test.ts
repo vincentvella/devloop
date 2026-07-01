@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
 import {
+  androidBuildChecks,
+  androidBuildIssues,
+  androidBuildReady,
+  androidBuildSummary,
   androidEnvChecks,
   androidEnvIssues,
   androidEnvReady,
@@ -52,4 +56,21 @@ test("Android readiness needs only adb + a booted device", () => {
     ["adb (Android SDK)", true],
     ["Booted device/emulator", false],
   ]);
+});
+
+test("Android BUILD readiness needs an SDK path + adb + a JDK, with actionable fixes", () => {
+  const ok = { adb: true, jdk: true, androidHome: true };
+  expect(androidBuildReady(ok)).toBe(true);
+  expect(androidBuildSummary(ok)).toMatch(/ready/);
+  expect(androidBuildChecks(ok).every((c) => c.ok)).toBe(true);
+
+  const none = androidBuildIssues({ adb: false, jdk: false, androidHome: false });
+  expect(none.map((i) => i.what)).toEqual([
+    "ANDROID_HOME not set",
+    "Android SDK platform-tools (adb) not found",
+    "no JDK found (java)",
+  ]);
+  expect(androidBuildReady({ adb: false, jdk: false, androidHome: false })).toBe(false);
+  expect(androidBuildSummary({ adb: false, jdk: true, androidHome: true })).toContain("adb");
+  expect(androidBuildIssues({ adb: true, jdk: false, androidHome: true })[0]!.fix).toContain("JDK 17");
 });
