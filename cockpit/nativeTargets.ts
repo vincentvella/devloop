@@ -293,14 +293,18 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     // Web target: expo config's platforms win (authoritative — honors app.config.ts),
     // else app.json's platforms, else react-native-web presence. Only run expo config
     // for projects with `expo` installed (a bare-RN dir would make bunx fetch it).
-    const expoConfigPlatforms = deps.expo ? await resolvedExpoPlatforms(cwd) : null;
+    // Run the two slow probes concurrently — expo config (platforms) + the fingerprint
+    // (staleness badge) — so it's max(), not sum(), of the two subprocess spawns.
+    const [expoConfigPlatforms, current] = await Promise.all([
+      deps.expo ? resolvedExpoPlatforms(cwd) : Promise.resolve(null),
+      computeFingerprint(cwd),
+    ]);
     const webCapable = webTargetForProject({
       expoConfigPlatforms,
       appJsonPlatforms: readAppJsonPlatforms(cwd),
       deps,
     });
     const iosCapable = process.platform === "darwin"; // iOS simulator + idb are macOS-only
-    const current = await computeFingerprint(cwd);
     return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd), webCapable, iosCapable);
   }
 

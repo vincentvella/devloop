@@ -523,6 +523,7 @@ function App() {
   const [netProfile, setNetProfile] = useState("none"); // #25 throttle picker (web)
   const [wrenchOpen, setWrenchOpen] = useState(false); // wrench → active-pane modal (project, dev)
   const nativeInfo = useDevloopStore((s) => s.nativeInfo);
+  const [detecting, setDetecting] = useState(false); // probing a project's targets (expo config + fingerprint)
   const [building, setBuilding] = useState(false);
   const [viewTarget, setViewTarget] = useState("web"); // Expo: which target the pane shows (web | ios)
   const [sidebarHidden, setSidebarHidden] = useState(false);
@@ -655,9 +656,11 @@ function App() {
     const setNativeInfo = useDevloopStore.getState().setNativeInfo;
     if (!devCwd) {
       setNativeInfo(null);
+      setDetecting(false);
       return;
     }
     let live = true;
+    setDetecting(true); // detection spawns expo config + a fingerprint probe (a few seconds)
     // Guard the store write too, not just setViewTarget: nativeInfo spawns `expo config`,
     // so calls across cwd/pane switches can resolve out of order — drop the stale ones,
     // else a superseded project's targets clobber the current pane (the Web-flicker bug).
@@ -666,6 +669,7 @@ function App() {
       .then((info) => {
         if (!live) return;
         setNativeInfo(info);
+        setDetecting(false);
         if (info?.targets?.length && !info.targets.includes(viewTarget)) setViewTarget(info.targets[0]!);
       });
     return () => {
@@ -1016,7 +1020,12 @@ function App() {
           >
             <Eraser size={15} />
           </IconBtn>
-          {nativeInfo?.isNative && nativeInfo.targets.length > 0 && (
+          {detecting && (
+            <span className="detecting" title="detecting the project's targets (Expo config + fingerprint)">
+              <span className="detecting-spinner" /> detecting project…
+            </span>
+          )}
+          {!detecting && nativeInfo?.isNative && nativeInfo.targets.length > 0 && (
             <div
               className="segmented target-switch"
               title="view target — Web (browser), iOS (simulator), or Android (device mirror)"
@@ -1028,7 +1037,7 @@ function App() {
               ))}
             </div>
           )}
-          {nativeInfo?.isNative && (viewTarget === "ios" || viewTarget === "android") && (
+          {!detecting && nativeInfo?.isNative && (viewTarget === "ios" || viewTarget === "android") && (
             <>
               <button
                 className="labeled btn-primary"
