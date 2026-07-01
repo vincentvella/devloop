@@ -219,6 +219,8 @@ async function main() {
   manager.onChange = () => {
     if (shellWin && !shellWin.isDestroyed()) shellWin.webContents.send("devloop:panesChanged");
   };
+  // Swap panes while a sim/mirror is up → foreground that pane's app on the device.
+  manager.onActivePaneChanged = (pane, target) => void native.foregroundApp(pane.dev?.cwd, target);
 
   registerIpc({
     buffer,

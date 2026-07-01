@@ -7,10 +7,12 @@
 import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { BrowserWindow } from "electron";
 import { usableSerials } from "../src/adb.ts";
 import { adbBinary } from "../src/androidLog.ts";
 import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
+import { resolveAppId } from "../src/appIdentity.ts";
 import { projectInputsHash, readAppJsonPlatforms, resolvedExpoPlatforms } from "../src/expoConfig.ts";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import { type Platform, resolveNativeInfo, webTargetForProject } from "../src/nativeBuild.ts";
@@ -37,6 +39,8 @@ import { detectTargetKind } from "../src/target.ts";
 import type { BrowserManager } from "./browserManager.ts";
 import type { NativeObservability } from "./nativeObservability.ts";
 import type { ServeSim } from "./serveSim.ts";
+
+const execFileP = promisify(execFile);
 
 export interface NativeTargetsDeps {
   getManager: () => BrowserManager;
@@ -232,6 +236,33 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     if (active) getManager().setNativeController(active.id, undefined);
   }
 
+  /** Foreground the pane's app on the active device so the preview follows a pane swap.
+   *  App id is resolved statically (app.json → the generated native project); a no-op if
+   *  it can't be resolved or the app isn't installed — a friendly timeline note, no error. */
+  async function foregroundApp(cwd: string | undefined, platform: "ios" | "android"): Promise<void> {
+    if (!cwd) return;
+    const appId = resolveAppId(cwd, platform);
+    if (!appId) {
+      log(`app-focus: couldn't resolve the ${platform} app id for ${cwd}`);
+      return;
+    }
+    const active = getManager()
+      .listPanes()
+      .find((p) => p.active);
+    try {
+      if (platform === "ios") await execFileP("xcrun", ["simctl", "launch", "booted", appId], { timeout: 8000 });
+      else await runAdb(["shell", "monkey", "-p", appId, "-c", "android.intent.category.LAUNCHER", "1"]);
+    } catch {
+      buffer.push(
+        "native",
+        "log",
+        `app-focus: couldn't foreground ${appId} on the ${platform} device — build/install it for this project first`,
+        undefined,
+        active?.id,
+      );
+    }
+  }
+
   /** Re-probe all native readiness (iOS + Android interactions + Android build) — no build/open. */
   function doctor() {
     const ios = probeNativeEnv();
@@ -331,5 +362,6 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     runAdb,
     appMatchFor,
     nativeInfo,
+    foregroundApp,
   };
 }
