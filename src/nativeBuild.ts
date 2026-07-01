@@ -76,6 +76,17 @@ export interface NativeInfo {
 }
 
 /**
+ * Whether an Expo/RN project exposes a Web target. If the Expo config declares
+ * `platforms`, that's authoritative — web must be listed. Otherwise fall back to a
+ * real web renderer being installed (`react-native-web`); `expo` alone isn't enough
+ * (a managed app without react-native-web/react-dom can't serve web).
+ */
+export function supportsWebTarget(deps: Record<string, string>, declaredPlatforms?: readonly string[] | null): boolean {
+  if (declaredPlatforms && declaredPlatforms.length > 0) return declaredPlatforms.includes("web");
+  return !!deps["react-native-web"];
+}
+
+/**
  * What the cockpit needs to render the build control for a project: whether it's
  * a native target, which platforms to offer, and the staleness badge. Pure — the
  * cockpit feeds it the detected kind + fs probe + fingerprints.
