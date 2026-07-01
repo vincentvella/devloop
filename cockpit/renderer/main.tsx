@@ -373,7 +373,6 @@ function App() {
   const panes = useDevloopStore((s) => s.panes);
   const storeRefreshPanes = useDevloopStore((s) => s.refreshPanes);
   const entries = useDevloopStore((s) => s.entries);
-  const projects = useDevloopStore((s) => s.projects);
   const exts = useDevloopStore((s) => s.exts);
   const setExts = useDevloopStore((s) => s.setExts);
   const refreshProjects = useDevloopStore((s) => s.refreshProjects);
@@ -698,29 +697,6 @@ function App() {
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
   }, []);
-
-  const fillFromProject = (name: string) => {
-    const p = projects.find((x) => x.name === name);
-    if (!p) return;
-    setDevCwd(p.cwd);
-    setDevCmd(p.cmd ?? "");
-    setUrl(p.url ?? "");
-    setSteps(p.steps?.length ? p.steps : [{ kind: "navigate" }]);
-  };
-
-  // Open a saved project (fill the form, then dev_start + navigate on the active pane).
-  const openProject = useCallback(
-    async (name: string) => {
-      if (!name) return;
-      setSelProject(name);
-      fillFromProject(name);
-      const res = await dl().openProject(name);
-      await labelActive(res.name);
-      await refreshPanes();
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projects, labelActive, refreshPanes],
-  );
 
   // Save the active pane as a project (named by its tab label / folder; rename on the tab).
   const saveProject = useCallback(async () => {
@@ -1177,21 +1153,10 @@ function App() {
             </Dialog.Title>
             <div className="settings">
               <div className="modal-hint">
-                <strong>Open</strong> a saved project above, or set the dev <strong>command</strong> +{" "}
-                <strong>folder</strong> (leave the command blank to auto-detect from <code>package.json</code>) — these
-                auto-save to the pane, and <strong>▶</strong> in the top bar starts the dev server.{" "}
-                <strong>Save as project</strong> keeps this setup in the picker and names the tab.
-              </div>
-              <div className="row">
-                <span className="field-label">open</span>
-                <select value={selProject} onChange={(e) => void openProject(e.target.value)}>
-                  <option value="">— open a saved project —</option>
-                  {projects.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                Set this pane's dev <strong>command</strong> + <strong>folder</strong> (leave the command blank to
+                auto-detect from <code>package.json</code>) — these auto-save to the pane, and <strong>▶</strong> in the
+                top bar starts the dev server. <strong>Save as project</strong> captures this pane in your saved
+                projects.
               </div>
               <div className="row">
                 <span className="field-label">dev cmd</span>
