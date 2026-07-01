@@ -11,7 +11,7 @@ import type { BrowserWindow } from "electron";
 import { usableSerials } from "../src/adb.ts";
 import { adbBinary } from "../src/androidLog.ts";
 import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
-import { readAppJsonPlatforms, resolvedExpoPlatforms } from "../src/expoConfig.ts";
+import { projectInputsHash, readAppJsonPlatforms, resolvedExpoPlatforms } from "../src/expoConfig.ts";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import { type Platform, resolveNativeInfo, webTargetForProject } from "../src/nativeBuild.ts";
 import { computeFingerprint, runNativeBuild } from "../src/nativeBuildRunner.ts";
@@ -32,7 +32,7 @@ import {
   nativeEnvSummary,
 } from "../src/nativeEnv.ts";
 import { deriveAppMatch, metroBaseFromUrl } from "../src/nativeObservability.ts";
-import { getProjectFingerprint } from "../src/registry.ts";
+import { getNativeCache, getProjectFingerprint, setNativeCache } from "../src/registry.ts";
 import { detectTargetKind } from "../src/target.ts";
 import type { BrowserManager } from "./browserManager.ts";
 import type { NativeObservability } from "./nativeObservability.ts";
@@ -290,21 +290,30 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     const kind = detectTargetKind({ dependencies: deps, ...probe });
     if (kind !== "react-native")
       return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
-    // Web target: expo config's platforms win (authoritative — honors app.config.ts),
-    // else app.json's platforms, else react-native-web presence. Only run expo config
-    // for projects with `expo` installed (a bare-RN dir would make bunx fetch it).
-    // Run the two slow probes concurrently — expo config (platforms) + the fingerprint
-    // (staleness badge) — so it's max(), not sum(), of the two subprocess spawns.
-    const [expoConfigPlatforms, current] = await Promise.all([
-      deps.expo ? resolvedExpoPlatforms(cwd) : Promise.resolve(null),
-      computeFingerprint(cwd),
-    ]);
+    const iosCapable = process.platform === "darwin"; // iOS simulator + idb are macOS-only
+    // Detection cache — keyed by a content hash of package.json + the Expo config,
+    // persisted to disk. On a hit we skip both subprocess spawns; on a miss (first
+    // encounter or a real config change) we probe concurrently — expo config (platforms)
+    // + the fingerprint (staleness badge) — behind the "detecting…" indicator, then persist.
+    // expo config only runs when `expo` is a dep (a bare-RN dir would make bunx fetch it).
+    const hash = projectInputsHash(cwd);
+    const cached = getNativeCache(cwd);
+    let expoConfigPlatforms: string[] | null;
+    let current: string | null;
+    if (cached && cached.hash === hash) {
+      ({ platforms: expoConfigPlatforms, fingerprint: current } = cached);
+    } else {
+      [expoConfigPlatforms, current] = await Promise.all([
+        deps.expo ? resolvedExpoPlatforms(cwd) : Promise.resolve(null),
+        computeFingerprint(cwd),
+      ]);
+      setNativeCache(cwd, { hash, platforms: expoConfigPlatforms, fingerprint: current });
+    }
     const webCapable = webTargetForProject({
       expoConfigPlatforms,
       appJsonPlatforms: readAppJsonPlatforms(cwd),
       deps,
     });
-    const iosCapable = process.platform === "darwin"; // iOS simulator + idb are macOS-only
     return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd), webCapable, iosCapable);
   }
 

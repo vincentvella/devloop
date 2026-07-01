@@ -148,6 +148,35 @@ export function setUnpackedExtensions(paths: string[]): void {
   writeFileSync(file("unpacked-extensions.json"), JSON.stringify([...new Set(paths)], null, 2));
 }
 
+/** Per-project native-detection cache — keyed by a content hash of the project's inputs
+ *  (package.json + the Expo config), so the cockpit skips the expo-config + fingerprint
+ *  spawns unless the config actually changed. Persisted so it survives restarts. */
+export interface NativeCacheEntry {
+  hash: string;
+  platforms: string[] | null;
+  fingerprint: string | null;
+}
+
+function readNativeCache(): Record<string, NativeCacheEntry> {
+  try {
+    const map = JSON.parse(readFileSync(file("native-cache.json"), "utf8"));
+    return map && typeof map === "object" ? map : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getNativeCache(cwd: string): NativeCacheEntry | undefined {
+  return readNativeCache()[cwd];
+}
+
+export function setNativeCache(cwd: string, entry: NativeCacheEntry): void {
+  const map = readNativeCache();
+  map[cwd] = entry;
+  mkdirSync(dir(), { recursive: true });
+  writeFileSync(file("native-cache.json"), JSON.stringify(map, null, 2));
+}
+
 /** Extension ids the user toggled off — kept installed but not loaded. */
 export function getDisabledExtensions(): string[] {
   try {

@@ -1,36 +1,38 @@
 /**
  * Resolve an Expo project's `platforms` via `expo config` — authoritative (it
  * evaluates app.config.ts + app.json + Expo defaults), unlike a static app.json read.
- * Node-only (no electron) so it's importable from tests + the cockpit. Cached per cwd,
- * keyed on the config files' mtime so edits invalidate the cache.
+ * Node-only (no electron) so it's importable from tests + the cockpit. Uncached here —
+ * the cockpit persists the result keyed by projectInputsHash (see registry.ts).
  */
 import { execFile } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
-const platformsCache = new Map<string, { key: number; platforms: string[] | null }>();
 
-function configMtime(cwd: string): number {
-  let m = 0;
-  for (const f of ["app.config.ts", "app.config.js", "app.config.mjs", "app.json", "package.json"]) {
+/** Content hash of the files that determine a project's targets — package.json + the
+ *  Expo config. The detection cache key: stable across touches / `git checkout` (unlike
+ *  mtime), busts only when the content actually changes. Cheap (reads a few small files). */
+export function projectInputsHash(cwd: string): string {
+  const h = createHash("sha1");
+  for (const f of ["package.json", "app.json", "app.config.ts", "app.config.js", "app.config.mjs"]) {
     try {
-      m = Math.max(m, statSync(join(cwd, f)).mtimeMs);
+      h.update(f)
+        .update("\0")
+        .update(readFileSync(join(cwd, f)))
+        .update("\0");
     } catch {
-      /* missing — ignore */
+      /* missing — contributes nothing */
     }
   }
-  return m;
+  return h.digest("hex");
 }
 
 /** Platforms from `expo config --json` (honors app.config.ts). null when expo config
  *  isn't available (no expo, eval error, timeout) — the caller falls back statically. */
 export async function resolvedExpoPlatforms(cwd: string): Promise<string[] | null> {
-  const key = configMtime(cwd);
-  const hit = platformsCache.get(cwd);
-  if (hit && hit.key === key) return hit.platforms;
-  let platforms: string[] | null = null;
   try {
     const { stdout } = await execFileP("bunx", ["expo", "config", "--json", "--type", "public"], {
       cwd,
@@ -38,12 +40,11 @@ export async function resolvedExpoPlatforms(cwd: string): Promise<string[] | nul
       maxBuffer: 32 * 1024 * 1024,
     });
     const cfg = JSON.parse(stdout);
-    if (Array.isArray(cfg?.platforms)) platforms = cfg.platforms;
+    if (Array.isArray(cfg?.platforms)) return cfg.platforms;
   } catch {
     /* no expo / eval error / timeout → caller falls back to the static heuristic */
   }
-  platformsCache.set(cwd, { key, platforms });
-  return platforms;
+  return null;
 }
 
 /** `platforms` declared statically in app.json (`expo.platforms` or top-level). null if
