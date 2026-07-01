@@ -12,7 +12,7 @@ import { usableSerials } from "../src/adb.ts";
 import { adbBinary } from "../src/androidLog.ts";
 import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
 import type { LogBuffer } from "../src/logBuffer.ts";
-import { type Platform, resolveNativeInfo } from "../src/nativeBuild.ts";
+import { type Platform, resolveNativeInfo, supportsWebTarget } from "../src/nativeBuild.ts";
 import { computeFingerprint, runNativeBuild } from "../src/nativeBuildRunner.ts";
 import {
   type AndroidBuildProbe,
@@ -289,7 +289,17 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     const kind = detectTargetKind({ dependencies: deps, ...probe });
     if (kind !== "react-native")
       return { isNative: false, platforms: [], targets: [], buildStatus: "unknown", badge: null };
-    const webCapable = !!(deps["expo"] || deps["react-native-web"]); // Expo / RNW → has a Web target
+    // Web target: expo.platforms (app.json) is authoritative when declared; otherwise require
+    // react-native-web. app.config.(ts|js) can't be parsed statically → falls back to the deps.
+    let declaredPlatforms: string[] | null = null;
+    try {
+      const appJson = JSON.parse(readFileSync(join(cwd, "app.json"), "utf8"));
+      const p = appJson?.expo?.platforms ?? appJson?.platforms;
+      if (Array.isArray(p)) declaredPlatforms = p;
+    } catch {
+      /* app.config.(ts|js) or no app.json → fall back to installed deps */
+    }
+    const webCapable = supportsWebTarget(deps, declaredPlatforms);
     const iosCapable = process.platform === "darwin"; // iOS simulator + idb are macOS-only
     const current = await computeFingerprint(cwd);
     return resolveNativeInfo(kind, probe, current, getProjectFingerprint(cwd), webCapable, iosCapable);

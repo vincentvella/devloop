@@ -5,6 +5,7 @@ import {
   buildStatusLabel,
   fingerprintStatus,
   resolveNativeInfo,
+  supportsWebTarget,
 } from "../src/nativeBuild.ts";
 
 test("availablePlatforms reflects prebuilt native dirs, iOS first", () => {
@@ -63,6 +64,21 @@ test("resolveNativeInfo: RN project offers platforms + staleness badge", () => {
 
 test("resolveNativeInfo: managed RN project (no native dirs) still offers iOS", () => {
   expect(resolveNativeInfo("react-native", {}).platforms).toEqual(["ios"]);
+});
+
+test("supportsWebTarget: declared expo.platforms is authoritative", () => {
+  // declared + web listed → yes; declared without web → no, even with react-native-web installed
+  expect(supportsWebTarget({ "react-native-web": "*" }, ["ios", "android", "web"])).toBe(true);
+  expect(supportsWebTarget({ "react-native-web": "*" }, ["ios", "android"])).toBe(false);
+  // an empty array is meaningless → treat as "not declared" and fall back to deps
+  expect(supportsWebTarget({ "react-native-web": "*" }, [])).toBe(true);
+});
+
+test("supportsWebTarget: undeclared → requires react-native-web, not just expo", () => {
+  expect(supportsWebTarget({ expo: "*" }, null)).toBe(false); // expo alone can't serve web
+  expect(supportsWebTarget({ expo: "*", "react-native-web": "*" })).toBe(true);
+  expect(supportsWebTarget({ "react-native-web": "*" })).toBe(true);
+  expect(supportsWebTarget({})).toBe(false);
 });
 
 test("resolveNativeInfo: view targets — web added only when webCapable, iOS gated to macOS", () => {
