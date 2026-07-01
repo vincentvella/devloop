@@ -734,6 +734,7 @@ function App() {
       url: url.trim() || undefined,
       steps,
     });
+    if (a) await dl().paneSetLabel(a.id, name); // reflect the saved project's name on its tab
     await refreshProjects();
     setSelProject(name);
   }, [devCwd, devCmd, url, steps, refreshProjects]);
