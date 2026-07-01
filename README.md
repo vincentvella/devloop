@@ -135,6 +135,9 @@ timeline, so you can see what actually happened.
 - **Definition of done:** the feature is verified live in devloop — no console or
   page errors, the expected network calls succeeded, the UI reflects the change —
   not just "the code looks right."
+- **Setup stays yours:** if a native build needs a toolchain that isn't installed,
+  devloop tells you exactly what's missing and the command to fix it — it
+  **diagnoses, it never installs or touches your toolchain.** Run the fix, then rebuild.
 
 Register once: `claude mcp add devloop --scope user -- npx -y devloop-mcp`
 ```
