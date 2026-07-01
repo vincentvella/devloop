@@ -5,12 +5,14 @@ export async function projectRegistry(_app: ElectronApplication, win: Page): Pro
   await win.getByLabel("pane settings — project & dev server").click();
   await win.getByTitle("save this pane as a reusable project (also names its tab)").click();
   await win.waitForTimeout(400);
-  // The saved project (named from the pane label) appears in the project picker.
-  const opts = await win.locator(".settings select option").allTextContents();
+  // The saved project persists to the registry (the picker lives on + now, not the wrench).
+  const names = await win.evaluate(() =>
+    (window as unknown as { devloop: { projects(): Promise<{ name: string }[]> } }).devloop.projects(),
+  );
   check(
-    "saving a project adds it to the picker",
-    opts.some((o) => o.includes("renamed-pane") || o.includes("devloop")),
-    opts.filter(Boolean).join(","),
+    "saving a project persists it to the registry",
+    names.some((p) => p.name.includes("renamed-pane") || p.name.includes("devloop")),
+    names.map((p) => p.name).join(","),
   );
   await closeWrench(win);
 }
