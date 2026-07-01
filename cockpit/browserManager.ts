@@ -63,6 +63,9 @@ export class BrowserManager implements IBrowserManager {
   private androidActive = false; // when true, browser_* route to adb + the renderer shows the mirror
   private simView?: WebContentsView; // serve-sim MJPEG stream viewer (created on first use)
   onChange?: () => void;
+  /** Fired when the active pane changes while a native target is up — lets the cockpit
+   *  foreground the new pane's app on the device (see nativeTargets.foregroundApp). */
+  onActivePaneChanged?: (pane: PaneInfo, nativeTarget: "ios" | "android") => void;
 
   /**
    * Show/hide the simulator over the pane area. The simulator is a SECOND
@@ -402,6 +405,9 @@ export class BrowserManager implements IBrowserManager {
     }
     this.persist();
     this.notify();
+    // Follow the swap: if a native target is up, foreground this pane's app on the device.
+    const nativeTarget = this.simulatorActive ? "ios" : this.androidActive ? "android" : null;
+    if (nativeTarget) this.onActivePaneChanged?.(this.info(id), nativeTarget);
     return this.info(id);
   }
 
