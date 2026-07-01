@@ -46,6 +46,19 @@ export interface ExtControl {
   setEnabled(id: string, enabled: boolean): Promise<ExtListItem[]>;
 }
 
+export interface NativeReadinessReport {
+  ready: boolean;
+  checks: { label: string; ok: boolean; fix?: string }[];
+  summary: string;
+}
+
+/** A full native-readiness snapshot (native_doctor): iOS + Android interactions and the Android build toolchain. */
+export interface NativeDoctor {
+  ios: NativeReadinessReport;
+  androidInteractions: NativeReadinessReport;
+  androidBuild: NativeReadinessReport;
+}
+
 export interface NativeControl {
   /** Open the iOS simulator or Android device mirror + route browser_* to it. */
   open(platform: "ios" | "android"): Promise<{ ok: boolean; summary?: string }>;
@@ -54,6 +67,8 @@ export interface NativeControl {
   /** Build + launch the native dev build locally (`expo run:<platform>`), streaming
    *  to the timeline. Returns started:false + a toolchain checklist if it can't. */
   build(platform: "ios" | "android", cwd?: string): Promise<{ started: boolean; detail?: string }>;
+  /** Re-probe native readiness (no build/open) — iOS + Android interactions + the Android build toolchain. */
+  doctor(): Promise<NativeDoctor>;
 }
 
 let deps: ToolDeps;
@@ -372,6 +387,13 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
           "native builds require the Devloop cockpit (run the Electron app); the headless server is web-only",
         );
       return json(await deps.nativeControl.build(args.platform as "ios" | "android", args.cwd as string | undefined));
+    }
+    case "native_doctor": {
+      if (!deps.nativeControl)
+        throw new Error(
+          "native readiness checks require the Devloop cockpit (run the Electron app); the headless server is web-only",
+        );
+      return json(await deps.nativeControl.doctor());
     }
     case "project_list":
       return json({ projects: listProjects() });

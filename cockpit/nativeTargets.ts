@@ -17,12 +17,17 @@ import { computeFingerprint, runNativeBuild } from "../src/nativeBuildRunner.ts"
 import {
   type AndroidBuildProbe,
   type AndroidEnvProbe,
+  androidBuildChecks,
   androidBuildReady,
   androidBuildSummary,
+  androidEnvChecks,
   androidEnvIssues,
+  androidEnvReady,
   androidEnvSummary,
   type NativeEnvProbe,
+  nativeEnvChecks,
   nativeEnvIssues,
+  nativeEnvReady,
   nativeEnvSummary,
 } from "../src/nativeEnv.ts";
 import { deriveAppMatch, metroBaseFromUrl } from "../src/nativeObservability.ts";
@@ -226,6 +231,18 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     if (active) getManager().setNativeController(active.id, undefined);
   }
 
+  /** Re-probe all native readiness (iOS + Android interactions + Android build) — no build/open. */
+  function doctor() {
+    const ios = probeNativeEnv();
+    const ai = probeAndroidEnv();
+    const ab = probeAndroidBuild();
+    return {
+      ios: { ready: nativeEnvReady(ios), checks: nativeEnvChecks(ios), summary: nativeEnvSummary(ios) },
+      androidInteractions: { ready: androidEnvReady(ai), checks: androidEnvChecks(ai), summary: androidEnvSummary(ai) },
+      androidBuild: { ready: androidBuildReady(ab), checks: androidBuildChecks(ab), summary: androidBuildSummary(ab) },
+    };
+  }
+
   function doNativeBuild(platform: Platform, cwd?: string): { started: boolean; detail?: string } {
     const active = getManager()
       .listPanes()
@@ -284,6 +301,7 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     doOpenAndroid,
     doCloseAndroid,
     doNativeBuild,
+    doctor,
     probeNativeEnv,
     probeAndroidEnv,
     probeAndroidBuild,

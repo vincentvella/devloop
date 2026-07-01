@@ -46,3 +46,29 @@ test("native_* delegate to nativeControl when configured (cockpit)", async () =>
   expect(JSON.parse(text(await handleTool("native_build", { platform: "ios", cwd: "/proj" }))).started).toBe(true);
   expect(calls).toEqual(["open:android", "close", "build:ios:/proj"]);
 });
+
+test("native_doctor reports the cockpit is required in headless mode", async () => {
+  configureTools(base);
+  await expect(handleTool("native_doctor", {})).rejects.toThrow(/cockpit/i);
+});
+
+test("native_doctor returns the three readiness reports when configured", async () => {
+  const report = (ready: boolean) => ({
+    ready,
+    checks: [{ label: "x", ok: ready }],
+    summary: ready ? "ready" : "nope",
+  });
+  configureTools({
+    ...base,
+    nativeControl: {
+      open: async () => ({ ok: true }),
+      close: async () => {},
+      build: async () => ({ started: true }),
+      doctor: async () => ({ ios: report(true), androidInteractions: report(false), androidBuild: report(false) }),
+    },
+  });
+  const r = JSON.parse(text(await handleTool("native_doctor", {})));
+  expect(r.ios.ready).toBe(true);
+  expect(r.androidBuild.ready).toBe(false);
+  expect(r.androidInteractions.checks[0].label).toBe("x");
+});

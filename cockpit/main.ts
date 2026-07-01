@@ -257,6 +257,7 @@ async function main() {
         await native.doCloseAndroid();
       },
       build: async (platform, cwd) => native.doNativeBuild(platform as Platform, cwd),
+      doctor: async () => native.doctor(),
     },
     // ext_* over MCP — same path as the cockpit's Settings "ext" row.
     extControl: {

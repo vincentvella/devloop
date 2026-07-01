@@ -139,7 +139,7 @@ timeline, so you can see what actually happened.
 Register once: `claude mcp add devloop --scope user -- npx -y devloop-mcp`
 ```
 
-## Tools (45)
+## Tools (46)
 
 **Dev server** — runtime, no per-project registration needed
 - `dev_start({ project?, cmd?, cwd? })` — start a dev server and tee its logs. Specify it three ways: a saved registry `project`; explicit `cmd`+`cwd`; or neither (`cwd` defaults to the server's dir, `cmd` auto-detected from `package.json` scripts: `dev`/`develop`/`web`/`start`/`serve`).
@@ -149,7 +149,8 @@ Register once: `claude mcp add devloop --scope user -- npx -y devloop-mcp`
 **Native targets** — Expo/React Native (cockpit only; needs Electron + a simulator/emulator)
 - `native_open({ platform })` — open the iOS simulator or Android device mirror for the active pane; `browser_*` then drive the native app (idb/adb) and JS + native logs stream to the timeline. Returns `ok:false` with a reason if the device/tooling isn't ready.
 - `native_close()` — back to the pane's web content.
-- `native_build({ platform, cwd? })` — `expo run:ios` / `expo run:android`, streamed to the timeline (`cwd` defaults to the active pane's project).
+- `native_build({ platform, cwd? })` — `expo run:ios` / `expo run:android`, streamed to the timeline (`cwd` defaults to the active pane's project). Android returns a toolchain checklist instead of building if the SDK/JDK isn't set up.
+- `native_doctor()` — re-check native readiness **without** building or opening: iOS + Android interactions + the Android build toolchain, each a ✓/✗ checklist with the fix for anything missing. Run it after installing a missing tool to confirm it's resolved.
 - In headless stdio/daemon mode these report that the cockpit is required (Puppeteer is web-only).
 
 **Browser control** — act on the active pane
