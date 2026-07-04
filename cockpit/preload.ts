@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("devloop", {
   androidEnv: () => ipcRenderer.invoke("devloop:androidEnv"),
   androidBuild: () => ipcRenderer.invoke("devloop:androidBuild"),
   doctor: () => ipcRenderer.invoke("devloop:doctor"),
+  nativeSystemLogs: (on: boolean) => ipcRenderer.invoke("devloop:nativeSystemLogs", on),
   openAndroid: () => ipcRenderer.invoke("devloop:openAndroid"),
   closeAndroid: () => ipcRenderer.invoke("devloop:closeAndroid"),
   androidTap: (x: number, y: number) => ipcRenderer.invoke("devloop:androidTap", x, y),

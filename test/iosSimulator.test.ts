@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import {
   logStreamArgs,
+  type NativeLogLine,
   NativeLogStream,
   nativeErrorLevel,
   parseLogLine,
   type SpawnLike,
   screenshotArgs,
 } from "../src/iosSimulator.ts";
-import { LogBuffer } from "../src/logBuffer.ts";
 
 test("parseLogLine: compact line → level + process + message", () => {
   const r = parseLogLine("2026-06-12 21:09:00.123-0700 Df Caliburr[461:1a2b] hello from native");
@@ -15,6 +15,7 @@ test("parseLogLine: compact line → level + process + message", () => {
     ts: "2026-06-12 21:09:00.123-0700",
     level: "log",
     process: "Caliburr",
+    pid: 461,
     message: "hello from native",
   });
 });
@@ -56,21 +57,20 @@ test("nativeErrorLevel flags error + fault", () => {
   expect(nativeErrorLevel("log")).toBe(false);
 });
 
-test("NativeLogStream parses spawned stdout into native buffer entries (chunked)", () => {
-  const buffer = new LogBuffer(100);
+test("NativeLogStream parses spawned stdout into log lines (chunked)", () => {
   let onData: (chunk: string) => void = () => {};
   const fakeSpawn: SpawnLike = () => ({ stdout: { on: (_e, cb) => (onData = cb) }, kill: () => {} });
+  const lines: NativeLogLine[] = [];
 
-  const stream = new NativeLogStream(buffer, { device: "D", match: "Caliburr", spawn: fakeSpawn });
+  const stream = new NativeLogStream({ device: "D", onLine: (l) => lines.push(l), spawn: fakeSpawn });
   stream.start();
 
   // split across chunks to exercise line buffering
   onData("2026-06-12 21:09:00.1-0700 Df Caliburr[1:2] first line\n2026-06-12 21:09:00.2-0700 Er Calibu");
   onData("rr[1:2] bad thing\n");
 
-  const entries = buffer.query({ source: "native" });
-  expect(entries.length).toBe(2);
-  expect(entries[0]).toMatchObject({ source: "native", stream: "log", line: "first line" });
-  expect(entries[1]).toMatchObject({ source: "native", stream: "error", line: "bad thing" });
-  expect((entries[1]!.detail as any).process).toBe("Caliburr");
+  expect(lines.map((l) => l.message)).toEqual(["first line", "bad thing"]);
+  expect(lines.map((l) => l.level)).toEqual(["log", "error"]);
+  expect(lines[1]?.process).toBe("Caliburr");
+  expect(lines[0]?.pid).toBe(1);
 });

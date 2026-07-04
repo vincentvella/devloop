@@ -102,6 +102,7 @@ export function registerIpc(deps: RegisterIpcDeps): void {
     return { ready: androidBuildReady(probe), checks: androidBuildChecks(probe), summary: androidBuildSummary(probe) };
   });
   ipcMain.handle("devloop:doctor", () => native.doctor());
+  ipcMain.handle("devloop:nativeSystemLogs", (_e, on: boolean) => native.setSystemLogs(on));
   ipcMain.handle("devloop:openAndroid", () => native.doOpenAndroid());
   ipcMain.handle("devloop:closeAndroid", async () => {
     await native.doCloseAndroid();

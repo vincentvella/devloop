@@ -73,11 +73,13 @@ test("parseLogcatLine handles brief format, banners, and fallback", () => {
   expect(parseLogcatLine("E/AndroidRuntime( 1234): FATAL EXCEPTION: main")).toEqual({
     level: "error",
     process: "AndroidRuntime",
+    pid: 1234,
     message: "FATAL EXCEPTION: main",
   });
   expect(parseLogcatLine("I/ReactNativeJS( 555): running app")).toEqual({
     level: "info",
     process: "ReactNativeJS",
+    pid: 555,
     message: "running app",
   });
   expect(parseLogcatLine("--------- beginning of main")).toBeNull();

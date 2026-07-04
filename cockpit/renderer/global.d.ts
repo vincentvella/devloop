@@ -120,6 +120,7 @@ export interface DevloopApi {
     androidInteractions: { ready: boolean; checks: { label: string; ok: boolean; fix?: string }[]; summary: string };
     androidBuild: { ready: boolean; checks: { label: string; ok: boolean; fix?: string }[]; summary: string };
   }>;
+  nativeSystemLogs: (on: boolean) => Promise<void>;
   openAndroid: () => Promise<{ ok: boolean; serial?: string; summary?: string }>;
   closeAndroid: () => Promise<{ ok: boolean }>;
   androidTap: (x: number, y: number) => Promise<void>;
