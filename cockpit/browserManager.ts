@@ -11,7 +11,8 @@
  */
 import { BrowserWindow, WebContentsView } from "electron";
 import type { IBrowserController, IBrowserManager, PaneInfo } from "../src/browserController.ts";
-import { DevServer, type DevStatus, detectDevCommand } from "../src/devServer.ts";
+import { assignMetroPort } from "../src/devPort.ts";
+import { DevServer, type DevStatus, detectDevCommand, readScripts } from "../src/devServer.ts";
 import type { LogBuffer } from "../src/logBuffer.ts";
 import { DEFAULT_PARTITION, partitionForCwd } from "../src/partition.ts";
 import { getPanes, setPanes } from "../src/registry.ts";
@@ -35,6 +36,8 @@ interface Pane {
   dev: DevServer; // this pane's own dev server
   cmd?: string;
   cwd?: string;
+  /** Free Metro/Expo port auto-assigned to this pane's dev server (avoids the 8081 clash). */
+  metroPort?: number;
   label?: string;
   url: string; // canonical URL (persisted) — may differ from what's displayed (e.g. a placeholder)
   partition: string; // the pane's session partition (per-project, #27); recreated on change
@@ -496,15 +499,24 @@ export class BrowserManager implements IBrowserManager {
     await this.ensurePaneSession(p); // a project's cwd drives its session partition (#27)
     const resolvedCwd = p.cwd || process.cwd();
     const resolvedCmd = p.cmd || detectDevCommand(resolvedCwd);
+    // Auto-assign a free Metro/Expo port so multiple native panes/instances don't collide
+    // on 8081 (which makes `expo start` prompt for another port + die non-interactively).
+    // Skip ports already handed to other live panes to avoid a same-instant double-assign.
+    const reserved = new Set<number>();
+    for (const other of this.panes.values()) if (other.metroPort) reserved.add(other.metroPort);
+    const assigned = await assignMetroPort(resolvedCmd, readScripts(resolvedCwd), reserved);
+    p.metroPort = assigned.port;
     p.awaitingUrl = true; // auto-navigate this pane when the server announces its URL
-    const st = p.dev.start(resolvedCmd, resolvedCwd);
+    const st = p.dev.start(assigned.cmd, resolvedCwd);
     this.persist();
     this.notify();
     return st;
   }
 
   devStop(id?: string): boolean {
-    const r = this.paneOrActive(id).dev.stop();
+    const p = this.paneOrActive(id);
+    const r = p.dev.stop();
+    p.metroPort = undefined; // free its Metro port back into the pool
     this.notify();
     return r;
   }

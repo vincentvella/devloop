@@ -53,6 +53,15 @@ export function detectDevCommand(cwd: string): string {
   );
 }
 
+/** A project's package.json `scripts` (empty if none) — for inspecting what a dev command runs. */
+export function readScripts(cwd: string): Record<string, string> {
+  try {
+    return JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")).scripts ?? {};
+  } catch {
+    return {};
+  }
+}
+
 /** Minimal dev-server surface the tool layer depends on (DevServer, or a per-pane facade). */
 export interface DevServerLike {
   // May be async in the cockpit (a project change can recreate the pane's session, #27).
