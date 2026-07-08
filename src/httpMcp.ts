@@ -58,6 +58,12 @@ export async function startHttpMcp(opts: {
   buildServer: () => Server;
   port: number;
   tries?: number;
+  /**
+   * Interface to bind. Defaults to `127.0.0.1` (loopback only) so the MCP endpoint —
+   * and the browser/server/native data flowing over it — is never reachable from the
+   * local network. Set to `0.0.0.0` only to deliberately expose a shared daemon.
+   */
+  host?: string;
   log?: (m: string) => void;
   /** Called with the live session count whenever a session opens or closes (for idle-shutdown). */
   onSessionsChanged?: (count: number) => void;
@@ -115,12 +121,13 @@ export async function startHttpMcp(opts: {
   });
 
   let chosen = opts.port;
+  const host = opts.host ?? "127.0.0.1";
   const tries = opts.tries ?? 10;
   for (let p = opts.port; p < opts.port + tries; p++) {
     const bound = await new Promise<boolean>((resolve, reject) => {
       const onErr = (err: NodeJS.ErrnoException) => (err.code === "EADDRINUSE" ? resolve(false) : reject(err));
       server.once("error", onErr);
-      server.listen(p, () => {
+      server.listen(p, host, () => {
         server.removeListener("error", onErr);
         chosen = p;
         resolve(true);
@@ -128,6 +135,6 @@ export async function startHttpMcp(opts: {
     });
     if (bound) break;
   }
-  opts.log?.(`MCP over HTTP listening on http://localhost:${chosen}/mcp`);
+  opts.log?.(`MCP over HTTP listening on http://${host}:${chosen}/mcp`);
   return { server, port: chosen };
 }
