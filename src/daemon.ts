@@ -52,9 +52,14 @@ export async function runDaemon(): Promise<void> {
   const idleMs = Number(process.env.DEVLOOP_DAEMON_IDLE_MS ?? 0);
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Loopback-only by default; set DEVLOOP_HTTP_HOST=0.0.0.0 to deliberately expose a
+  // shared daemon to the local network (understand the exposure before doing so).
+  const host = process.env.DEVLOOP_HTTP_HOST || "127.0.0.1";
+
   const { server, port: bound } = await startHttpMcp({
     buildServer: () => buildMcpServer("devloop-daemon"),
     port,
+    host,
     log,
     onSessionsChanged: (count) => {
       if (idleTimer) {
@@ -72,7 +77,7 @@ export async function runDaemon(): Promise<void> {
   writeDaemonState({
     pid: process.pid,
     port: bound,
-    url: `http://localhost:${bound}/mcp`,
+    url: `http://${host === "0.0.0.0" ? "localhost" : host}:${bound}/mcp`,
     startedAt: new Date().toISOString(),
   });
   log("daemon ready — connect MCP clients via HTTP/SSE at /mcp");
