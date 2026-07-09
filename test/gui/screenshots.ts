@@ -3,7 +3,7 @@
  *
  * Reuses the GUI test harness: launches the real Electron cockpit, drives it
  * against the bundled fixture web-app (panes + dev server + timeline), and
- * captures PNGs into site/shots/. Run: `bun run app:shots`
+ * captures PNGs into web/public/shots/. Run: `bun run app:shots`
  * (opens a real window briefly — that's expected). Must run under node, not
  * bun — Playwright's Electron control channel hangs under bun's runtime.
  * Needs macOS Screen Recording permission for the capturing terminal.
@@ -18,7 +18,7 @@ import { devServerAndLogs } from "./scenarios/devServer.ts";
 import { multiPane } from "./scenarios/panes.ts";
 import { repro } from "./scenarios/timeline.ts";
 
-const SHOTS = join(ROOT, "site", "shots");
+const SHOTS = join(ROOT, "web", "public", "shots");
 // A real, visually rich page for the browser pane (dogfooding) instead of the
 // bare test fixture, so the pane isn't mostly empty in the captures.
 const SHOWCASE_URL = "https://devloop.build";

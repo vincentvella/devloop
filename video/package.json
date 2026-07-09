@@ -5,7 +5,7 @@
   "description": "Remotion source for the Devloop site hero loop",
   "scripts": {
     "studio": "remotion studio",
-    "render": "remotion render DevloopHero ../site/demo.mp4 --codec h264 && remotion render DevloopHero ../site/demo.webm --codec vp8 && remotion still DevloopHero ../site/demo-poster.png --frame 300"
+    "render": "remotion render DevloopHero ../web/public/demo.mp4 --codec h264 && remotion render DevloopHero ../web/public/demo.webm --codec vp8 && remotion still DevloopHero ../web/public/demo-poster.png --frame 300"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.485",
