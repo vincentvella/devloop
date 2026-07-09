@@ -40,8 +40,15 @@ export function computeFingerprint(
 
 function defaultNodeRun(cmd: string, args: string[], cwd: string, env: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { cwd, env: { ...process.env, ...env }, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) =>
-      err ? reject(err) : resolve(stdout),
+    // Bound the compute: @expo/fingerprint hashes the whole native project and can run
+    // long (or wedge) on large Expo apps, which would otherwise leave the cockpit's
+    // "detecting…" indicator stuck forever. On timeout execFile rejects → the caller's
+    // .catch maps it to null (the staleness badge just degrades to "unknown").
+    execFile(
+      cmd,
+      args,
+      { cwd, env: { ...process.env, ...env }, maxBuffer: 16 * 1024 * 1024, timeout: 15_000, killSignal: "SIGKILL" },
+      (err, stdout) => (err ? reject(err) : resolve(stdout)),
     );
   });
 }
