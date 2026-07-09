@@ -7,6 +7,7 @@
  * touches the transport or knows which browser substrate is behind it.
  */
 
+import { basename } from "node:path";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { IBrowserController, IBrowserManager } from "./browserController.ts";
 import { buildBundle } from "./bundle.ts";
@@ -360,7 +361,10 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       if (args.project && !proj) throw new Error(`no saved project named "${args.project}"`);
       const cwd = (args.cwd as string | undefined) ?? proj?.cwd ?? process.cwd();
       const cmd = (args.cmd as string | undefined) ?? proj?.cmd ?? detectDevCommand(cwd);
-      return json(await devServer.start(cmd, cwd));
+      // Suggest a pane name (cockpit applies it only if the pane is still unlabeled):
+      // the registered project name, else the cwd's basename.
+      const label = proj?.name ?? (basename(cwd) || undefined);
+      return json(await devServer.start(cmd, cwd, label));
     }
     case "dev_stop":
       return json({ stopped: devServer.stop() });
@@ -411,8 +415,18 @@ export async function handleTool(name: string, args: Record<string, unknown> = {
       return json({ projects: removeProject(args.name as string) });
     case "pane_list":
       return json({ panes: asManager().listPanes() });
-    case "pane_new":
-      return json(await asManager().newPane(args.url as string | undefined));
+    case "pane_new": {
+      // Optionally scope the new pane to a project: a saved `project`, or explicit
+      // `cwd`/`cmd`/`label`. cwd isolates its storage partition; url/cmd fall back to
+      // the project's. Without any of these it's a blank, unscoped pane (as before).
+      const proj = args.project ? getProject(args.project as string) : undefined;
+      if (args.project && !proj) throw new Error(`no saved project named "${args.project}"`);
+      const cwd = (args.cwd as string | undefined) ?? proj?.cwd;
+      const cmd = (args.cmd as string | undefined) ?? proj?.cmd;
+      const label = (args.label as string | undefined) ?? proj?.name ?? (cwd ? basename(cwd) || undefined : undefined);
+      const url = (args.url as string | undefined) ?? proj?.url;
+      return json(await asManager().newPane(url, label, cmd, cwd));
+    }
     case "pane_select":
       return json(asManager().selectPane(args.id as string));
     case "pane_close":

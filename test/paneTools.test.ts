@@ -9,11 +9,17 @@ test("pane_list returns the manager's panes", async () => {
   expect(browser.listPanes).toHaveBeenCalled();
 });
 
-test("pane_new forwards the url", async () => {
+test("pane_new forwards the url (unscoped: no label/cmd/cwd)", async () => {
   const { browser } = configure();
   const r = parse(await handleTool("pane_new", { url: "http://localhost:3000" }));
   expect(r).toMatchObject({ id: "p2", url: "http://localhost:3000" });
-  expect(browser.newPane).toHaveBeenCalledWith("http://localhost:3000");
+  expect(browser.newPane).toHaveBeenCalledWith("http://localhost:3000", undefined, undefined, undefined);
+});
+
+test("pane_new scopes the pane to a cwd and names it from the basename", async () => {
+  const { browser } = configure();
+  await handleTool("pane_new", { url: "http://localhost:3000", cwd: "/repos/web", cmd: "bun run dev" });
+  expect(browser.newPane).toHaveBeenCalledWith("http://localhost:3000", "web", "bun run dev", "/repos/web");
 });
 
 test("pane_select / pane_pop return the pane", async () => {
