@@ -105,10 +105,21 @@ export class DevServer implements DevServerLike {
     // or SIGKILL of the parent can't orphan the dev server (e.g. leaving :3000
     // held). On normal exit of the command, the watchdog is torn down.
     const parent = process.pid;
+    // Poll the parent every 1s; once it's gone, SIGTERM the whole group then, after a
+    // grace period, SIGKILL it. Metro/expo can ignore or slow-handle SIGTERM and keep
+    // its port bound — without the SIGKILL escalation the dev server orphans and leaks
+    // :8081/:3000 after the cockpit dies (the reason ports leaked on kill).
+    // `trap '' TERM` is load-bearing: the watchdog signals its OWN process group, so
+    // without ignoring SIGTERM it would kill itself at the first `kill -TERM -$$` and
+    // never reach the SIGKILL — a SIGTERM-ignoring Metro would then survive and keep its
+    // port (verified: the escalation only reaps a stubborn child WITH this trap).
     const wrapped =
       `( ${cmd} ) & CMD=$!; ` +
-      `( while kill -0 ${parent} 2>/dev/null; do sleep 2; done; kill -TERM -$$ 2>/dev/null ) & WATCH=$!; ` +
-      `wait $CMD; CODE=$?; kill $WATCH 2>/dev/null; exit $CODE`; // propagate the dev cmd's exit code
+      `( trap '' TERM; while kill -0 ${parent} 2>/dev/null; do sleep 1; done; ` +
+      `kill -TERM -$$ 2>/dev/null; sleep 3; kill -KILL -$$ 2>/dev/null ) & WATCH=$!; ` +
+      // SIGKILL the watchdog on normal exit — it traps SIGTERM, so a plain `kill` wouldn't
+      // stop it and it would linger polling the (now-idle) parent.
+      `wait $CMD; CODE=$?; kill -KILL $WATCH 2>/dev/null; exit $CODE`; // propagate the dev cmd's exit code
     this.child = spawn(wrapped, {
       cwd,
       shell: true,
@@ -179,13 +190,21 @@ export class DevServer implements DevServerLike {
   stop(): boolean {
     if (!this.child) return false;
     const pid = this.child.pid;
-    try {
-      // Negative pid → signal the whole process group (kills grandchildren too).
-      if (pid) process.kill(-pid, "SIGTERM");
-      else this.child.kill("SIGTERM");
-    } catch {
-      this.child.kill("SIGTERM"); // group already gone / not a leader
-    }
+    const child = this.child;
+    const signalGroup = (sig: NodeJS.Signals): void => {
+      try {
+        // Negative pid → signal the whole process group (kills grandchildren too).
+        if (pid) process.kill(-pid, sig);
+        else child.kill(sig);
+      } catch {
+        /* group already gone */
+      }
+    };
+    signalGroup("SIGTERM");
+    // Escalate to SIGKILL shortly after: Metro/expo can ignore or slow-handle SIGTERM
+    // and keep its port bound. Manual stop runs while the cockpit is alive so this timer
+    // fires; on a cockpit crash the in-shell watchdog does the same escalation.
+    if (pid) setTimeout(() => signalGroup("SIGKILL"), 3000).unref?.();
     this.child = undefined;
     this.meta = undefined;
     return true;
