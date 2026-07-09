@@ -385,10 +385,23 @@ export const TOOLS = [
   }),
   defineTool({
     name: "pane_new",
-    purpose: "Open a new browser pane and make it active. Optionally navigate it to a URL.",
+    purpose:
+      "Open a new browser pane and make it active. Optionally navigate it to a URL and/or scope it to a project.",
+    behavior:
+      "Pass a saved `project` (resolves cwd/cmd/url/name), or explicit `cwd`/`cmd`/`label`, to scope the pane — " +
+      "cwd isolates its storage partition and names it. With none of these it's a blank, unscoped pane.",
     alternatives: "To switch panes use pane_select; to close use pane_close. (Cockpit only.)",
     annotations: { openWorldHint: true, idempotentHint: false },
-    params: { url: { type: "string", description: "Optional URL to open in the new pane (else a blank pane)." } },
+    params: {
+      url: { type: "string", description: "Optional URL to open (else the project's URL, else a blank pane)." },
+      project: { type: "string", description: "Name of a saved project to scope this pane to (see project_list)." },
+      cwd: { type: "string", description: "Project directory to scope the pane to (isolates its storage partition)." },
+      cmd: { type: "string", description: "Dev command to associate with the pane (used by a later dev_start)." },
+      label: {
+        type: "string",
+        description: "Display name for the pane (defaults to the project name or cwd basename).",
+      },
+    },
   }),
   defineTool({
     name: "pane_select",

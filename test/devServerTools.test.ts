@@ -22,7 +22,16 @@ test("dev_start with explicit cmd+cwd starts the server and returns its status",
   const { devServer } = configure();
   const r = parse(await handleTool("dev_start", { cmd: "bun run dev", cwd: "/proj" }));
   expect(r).toMatchObject({ running: true });
-  expect(devServer.start).toHaveBeenCalledWith("bun run dev", "/proj");
+  // Passes a suggested pane label derived from the cwd basename (cockpit names an
+  // unlabeled pane from it; headless ignores it).
+  expect(devServer.start).toHaveBeenCalledWith("bun run dev", "/proj", "proj");
+});
+
+test("dev_start with a saved project passes the project name as the label", async () => {
+  const { devServer } = configure();
+  await handleTool("project_add", { name: "shop", cwd: "/repos/storefront", cmd: "bun dev" });
+  parse(await handleTool("dev_start", { project: "shop" }));
+  expect(devServer.start).toHaveBeenCalledWith("bun dev", "/repos/storefront", "shop");
 });
 
 test("dev_start with an unknown project name throws", async () => {

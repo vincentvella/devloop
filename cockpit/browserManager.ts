@@ -492,10 +492,11 @@ export class BrowserManager implements IBrowserManager {
     this.notify();
   }
 
-  async devStart(id?: string, cmd?: string, cwd?: string): Promise<DevStatus> {
+  async devStart(id?: string, cmd?: string, cwd?: string, label?: string): Promise<DevStatus> {
     const p = this.paneOrActive(id);
     if (cmd !== undefined) p.cmd = cmd;
     if (cwd !== undefined) p.cwd = cwd;
+    if (label && !p.label) p.label = label; // name an unlabeled pane from its project (agent-driven flows)
     await this.ensurePaneSession(p); // a project's cwd drives its session partition (#27)
     const resolvedCwd = p.cwd || process.cwd();
     const resolvedCmd = p.cmd || detectDevCommand(resolvedCwd);

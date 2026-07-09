@@ -253,7 +253,7 @@ async function main() {
 
   // The tool layer's dev_* tools act on the ACTIVE pane's dev server.
   const devFacade: DevServerLike = {
-    start: (cmd, cwd) => manager.devStart(undefined, cmd, cwd),
+    start: (cmd, cwd, label) => manager.devStart(undefined, cmd, cwd, label),
     stop: () => manager.devStop(),
     status: () => manager.devStatus(),
   };

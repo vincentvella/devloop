@@ -75,7 +75,8 @@ export interface PaneInfo {
  */
 export interface IBrowserManager extends ITargetController {
   listPanes(): PaneInfo[];
-  newPane(url?: string): Promise<PaneInfo>;
+  /** `label`/`cmd`/`cwd` scope the pane to a project (cwd drives its storage partition). */
+  newPane(url?: string, label?: string, cmd?: string, cwd?: string): Promise<PaneInfo>;
   selectPane(id: string): PaneInfo;
   closePane(id: string): boolean;
   popPane(id: string): PaneInfo;
