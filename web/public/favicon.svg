@@ -1,0 +1,19 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- cyan (server) flows into blue (browser): one continuous loop -->
+    <linearGradient id="flow" x1="82" y1="80" x2="186" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#56d4dd"/>
+      <stop offset="1" stop-color="#588cff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- app-icon plate -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+
+  <!-- lowercase "d": the bowl is the loop, the stem is the ascender -->
+  <path d="M 174 56 L 174 196" stroke="url(#flow)" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="128" cy="150" r="46" stroke="url(#flow)" stroke-width="24" fill="none"/>
+
+  <!-- the correlated moment, inside the loop -->
+  <circle cx="128" cy="150" r="15" fill="#ffd33d"/>
+</svg>

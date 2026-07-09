@@ -48,8 +48,17 @@
   "trustedDependencies": [
     "electron"
   ],
+  "workspaces": [
+    "web"
+  ],
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
   "scripts": {
     "start": "bun run src/index.ts",
+    "site:dev": "bun --filter=devloop-site run dev",
+    "site:build": "bun --filter=devloop-site run build",
+    "site:start": "bun --filter=devloop-site run start",
     "test": "bun test",
     "test:e2e": "bun run test-smoke.ts && bun run app:selftest",
     "test:daemon": "bun run mcp:build && bun run scripts/test-daemon.ts",
@@ -90,6 +99,7 @@
     "@radix-ui/react-tooltip": "^1.2.11",
     "@tailwindcss/cli": "^4.3.2",
     "@types/bun": "latest",
+    "@types/node": "24.13.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "electron": "^42.5.0",
