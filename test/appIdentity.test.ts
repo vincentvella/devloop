@@ -50,6 +50,18 @@ test("iOS bundle id: $(PRODUCT_BUNDLE_IDENTIFIER) resolves from the pbxproj (ski
   rmSync(dir, { recursive: true, force: true });
 });
 
+test("iOS bundle id: ignores DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO", () => {
+  // Real-world (bonfire): a `DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;` line
+  // preceding the real id would match the unanchored regex → "NO". Must pick the real id.
+  const dir = proj({
+    "ios/App/Info.plist": "<key>CFBundleIdentifier</key>\n<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>",
+    "ios/App.xcodeproj/project.pbxproj":
+      "DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;\nPRODUCT_BUNDLE_IDENTIFIER = com.vincentvella.bonfire;\n",
+  });
+  expect(resolveIosBundleId(dir)).toBe("com.vincentvella.bonfire");
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("Android package: app.json wins, else build.gradle, else manifest", () => {
   const cfg = proj({ "app.json": JSON.stringify({ expo: { android: { package: "com.acme.app" } } }) });
   expect(resolveAndroidPackage(cfg)).toBe("com.acme.app");

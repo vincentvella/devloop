@@ -53,9 +53,11 @@ function pbxProductBundleId(iosDir: string): string | null {
   if (!proj) return null;
   try {
     const pbx = readFileSync(join(iosDir, proj, "project.pbxproj"), "utf8");
-    const ids = [...pbx.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = "?([\w.-]+)"?;/g)]
+    // \b so we don't match the substring of DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER
+    // (= YES/NO), and require a reverse-DNS dot so bare values like NO/YES never win.
+    const ids = [...pbx.matchAll(/\bPRODUCT_BUNDLE_IDENTIFIER = "?([\w.-]+)"?;/g)]
       .map((m) => m[1])
-      .filter((id): id is string => !!id && !id.includes("$") && !/\.(Tests|UITests)$/i.test(id));
+      .filter((id): id is string => !!id && id.includes(".") && !id.includes("$") && !/\.(Tests|UITests)$/i.test(id));
     return ids[0] ?? null;
   } catch {
     return null;
