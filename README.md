@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://devloop.build"><img src="https://raw.githubusercontent.com/vincentvella/devloop/main/site/shots/cockpit.png" alt="The Devloop cockpit: a browser pane beside a unified, filterable timeline of correlated server and browser logs" width="820" /></a>
+  <a href="https://devloop.build"><img src="https://raw.githubusercontent.com/vincentvella/devloop/main/web/public/shots/cockpit.png" alt="The Devloop cockpit: a browser pane beside a unified, filterable timeline of correlated server and browser logs" width="820" /></a>
 </p>
 
 ---
