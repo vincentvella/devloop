@@ -64,7 +64,7 @@ export const useDevloopStore = create<DevloopState>((set, get) => ({
     set({ entries: (await dl().getLogs({ limit: 1000 })).map((e) => ({ ...e })) });
     await get().refreshProjects();
     set({ exts: await dl().extList() });
-    dl().onPush((e) => get().appendEntry(e));
+    dl().onPush((rows) => get().appendEntries(rows as Entry[])); // batched (one set() per ~50ms flush)
     dl().onExtChanged(
       () =>
         void dl()

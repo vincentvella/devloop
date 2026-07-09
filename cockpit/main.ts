@@ -31,7 +31,7 @@ const BASE = app.isPackaged ? join(app.getAppPath(), "out") : dirname(resolve(pr
 import { buildIssueUrl, errorText } from "../src/crashReport.ts";
 import type { DevServerLike } from "../src/devServer.ts";
 import { startHttpMcp } from "../src/httpMcp.ts";
-import { LogBuffer } from "../src/logBuffer.ts";
+import { LogBuffer, type LogEntry } from "../src/logBuffer.ts";
 import { buildMcpServer } from "../src/mcpServer.ts";
 import type { Platform } from "../src/nativeBuild.ts";
 import { nativeEnvReady, nativeEnvSummary } from "../src/nativeEnv.ts";
@@ -134,8 +134,23 @@ function createWindows(): void {
   shellWin.on("closed", () => quitHard());
   void shellWin.loadFile(join(BASE, "renderer/index.html"));
 
-  // Stream live events to the timeline window.
-  buffer.onPush((e) => shellWin?.webContents.send("devloop:push", e));
+  // Stream live events to the timeline window — COALESCED into ~50ms batches. A chatty
+  // source (e.g. a spammy native os_log stream) can emit thousands of lines/sec; sending
+  // one IPC + one React state update per line freezes the renderer (the UI stops
+  // repainting/resizing). Batching turns a burst into a single array + one appendEntries.
+  let pushQueue: LogEntry[] = [];
+  let pushTimer: ReturnType<typeof setTimeout> | undefined;
+  const flushPush = () => {
+    pushTimer = undefined;
+    if (!pushQueue.length) return;
+    const batch = pushQueue;
+    pushQueue = [];
+    shellWin?.webContents.send("devloop:push", batch);
+  };
+  buffer.onPush((e) => {
+    pushQueue.push(e);
+    if (!pushTimer) pushTimer = setTimeout(flushPush, 50);
+  });
 }
 
 const WELCOME =
