@@ -39,15 +39,23 @@ export function projectName(cwd: string): string {
 /** Pick a dev command from a project's package.json scripts. Throws if none found. */
 export function detectDevCommand(cwd: string): string {
   let scripts: Record<string, string> = {};
+  let isExpo = false;
   try {
     const pkg = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"));
     scripts = pkg.scripts ?? {};
+    isExpo = !!(pkg.dependencies?.expo || pkg.devDependencies?.expo);
   } catch {
     throw new Error(`no package.json found in ${cwd}; pass an explicit cmd`);
   }
-  for (const name of ["dev", "develop", "web", "start", "serve"]) {
+  // Expo apps: prefer the all-target `start` (expo start) over the web-only `web`
+  // (expo start --web). One Metro then serves web AND the native dev-client, so
+  // devloop's Web·iOS·Android switcher works and native panes don't collide on a
+  // web-only bundler. Non-Expo projects keep web-first (Vite/Next/CRA dev servers).
+  const order = isExpo ? ["dev", "develop", "start", "web", "serve"] : ["dev", "develop", "web", "start", "serve"];
+  for (const name of order) {
     if (scripts[name]) return `bun run ${name}`;
   }
+  if (isExpo) return "bunx expo start"; // Expo with no matching script → canonical all-target Metro
   throw new Error(
     `no dev script found in ${cwd}/package.json (looked for dev/develop/web/start/serve); pass an explicit cmd`,
   );

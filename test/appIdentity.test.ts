@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveAndroidPackage, resolveIosBundleId } from "../src/appIdentity.ts";
+import { resolveAndroidPackage, resolveAppScheme, resolveIosBundleId } from "../src/appIdentity.ts";
 
 function proj(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), "dl-appid-"));
@@ -18,6 +18,16 @@ test("iOS bundle id: app.json wins", () => {
   const dir = proj({ "app.json": JSON.stringify({ expo: { ios: { bundleIdentifier: "com.acme.app" } } }) });
   expect(resolveIosBundleId(dir)).toBe("com.acme.app");
   rmSync(dir, { recursive: true, force: true });
+});
+
+test("resolveAppScheme: string, first-of-array, and absent", () => {
+  const a = proj({ "app.json": JSON.stringify({ expo: { scheme: "caliburr" } }) });
+  expect(resolveAppScheme(a)).toBe("caliburr");
+  const b = proj({ "app.json": JSON.stringify({ expo: { scheme: ["bonfire", "bonfire2"] } }) });
+  expect(resolveAppScheme(b)).toBe("bonfire");
+  const c = proj({ "app.json": JSON.stringify({ expo: { ios: { bundleIdentifier: "x" } } }) });
+  expect(resolveAppScheme(c)).toBeNull();
+  for (const d of [a, b, c]) rmSync(d, { recursive: true, force: true });
 });
 
 test("iOS bundle id: literal Info.plist fallback (no app.json id)", () => {

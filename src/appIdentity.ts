@@ -89,3 +89,13 @@ export function androidPackageFromNative(cwd: string): string | null {
 export function resolveAppId(cwd: string, platform: "ios" | "android"): string | null {
   return platform === "ios" ? resolveIosBundleId(cwd) : resolveAndroidPackage(cwd);
 }
+
+/** The app's custom URL scheme (Expo `expo.scheme`) — for the dev-client deep link that
+ *  re-points an installed dev build at a specific Metro. First entry if it's an array;
+ *  null when unset. */
+export function resolveAppScheme(cwd: string): string | null {
+  const scheme = (readAppJsonExpo(cwd) as { scheme?: string | string[] } | null)?.scheme;
+  if (typeof scheme === "string") return scheme.trim() || null;
+  if (Array.isArray(scheme) && typeof scheme[0] === "string") return scheme[0].trim() || null;
+  return null;
+}
