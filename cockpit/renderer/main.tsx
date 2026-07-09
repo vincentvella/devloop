@@ -760,12 +760,17 @@ function App() {
       try {
         const st = await dl().devStart({});
         if (st.name) await labelActive(st.name);
+        // If the pane's target is native, the app runs on the device — open the
+        // simulator/mirror so the pane shows it, instead of auto-navigating the
+        // browser pane to Metro's URL (which just serves the Expo manifest JSON).
+        if (viewTarget === "ios") await dl().openSimulator();
+        else if (viewTarget === "android") await dl().openAndroid();
       } catch (e) {
         setReproStatus(`dev: ${(e as Error)?.message?.split(": ").pop() ?? "start failed"}`);
       }
     }
     await refreshPanes();
-  }, [devRunning, dev, labelActive, refreshPanes]);
+  }, [devRunning, dev, labelActive, refreshPanes, viewTarget]);
 
   const runRepro = useCallback(
     async (actions: Step[]) => {
