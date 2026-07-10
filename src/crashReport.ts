@@ -33,7 +33,14 @@ export interface CrashContext {
 
 /** Best-effort human-readable text for any thrown value. */
 export function errorText(err: unknown): string {
-  if (err instanceof Error) return err.stack || `${err.name}: ${err.message}`;
+  if (err instanceof Error) {
+    const stack = err.stack ?? "";
+    const head = `${err.name}: ${err.message}`;
+    // A global Error.prepareStackTrace (source-map tooling installs one transitively)
+    // can format `.stack` WITHOUT the message — never let a crash report drop it.
+    if (err.message && !stack.includes(err.message)) return stack ? `${head}\n${stack}` : head;
+    return stack || head;
+  }
   if (typeof err === "string") return err;
   try {
     return JSON.stringify(err);
