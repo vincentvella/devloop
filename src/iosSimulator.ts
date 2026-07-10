@@ -11,13 +11,14 @@ import { execFile, spawn as nodeSpawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LogBuffer } from "./logBuffer.ts";
 
 export interface NativeLogLine {
   ts?: string;
   /** Normalized level: log | info | debug | error | fault | activity */
   level: string;
   process?: string;
+  /** OS process id that emitted the line — used to route logs to the owning pane's app. */
+  pid?: number;
   message: string;
 }
 
@@ -42,9 +43,9 @@ const NOISE = /^(Filtering the log data|Timestamp\s|Skipping debug messages|--- 
 export function parseLogLine(raw: string): NativeLogLine | null {
   const line = raw.replace(/\r?\n$/, "").trimEnd();
   if (!line || NOISE.test(line)) return null;
-  const m = /^(\d{4}-\d\d-\d\d \S+)\s+([A-Za-z]{2})\s+(\S+?)\[\d+:[0-9a-fx]+\]\s+(.*)$/.exec(line);
+  const m = /^(\d{4}-\d\d-\d\d \S+)\s+([A-Za-z]{2})\s+(\S+?)\[(\d+):[0-9a-fx]+\]\s+(.*)$/.exec(line);
   if (m) {
-    return { ts: m[1], level: TYPE_LEVEL[m[2]!] ?? "log", process: m[3], message: m[4]!.trim() };
+    return { ts: m[1], level: TYPE_LEVEL[m[2]!] ?? "log", process: m[3], pid: Number(m[4]), message: m[5]!.trim() };
   }
   return { level: "log", message: line };
 }
@@ -83,14 +84,12 @@ export class NativeLogStream {
   private proc?: LineProc;
   private partial = "";
 
-  constructor(
-    private readonly buffer: LogBuffer,
-    private readonly opts: { device: string; match?: string; spawn?: SpawnLike; target?: string },
-  ) {}
+  constructor(private readonly opts: { device: string; onLine: (line: NativeLogLine) => void; spawn?: SpawnLike }) {}
 
   start(): void {
     const spawn = this.opts.spawn ?? ((cmd, args) => nodeSpawn(cmd, args) as unknown as LineProc);
-    this.proc = spawn("xcrun", logStreamArgs({ device: this.opts.device, match: this.opts.match }));
+    // Broad capture — one stream per device; routing to the owning pane happens per line.
+    this.proc = spawn("xcrun", logStreamArgs({ device: this.opts.device }));
     this.proc.stdout?.on("data", (chunk) => this.onData(chunk.toString()));
   }
 
@@ -101,14 +100,7 @@ export class NativeLogStream {
     this.partial = lines.pop() ?? "";
     for (const line of lines) {
       const parsed = parseLogLine(line);
-      if (parsed)
-        this.buffer.push(
-          "native",
-          parsed.level,
-          parsed.message,
-          parsed.process ? { process: parsed.process } : undefined,
-          this.opts.target,
-        );
+      if (parsed) this.opts.onLine(parsed);
     }
   }
 

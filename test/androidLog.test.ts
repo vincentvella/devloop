@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { AndroidLogStream, adbBinary } from "../src/androidLog.ts";
-import { LogBuffer } from "../src/logBuffer.ts";
+import type { NativeLogLine } from "../src/iosSimulator.ts";
 
 test("adbBinary prefers a real SDK platform-tools path, else falls back to PATH", () => {
   // No SDK roots set + bogus home → falls back to bare "adb".
@@ -9,12 +9,12 @@ test("adbBinary prefers a real SDK platform-tools path, else falls back to PATH"
   );
 });
 
-test("AndroidLogStream parses spawned logcat into native buffer entries", () => {
-  const buffer = new LogBuffer(100);
+test("AndroidLogStream parses spawned logcat into log lines", () => {
   let spawnedArgs: string[] = [];
-  const stream = new AndroidLogStream(buffer, {
+  const lines: NativeLogLine[] = [];
+  const stream = new AndroidLogStream({
     serial: "emulator-5554",
-    target: "pane1",
+    onLine: (l) => lines.push(l),
     spawn: (_cmd, args) => {
       spawnedArgs = args;
       return { stdout: null, kill() {} };
@@ -27,7 +27,7 @@ test("AndroidLogStream parses spawned logcat into native buffer entries", () => 
   // Feed two lines split across chunks; a banner is dropped.
   stream.onData("E/AndroidRuntime( 12): boom\n--------- beginning of main\nI/ReactNativeJS( 3): hel");
   stream.onData("lo\n");
-  const entries = buffer.query({ source: "native" });
-  expect(entries.map((e) => e.line)).toEqual(["boom", "hello"]);
-  expect(entries.map((e) => e.stream)).toEqual(["error", "info"]);
+  expect(lines.map((l) => l.message)).toEqual(["boom", "hello"]);
+  expect(lines.map((l) => l.level)).toEqual(["error", "info"]);
+  expect(lines[0]?.pid).toBe(12);
 });

@@ -10,7 +10,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { adbLogcatArgs, adbScreencapArgs, parseLogcatLine } from "./adb.ts";
-import type { LogBuffer } from "./logBuffer.ts";
+import type { NativeLogLine } from "./iosSimulator.ts";
 
 /**
  * Resolve the `adb` binary. The Android SDK's platform-tools often isn't on a GUI
@@ -42,12 +42,12 @@ export class AndroidLogStream {
   private partial = "";
 
   constructor(
-    private readonly buffer: LogBuffer,
-    private readonly opts: { serial: string; spawn?: SpawnLike; target?: string; adb?: string },
+    private readonly opts: { serial: string; onLine: (line: NativeLogLine) => void; spawn?: SpawnLike; adb?: string },
   ) {}
 
   start(): void {
     const spawn = this.opts.spawn ?? ((cmd, args) => nodeSpawn(cmd, args) as unknown as LineProc);
+    // Broad capture — one stream per device; routing to the owning pane happens per line.
     this.proc = spawn(this.opts.adb ?? adbBinary(), adbLogcatArgs(this.opts.serial));
     this.proc.stdout?.on("data", (chunk) => this.onData(chunk.toString()));
   }
@@ -59,14 +59,7 @@ export class AndroidLogStream {
     this.partial = lines.pop() ?? "";
     for (const line of lines) {
       const parsed = parseLogcatLine(line);
-      if (parsed)
-        this.buffer.push(
-          "native",
-          parsed.level,
-          parsed.message,
-          parsed.process ? { process: parsed.process } : undefined,
-          this.opts.target,
-        );
+      if (parsed) this.opts.onLine(parsed);
     }
   }
 

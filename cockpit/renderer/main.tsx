@@ -525,6 +525,7 @@ function App() {
   const nativeInfo = useDevloopStore((s) => s.nativeInfo);
   const [detecting, setDetecting] = useState(false); // probing a project's targets (expo config + fingerprint)
   const [building, setBuilding] = useState(false);
+  const [systemLogs, setSystemLogs] = useState(false); // capture the device/system native-log lane
   const [switching, setSwitching] = useState<string | null>(null); // bringing up a native device (iOS sim / Android mirror)
   const [viewTarget, setViewTarget] = useState("web"); // Expo: which target the pane shows (web | ios)
   const [sidebarHidden, setSidebarHidden] = useState(false);
@@ -1086,6 +1087,17 @@ function App() {
                   ⚠
                 </span>
               )}
+              <button
+                className={`seg${systemLogs ? " on" : ""}`}
+                title="also capture device/system native logs (permissions, push, location…) not attributable to this app"
+                onClick={() => {
+                  const next = !systemLogs;
+                  setSystemLogs(next);
+                  void dl().nativeSystemLogs(next);
+                }}
+              >
+                system logs
+              </button>
             </>
           )}
           <input

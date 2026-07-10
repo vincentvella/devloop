@@ -34,6 +34,7 @@ import {
   nativeEnvReady,
   nativeEnvSummary,
 } from "../src/nativeEnv.ts";
+import { parseAndroidPidof } from "../src/nativeLogRouter.ts";
 import { deriveAppMatch, metroBaseFromUrl } from "../src/nativeObservability.ts";
 import { getNativeCache, getProjectFingerprint, setNativeCache } from "../src/registry.ts";
 import { detectTargetKind } from "../src/target.ts";
@@ -167,11 +168,15 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     }
     const metroBase = paneMetroBase(active);
     if (active && metroBase) {
+      const cwd = active.dev?.cwd;
       const rn = observability.attach({
         paneId: active.id,
         metroBase,
         device: "booted",
-        appMatch: active.dev?.cwd ? appMatchFor(active.dev.cwd) : undefined,
+        platform: "ios",
+        appMatch: cwd ? appMatchFor(cwd) : undefined,
+        bundleId: cwd ? (resolveAppId(cwd, "ios") ?? undefined) : undefined,
+        pid: cwd ? await appPid(cwd, "ios") : undefined,
       });
       getManager().setNativeController(active.id, rn); // browser_* → the RN/idb controller while iOS is active
     } else {
@@ -211,11 +216,15 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     const metroBase = paneMetroBase(active);
     if (active) {
       // With Metro → JS over CDP too; without → still mirror + allow taps.
+      const cwd = active.dev?.cwd;
       const rn = observability.attach({
         paneId: active.id,
         metroBase: metroBase || "http://localhost:8081",
         device: serial,
         platform: "android",
+        appMatch: cwd ? appMatchFor(cwd) : undefined,
+        bundleId: cwd ? (resolveAppId(cwd, "android") ?? undefined) : undefined,
+        pid: cwd ? await appPid(cwd, "android") : undefined,
       });
       getManager().setNativeController(active.id, rn);
     }
@@ -282,6 +291,23 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     }
   }
 
+  /** Current OS pid of a project's app on the active device (launchctl list / pidof), or undefined. */
+  async function appPid(cwd: string, platform: "ios" | "android"): Promise<number | undefined> {
+    const id = resolveAppId(cwd, platform);
+    if (!id) return undefined;
+    try {
+      if (platform === "android") return parseAndroidPidof(await runAdb(["shell", "pidof", id])) ?? undefined;
+      const { stdout } = await execFileP("xcrun", ["simctl", "spawn", "booted", "launchctl", "list"], {
+        timeout: 5000,
+      });
+      const line = stdout.split("\n").find((l) => l.includes(id));
+      const pid = line ? Number(line.trim().split(/\s+/)[0]) : Number.NaN;
+      return Number.isInteger(pid) ? pid : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Foreground the pane's app on the active device so the preview follows a pane swap.
    *  App id is resolved statically (app.json → the generated native project). If the app
    *  isn't installed (or can't be resolved), send the device Home instead of leaving the
@@ -324,6 +350,14 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
       }
       if (devClientUrl)
         buffer.push("native", "log", `app-focus: pointed ${appId} at ${metroBase} (dev-client)`, undefined, active?.id);
+      // Re-scope this pane's native logs to the freshly-launched process (pid changes per launch).
+      if (active)
+        observability.trackApp(active.id, {
+          paneId: active.id,
+          bundleId: appId,
+          name: appMatchFor(cwd),
+          pid: await appPid(cwd, platform),
+        });
     } catch {
       buffer.push(
         "native",
@@ -333,6 +367,11 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
         active?.id,
       );
     }
+  }
+
+  /** Toggle capture of the device/system native-log lane (logs not attributable to a pane's app). */
+  function setSystemLogs(on: boolean): void {
+    observability.setSystemView(on);
   }
 
   /** Re-probe all native readiness (iOS + Android interactions + Android build) — no build/open. */
@@ -438,5 +477,6 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     appMatchFor,
     nativeInfo,
     foregroundApp,
+    setSystemLogs,
   };
 }

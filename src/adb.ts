@@ -167,8 +167,8 @@ const PRIORITY: Readonly<Record<string, string>> = {
 export function parseLogcatLine(raw: string): NativeLogLine | null {
   const line = raw.replace(/\r?\n$/, "").trimEnd();
   if (!line || /^-{3,}/.test(line)) return null;
-  const m = /^([VDIWEF])\/([^(]+)\(\s*\d+\):\s?(.*)$/.exec(line);
-  if (m) return { level: PRIORITY[m[1]!] ?? "log", process: m[2]!.trim(), message: m[3]! };
+  const m = /^([VDIWEF])\/([^(]+)\(\s*(\d+)\):\s?(.*)$/.exec(line);
+  if (m) return { level: PRIORITY[m[1]!] ?? "log", process: m[2]!.trim(), pid: Number(m[3]), message: m[4]! };
   return { level: "log", message: line };
 }
 
