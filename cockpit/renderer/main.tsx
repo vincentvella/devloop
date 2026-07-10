@@ -30,6 +30,7 @@ import {
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { buildDisplayRows, type DisplayRow, parseOsLog } from "../../src/logModel.ts";
+import { EXTRA_HINTS, keyToAction, prettyAccel, SHORTCUTS } from "../../src/shortcuts.ts";
 import { type UpdateStatus, updateStatusLabel } from "../../src/update.ts";
 import type { Entry, Pane, Project, Step } from "./global";
 import { useDevloopStore } from "./store";
@@ -528,6 +529,7 @@ function App() {
   const [filter, setFilter] = useState("");
   const [chips, setChips] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false); // gear → global modal (extensions, updates)
+  const [cheatOpen, setCheatOpen] = useState(false); // ⌘/ → keyboard-shortcut cheatsheet
   const [nativeEnv, setNativeEnv] = useState<{
     ready: boolean;
     checks: { label: string; ok: boolean; fix?: string }[];
@@ -572,6 +574,7 @@ function App() {
   const paneAreaRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
 
   const active = panes.find((p) => p.active);
   const dev = active?.dev;
@@ -674,9 +677,9 @@ function App() {
   // open-state in this condition — a missing one silently hides behind the pane.
   useEffect(() => {
     void dl().overlay(
-      lightbox !== null || wrenchOpen || settingsOpen || doctorOpen || nativePick !== null || launcherOpen,
+      lightbox !== null || wrenchOpen || settingsOpen || doctorOpen || nativePick !== null || launcherOpen || cheatOpen,
     );
-  }, [lightbox, wrenchOpen, settingsOpen, doctorOpen, nativePick, launcherOpen]);
+  }, [lightbox, wrenchOpen, settingsOpen, doctorOpen, nativePick, launcherOpen, cheatOpen]);
 
   // Probe whether the active pane's project is a native (Expo/RN) target — drives
   // the target switcher + build control. Runs on cwd change (not just wrench-open)
@@ -836,29 +839,69 @@ function App() {
     (window as unknown as { __devloopTest?: unknown }).__devloopTest = { runRepro };
   }, [runRepro]);
 
-  // keyboard shortcuts
+  // Keyboard shortcuts + native-menu items share one dispatcher (ids from src/shortcuts.ts).
+  const runAction = useCallback(
+    (id: string) => {
+      switch (id) {
+        case "focusUrl":
+          urlRef.current?.focus();
+          urlRef.current?.select();
+          break;
+        case "focusFilter":
+          filterRef.current?.focus();
+          filterRef.current?.select();
+          break;
+        case "clearLogs":
+          void dl().clear();
+          clearEntries();
+          break;
+        case "reload":
+          void dl().reload(false);
+          break;
+        case "hardReload":
+          void dl().reload(true);
+          break;
+        case "back":
+          void dl().back().then(refreshPanes);
+          break;
+        case "forward":
+          void dl().forward().then(refreshPanes);
+          break;
+        case "newPane":
+          void dl().paneNew().then(refreshPanes);
+          break;
+        case "closePane": {
+          const a = panes.find((p) => p.active);
+          if (a) void dl().paneClose(a.id).then(refreshPanes);
+          break;
+        }
+        case "toggleSidebar":
+          setSidebarHidden((v) => !v);
+          break;
+        case "settings":
+          setSettingsOpen((v) => !v);
+          break;
+        case "cheatsheet":
+          setCheatOpen((v) => !v);
+          break;
+      }
+    },
+    [clearEntries, refreshPanes, panes],
+  );
+
+  // Window-level shortcuts. When the native menu is set, its accelerators consume their
+  // keys before the page, so this mainly serves ⌘1–9 (pane select) + acts as a fallback.
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (!ev.metaKey) return;
       const k = ev.key.toLowerCase();
-      if (k === "l") {
+      const action = keyToAction(k, ev.shiftKey);
+      if (action) {
         ev.preventDefault();
-        urlRef.current?.focus();
-        urlRef.current?.select();
-      } else if (k === "r") {
-        ev.preventDefault();
-        void dl().reload(ev.shiftKey); // ⌘R reload page, ⌘⇧R hard reload (intercept Electron's reload)
-      } else if (k === "k") {
-        ev.preventDefault();
-        void dl().clear();
-        clearEntries();
-      } else if (k === "b") {
-        ev.preventDefault();
-        setSidebarHidden((v) => !v);
-      } else if (k === ",") {
-        ev.preventDefault();
-        setSettingsOpen((v) => !v);
-      } else if (/^[1-9]$/.test(k)) {
+        runAction(action);
+        return;
+      }
+      if (/^[1-9]$/.test(k)) {
         const p = panes[Number(k) - 1];
         if (p) {
           ev.preventDefault();
@@ -868,7 +911,10 @@ function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [panes, refreshPanes]);
+  }, [panes, refreshPanes, runAction]);
+
+  // Native menu bar → same actions over IPC.
+  useEffect(() => dl().onMenu?.((id) => runAction(id)), [runAction]);
 
   // draggable sidebar divider
   const startDrag = useCallback((e: React.MouseEvent) => {
@@ -1300,7 +1346,12 @@ function App() {
           ) : (
             <>
               <div className="filterbar">
-                <input placeholder="filter (substring)…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+                <input
+                  ref={filterRef}
+                  placeholder="filter (substring)…"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                />
                 <div className="chips">
                   {CHIPS.filter((c) => c.key !== "native" || nativeInfo?.isNative).map((c) => (
                     <span
@@ -1374,6 +1425,30 @@ function App() {
           <Dialog.Content className="lightbox-content" onClick={() => setLightbox(null)}>
             <Dialog.Title className="sr-only">Screenshot</Dialog.Title>
             {lightbox && <img src={lightbox} />}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* ⌘/ keyboard-shortcut cheatsheet */}
+      <Dialog.Root open={cheatOpen} onOpenChange={setCheatOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="modal-overlay" />
+          <Dialog.Content className="modal-content cheatsheet" aria-describedby={undefined}>
+            <Dialog.Title className="cheat-title">Keyboard shortcuts</Dialog.Title>
+            <div className="cheat-grid">
+              {SHORTCUTS.map((s) => (
+                <div className="cheat-row" key={s.id}>
+                  <span>{s.label}</span>
+                  <kbd>{prettyAccel(s.accel)}</kbd>
+                </div>
+              ))}
+              {EXTRA_HINTS.map((h) => (
+                <div className="cheat-row" key={h.label}>
+                  <span>{h.label}</span>
+                  <kbd>{h.keys}</kbd>
+                </div>
+              ))}
+            </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

@@ -21,14 +21,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { app, BrowserWindow, dialog, nativeImage, shell } from "electron";
+import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions, nativeImage, shell } from "electron";
 
 // Where main.cjs/preload.cjs/renderer live. Bun inlines __dirname to the SOURCE dir,
 // so we can't use it. Packaged: <app.asar>/out via getAppPath(). Dev (`electron
 // out/main.cjs`): the dir of the script Electron actually ran.
 const BASE = app.isPackaged ? join(app.getAppPath(), "out") : dirname(resolve(process.argv[1] ?? "."));
 
-import { buildIssueUrl, errorText } from "../src/crashReport.ts";
+import { buildIssueUrl, errorText, REPO } from "../src/crashReport.ts";
 import type { DevServerLike } from "../src/devServer.ts";
 import { startHttpMcp } from "../src/httpMcp.ts";
 import { LogBuffer, type LogEntry } from "../src/logBuffer.ts";
@@ -37,6 +37,7 @@ import type { Platform } from "../src/nativeBuild.ts";
 import { nativeEnvReady, nativeEnvSummary } from "../src/nativeEnv.ts";
 import { addProject, getPanes, getProject, getSession, listProjects, setSession } from "../src/registry.ts";
 import { mergePath, parseShellPath } from "../src/shellPath.ts";
+import { SHORTCUTS } from "../src/shortcuts.ts";
 import { configureTools, handleTool } from "../src/toolLayer.ts";
 import { BrowserManager } from "./browserManager.ts";
 import { createExtensionManager } from "./extensions.ts";
@@ -153,6 +154,71 @@ function createWindows(): void {
   });
 }
 
+/** Native menu bar — its accelerators fire the same actions as the in-app shortcuts,
+ *  routed to the renderer over IPC (single source of truth: src/shortcuts.ts; the ⌘/
+ *  cheatsheet lists them too). Replaces Electron's default menu, so it re-adds the
+ *  standard Edit/Window roles (⌘C/⌘V etc. depend on them). */
+function buildAppMenu(): void {
+  const isMac = process.platform === "darwin";
+  const send = (id: string) => () => shellWin?.webContents.send("devloop:menu", id);
+  const sep: MenuItemConstructorOptions = { type: "separator" };
+  const item = (id: string): MenuItemConstructorOptions => {
+    const s = SHORTCUTS.find((x) => x.id === id);
+    return { label: s?.label ?? id, accelerator: s?.accel, click: send(id) };
+  };
+  const template: MenuItemConstructorOptions[] = [
+    isMac
+      ? {
+          label: app.name,
+          submenu: [
+            { role: "about" },
+            sep,
+            item("settings"),
+            sep,
+            { role: "services" },
+            sep,
+            { role: "hide" },
+            { role: "hideOthers" },
+            { role: "unhide" },
+            sep,
+            { role: "quit" },
+          ],
+        }
+      : { label: "File", submenu: [item("settings"), sep, { role: "quit" }] },
+    { role: "editMenu" },
+    {
+      label: "View",
+      submenu: [
+        item("reload"),
+        item("hardReload"),
+        sep,
+        item("focusUrl"),
+        item("focusFilter"),
+        item("clearLogs"),
+        item("toggleSidebar"),
+        sep,
+        { role: "toggleDevTools" },
+        { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "Navigate",
+      submenu: [item("back"), item("forward"), sep, item("newPane"), { label: "Close pane", click: send("closePane") }],
+    },
+    { role: "windowMenu" },
+    {
+      role: "help",
+      submenu: [
+        item("cheatsheet"),
+        sep,
+        { label: "Report a Bug…", click: () => void shell.openExternal(`https://github.com/${REPO}/issues/new`) },
+        { label: "GitHub", click: () => void shell.openExternal(`https://github.com/${REPO}`) },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 const WELCOME =
   "data:text/html;charset=utf-8," +
   encodeURIComponent(
@@ -198,6 +264,7 @@ async function main() {
   if (iconPng && process.platform === "darwin" && app.dock) app.dock.setIcon(nativeImage.createFromPath(iconPng));
   log("app ready; creating windows");
   createWindows();
+  buildAppMenu();
 
   // Subsystem handles. `shellWin` exists (createWindows, above). We create the pane
   // manager NOW — synchronously, before registerIpc and before the first `await` — so

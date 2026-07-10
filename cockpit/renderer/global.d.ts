@@ -166,6 +166,7 @@ export interface DevloopApi {
   onPanesChanged: (cb: () => void) => () => void;
   onExtChanged: (cb: () => void) => () => void;
   onNativeRefresh: (cb: (cwd: string) => void) => () => void;
+  onMenu: (cb: (action: string) => void) => () => void;
   onPush: (cb: (rows: Entry[]) => void) => () => void;
   onUpdate: (cb: (status: import("../../src/update.ts").UpdateStatus) => void) => () => void;
   onAndroidFrame: (cb: (base64: string) => void) => () => void;
