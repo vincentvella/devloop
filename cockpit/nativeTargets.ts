@@ -12,7 +12,7 @@ import type { BrowserWindow } from "electron";
 import { usableSerials } from "../src/adb.ts";
 import { adbBinary } from "../src/androidLog.ts";
 import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
-import { resolveAppId } from "../src/appIdentity.ts";
+import { resolveAppId, resolveAppScheme } from "../src/appIdentity.ts";
 import { projectInputsHash, readAppJsonPlatforms, resolvedExpoPlatforms } from "../src/expoConfig.ts";
 import { idbButtonArgs } from "../src/idb.ts";
 import type { LogBuffer } from "../src/logBuffer.ts";
@@ -53,6 +53,14 @@ export interface NativeTargetsDeps {
 }
 
 export type NativeTargets = ReturnType<typeof createNativeTargets>;
+
+/** The reliable Metro origin for a pane: its assigned `metroPort` (from assignMetroPort),
+ *  falling back to the pane URL — which can go stale for native panes after a server
+ *  (re)starts, so two panes end up pointed at one port (the :8081 collision). */
+function paneMetroBase(pane: { metroPort?: number; url?: string } | undefined): string | null {
+  if (pane?.metroPort) return `http://localhost:${pane.metroPort}`;
+  return metroBaseFromUrl(pane?.url);
+}
 
 export function createNativeTargets(deps: NativeTargetsDeps) {
   const { getManager, getShellWin, serveSim, observability, buffer, log } = deps;
@@ -157,7 +165,7 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
         active?.id,
       );
     }
-    const metroBase = metroBaseFromUrl(active?.url);
+    const metroBase = paneMetroBase(active);
     if (active && metroBase) {
       const rn = observability.attach({
         paneId: active.id,
@@ -200,7 +208,7 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     }
     const serial = firstAndroidSerial();
     if (!serial) return { ok: false, summary: "no usable Android device" };
-    const metroBase = metroBaseFromUrl(active?.url);
+    const metroBase = paneMetroBase(active);
     if (active) {
       // With Metro → JS over CDP too; without → still mirror + allow taps.
       const rn = observability.attach({
@@ -297,9 +305,25 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
       );
       return;
     }
+    // Re-point the installed dev-client at THIS pane's Metro instead of a bare launch —
+    // otherwise the app falls back to its baked default (:8081) and two native panes
+    // collide on one port. Needs the app's URL scheme + the pane's Metro origin; if
+    // either is missing, fall back to a plain launch (unchanged behavior).
+    const metroBase = paneMetroBase(active);
+    const scheme = resolveAppScheme(cwd);
+    const devClientUrl =
+      metroBase && scheme ? `${scheme}://expo-development-client/?url=${encodeURIComponent(metroBase)}` : null;
     try {
-      if (platform === "ios") await execFileP("xcrun", ["simctl", "launch", "booted", appId], { timeout: 8000 });
-      else await runAdb(["shell", "monkey", "-p", appId, "-c", "android.intent.category.LAUNCHER", "1"]);
+      if (platform === "ios") {
+        if (devClientUrl) await execFileP("xcrun", ["simctl", "openurl", "booted", devClientUrl], { timeout: 8000 });
+        else await execFileP("xcrun", ["simctl", "launch", "booted", appId], { timeout: 8000 });
+      } else if (devClientUrl) {
+        await runAdb(["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", devClientUrl]);
+      } else {
+        await runAdb(["shell", "monkey", "-p", appId, "-c", "android.intent.category.LAUNCHER", "1"]);
+      }
+      if (devClientUrl)
+        buffer.push("native", "log", `app-focus: pointed ${appId} at ${metroBase} (dev-client)`, undefined, active?.id);
     } catch {
       buffer.push(
         "native",

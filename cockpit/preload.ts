@@ -87,8 +87,9 @@ contextBridge.exposeInMainWorld("devloop", {
     ipcRenderer.on("devloop:nativeRefresh", handler);
     return () => ipcRenderer.removeListener("devloop:nativeRefresh", handler);
   },
-  onPush: (cb: (entry: unknown) => void) => {
-    const handler = (_e: unknown, entry: unknown) => cb(entry);
+  onPush: (cb: (rows: unknown[]) => void) => {
+    // Payload is a coalesced BATCH of entries (see main.ts) — forward the array.
+    const handler = (_e: unknown, rows: unknown[]) => cb(rows);
     ipcRenderer.on("devloop:push", handler);
     return () => ipcRenderer.removeListener("devloop:push", handler);
   },

@@ -22,6 +22,18 @@ test("detectDevCommand throws with no package.json or no dev-ish script", () => 
   expect(() => detectDevCommand(pkgDir({ scripts: { build: "x" } }))).toThrow(/no dev script/);
 });
 
+test("detectDevCommand prefers all-target `start` over web-only `web` for Expo apps", () => {
+  // Expo: `web` is expo start --web (web-only) and breaks native — prefer `start`.
+  const expo = { dependencies: { expo: "^52.0.0" }, scripts: { web: "expo start --web", start: "expo start" } };
+  expect(detectDevCommand(pkgDir(expo))).toBe("bun run start");
+  // Non-Expo keeps web-first.
+  expect(detectDevCommand(pkgDir({ scripts: { web: "vite", start: "node ." } }))).toBe("bun run web");
+  // Expo with no start/dev script → canonical all-target Metro.
+  expect(detectDevCommand(pkgDir({ dependencies: { expo: "^52.0.0" }, scripts: { build: "x" } }))).toBe(
+    "bunx expo start",
+  );
+});
+
 test("projectName uses package.json name, else folder basename", () => {
   expect(projectName(pkgDir({ name: "my-app" }))).toBe("my-app");
   const d = mkdtempSync(join(tmpdir(), "dl-noname-"));

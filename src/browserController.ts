@@ -64,6 +64,9 @@ export interface PaneInfo {
   label?: string;
   /** This pane's dev server state (per-pane mode). */
   dev?: { running: boolean; name?: string; cmd?: string; cwd?: string; exitCode?: number | null };
+  /** The Metro/Expo port assigned to this pane (native) — the reliable Metro origin,
+   *  unlike the pane URL which can go stale after a project's server (re)starts. */
+  metroPort?: number;
   /** Browser navigation state for the back/forward buttons. */
   nav?: { canBack: boolean; canForward: boolean };
 }

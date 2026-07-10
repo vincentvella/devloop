@@ -592,6 +592,7 @@ export class BrowserManager implements IBrowserManager {
       popped: !!p.popped,
       label: p.label,
       dev: { running: st.running, name: st.name, cmd: p.cmd, cwd: p.cwd, exitCode: st.exitCode },
+      metroPort: p.metroPort,
       nav,
     };
   }
