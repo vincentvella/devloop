@@ -27,8 +27,9 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { buildDisplayRows, type DisplayRow, parseOsLog } from "../../src/logModel.ts";
 import { type UpdateStatus, updateStatusLabel } from "../../src/update.ts";
 import type { Entry, Pane, Project, Step } from "./global";
 import { useDevloopStore } from "./store";
@@ -361,23 +362,31 @@ function HeaderList({ title, h }: { title: string; h?: Record<string, string> })
   );
 }
 
-function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
+function LogRow({ row, onZoom }: { row: DisplayRow<Entry>; onZoom: (img: string) => void }) {
+  const { e, count } = row;
   const [open, setOpen] = useState(false);
   const isNet = e.stream === "network" && !!e.detail?.url;
   const long = !isNet && (e.line.length > 220 || (e.line.match(/\n/g)?.length ?? 0) > 2);
+  const os = e.source === "native" && !isNet ? parseOsLog(e.line) : null;
   const cls = ["logrow", e.source];
+  if (!row.showMeta) cls.push("cont");
   if (isErr(e)) cls.push("err");
   else if (e.stream === "console" && e.line.includes("[warning]")) cls.push("warn");
+  else if (e.source === "native" && (e.stream === "log" || e.stream === "info")) cls.push("quiet");
   const tier = netTier(e);
   if (tier) cls.push(tier);
   const d = e.detail;
   return (
     <div className={cls.join(" ")}>
-      <span className="ts">{fmtTime(e.ts)}</span>
-      <span className="tag">
-        {e.source}:{e.stream}
-      </span>
-      {e.target && <span className="tgt">{e.target}</span>}
+      {row.showMeta && (
+        <>
+          <span className="ts">{fmtTime(e.ts)}</span>
+          <span className="tag">
+            {e.source}:{e.stream}
+          </span>
+          {e.target && <span className="tgt">{e.target}</span>}
+        </>
+      )}
       {e.stream === "screenshot" && d?.image ? (
         <img className="shot" src={d.image} onClick={() => onZoom(d.image!)} />
       ) : isNet ? (
@@ -419,7 +428,18 @@ function LogRow({ e, onZoom }: { e: Entry; onZoom: (img: string) => void }) {
           onClick={long ? () => setOpen((v) => !v) : undefined}
           title={long ? (open ? "click to collapse" : "click to expand") : undefined}
         >
-          {e.line}
+          {os ? (
+            <>
+              <span className="subsys">{os.subsystem}</span> {os.rest}
+            </>
+          ) : (
+            e.line
+          )}
+          {count > 1 && (
+            <span className="dup" title={`${count} identical lines`}>
+              ×{count}
+            </span>
+          )}
         </span>
       )}
     </div>
@@ -921,6 +941,8 @@ function App() {
     if (active && e.target && e.target !== active.id) return false;
     return true;
   });
+  // Collapse the filtered stream for display: dedup identical runs + drop repeated metadata.
+  const displayRows = useMemo(() => buildDisplayRows(shown), [shown]);
 
   return (
     <Tooltip.Provider delayDuration={250}>
@@ -1316,8 +1338,8 @@ function App() {
                     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
                   }}
                 >
-                  {shown.map((e, i) => (
-                    <LogRow key={`${e.seq}:${i}`} e={e} onZoom={setLightbox} />
+                  {displayRows.map((row, i) => (
+                    <LogRow key={`${row.e.seq}:${i}`} row={row} onZoom={setLightbox} />
                   ))}
                 </div>
                 {!atBottom && (

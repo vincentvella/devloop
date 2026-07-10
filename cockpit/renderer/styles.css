@@ -502,6 +502,17 @@
     white-space: pre-wrap;
     word-break: break-word;
     border-left: 3px solid transparent;
+    /* Cheap virtualization: the browser skips layout/paint for off-screen rows, so a
+       full 2000-entry timeline stays smooth without a JS windowing lib. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 1.35em;
+  }
+  /* Continuation of a burst (same source+pane+second) — metadata hidden; tuck it under
+     the group with a tighter top and a faint rail so it still reads as one block. */
+  .logrow.cont {
+    padding-top: 0;
+    padding-left: 12px;
+    border-left-color: #21262d;
   }
   .logrow .ts {
     color: #586069;
@@ -514,6 +525,24 @@
   .logrow .tgt {
     color: #6e7681;
     margin-right: 6px;
+  }
+  /* Dim the os_log subsystem prefix ([com.apple.…]) so the real message stands out. */
+  .logrow .subsys {
+    color: #586069;
+  }
+  /* ×N badge for a collapsed run of identical lines. */
+  .logrow .dup {
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: #21262d;
+    color: var(--color-dim);
+    font-size: 0.85em;
+    white-space: nowrap;
+  }
+  /* Routine native chatter recedes; errors/warnings (below) still pop. */
+  .logrow.quiet .msg {
+    color: #8b949e;
   }
   .logrow.server .tag {
     color: var(--color-info);
