@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.10.0] - 2026-07-10
+
+### Added
+- **Keyboard cheatsheet + native menu bar** — press `⌘/` for a list of every shortcut, plus a full native menu (App · Edit · View · Navigate · Window · Help) whose accelerators mirror them. `⌘F` now focuses the log filter.
+- **Per-pane native log scoping** — native (iOS/Android) device logs are attributed to the pane's app, with an opt-in device/system lane for logs that aren't.
+- **Auto-assigned Metro/Expo port per pane** — run several native apps side by side without the `:8081` collision; each pane's dev-client is pointed at its own bundler.
+- Agent-created panes are now named from their project.
+
+### Changed
+- **Timeline log-view overhaul** — identical consecutive lines collapse into one row with a `×N` count, repeated timestamp/source/pane metadata is hidden, `os_log` subsystem prefixes are dimmed, and the list is virtualized so a busy timeline stays smooth. Log rows also use the full width.
+
+### Fixed
+- **Native multi-pane flow** — panes use an all-target `expo start` (not the web-only bundler), the dev-client is re-pointed at the pane's own Metro (no more cross-wiring between apps), the "detecting…" probe can't hang, a chatty native log stream no longer freezes the UI, the dev server is reliably reaped on exit (no leaked ports), the iOS bundle id resolves correctly, and pressing play on a native target opens the simulator.
+- `native_build` binds the pane's Metro port so a freshly-built app connects to the right project's bundler.
+- `diagnose()` now surfaces native (iOS/Android) crash log lines instead of reporting "no errors detected".
+- The MCP HTTP transport binds loopback (`127.0.0.1`) by default rather than all interfaces.
+- Crash reports keep the error message even when source-map tooling reformats the stack trace.
+
+### Tooling
+- Unit tests for `androidMirror` and `daemonClient`; dependency bumps (Remotion, Biome, cockpit UI).
+
+### Docs
+- `devloop.build` rebuilt as a Next.js app (Bun workspace) and moved to Vercel; the legacy static GitHub Pages site was removed.
+
 ## [0.9.1] - 2026-07-01
 
 ### Added
@@ -306,7 +330,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/vincentvella/devloop/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/vincentvella/devloop/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/vincentvella/devloop/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vincentvella/devloop/compare/v0.7.1...v0.8.0
