@@ -16,6 +16,14 @@ test("errorText prefers a stack, falls back to message/string/json", () => {
   expect(errorText({ a: 1 })).toBe('{"a":1}');
 });
 
+test("errorText keeps the message even when .stack was formatted without it", () => {
+  // A global Error.prepareStackTrace (source-map tooling) can drop the message from
+  // .stack; a crash report must still carry it. Regression for a suite-order flake.
+  const err = new Error("boom");
+  err.stack = "Error\n    at somewhere (file.ts:1:1)";
+  expect(errorText(err)).toContain("boom");
+});
+
 test("crashTitle is one concise line tagged with the kind", () => {
   const title = crashTitle({ ...ctx, error: new Error("first line\nsecond line") });
   expect(title.startsWith("Crash (main process): ")).toBe(true);
