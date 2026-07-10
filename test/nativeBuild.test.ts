@@ -25,6 +25,12 @@ test("buildCommand honors npm package manager", () => {
   expect(buildCommand("ios", { packageManager: "npm" })).toEqual({ cmd: "npx", args: ["expo", "run:ios"] });
 });
 
+test("buildCommand binds the pane's Metro port when given", () => {
+  expect(buildCommand("ios", { port: 8082 })).toEqual({ cmd: "bunx", args: ["expo", "run:ios", "--port", "8082"] });
+  // No port → unchanged (single-pane / no dev server yet).
+  expect(buildCommand("android")).toEqual({ cmd: "bunx", args: ["expo", "run:android"] });
+});
+
 test("fingerprintStatus: fresh / stale / unknown", () => {
   expect(fingerprintStatus("abc", "abc")).toBe("fresh");
   expect(fingerprintStatus("abc", "xyz")).toBe("stale");

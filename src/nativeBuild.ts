@@ -34,10 +34,15 @@ export type PackageManager = "bun" | "npm";
  */
 export function buildCommand(
   platform: Platform,
-  opts: { packageManager?: PackageManager } = {},
+  opts: { packageManager?: PackageManager; port?: number } = {},
 ): { cmd: string; args: string[] } {
   const runner = opts.packageManager === "npm" ? "npx" : "bunx";
-  return { cmd: runner, args: ["expo", `run:${platform}`] };
+  const args = ["expo", `run:${platform}`];
+  // Bind the run to THIS pane's assigned Metro port so the freshly-built app connects to
+  // the right bundler — without it `expo run` uses the default :8081 and, with another
+  // pane's Metro there, serves the wrong project (the caliburr→bonfire cross-wire).
+  if (opts.port) args.push("--port", String(opts.port));
+  return { cmd: runner, args };
 }
 
 export type FingerprintStatus = "fresh" | "stale" | "unknown";
