@@ -32,6 +32,27 @@ test("staleNativeBuildNote matches the known signatures, not unrelated errors", 
   expect(staleNativeBuildNote(g("TypeError: undefined is not a function"))).toBeNull();
 });
 
+test("VEL-65: surfaces native (iOS simctl / Android logcat) crash lines, skips clean ones", () => {
+  const r = diagnose([
+    e({
+      source: "native",
+      stream: "log",
+      line: "NSException *** -[__NSArrayM objectAtIndex:] index 3 beyond bounds",
+      ts: 100,
+    }),
+    e({ source: "native", stream: "log", line: "E/AndroidRuntime: FATAL EXCEPTION: main", ts: 200 }),
+    e({ source: "native", stream: "log", line: "I/ReactNativeJS: running application 'app'", ts: 300 }), // clean → skipped
+  ]);
+  expect(r.errorCount).toBe(2);
+  expect(r.groups.map((g) => g.source)).toEqual(["native", "native"]);
+  expect(r.groups.some((g) => /running application/.test(g.sample))).toBe(false);
+});
+
+test("VEL-65: a native stale-module line still triggers the rebuild hint", () => {
+  const r = diagnose([e({ source: "native", stream: "log", line: "Error: Cannot find native module 'ExpoCamera'" })]);
+  expect(r.nativeNotes[0]).toContain("native build looks stale");
+});
+
 test("groups repeated errors with counts and collects network failures", () => {
   const r = diagnose([
     e({ stream: "console", line: "[error] TypeError: x is undefined", ts: 100 }),
