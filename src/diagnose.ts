@@ -51,6 +51,14 @@ const isServerError = (e: LogEntry) =>
   e.source === "server" && /error|exception|traceback|unhandled|fatal|\bpanic\b/i.test(e.line);
 const isConsoleError = (e: LogEntry) => e.source === "browser" && e.stream === "console" && /\[error\]/i.test(e.line);
 const isPageError = (e: LogEntry) => e.stream === "pageerror";
+// Native crash / fatal signatures from the device log stream (iOS simctl + Android
+// logcat), pushed as source:"native". Without this, diagnose() is blind to native-side
+// crashes. Also treat a native stale-module line as an error so its group feeds
+// staleNativeBuildNote — a stale crash that surfaces only via a native line (not a JS
+// pageerror) would otherwise never trigger the rebuild hint. (VEL-65)
+const NATIVE_ERROR_RE = /fatal exception|exception|sigabrt|crash|anr\b|nse?exception|exc_bad_access|fatal error/i;
+const isNativeError = (e: LogEntry) =>
+  e.source === "native" && (NATIVE_ERROR_RE.test(e.line) || STALE_NATIVE_RE.test(e.line));
 const isNetFailure = (e: LogEntry) => {
   if (e.stream !== "network") return false;
   const d = e.detail as NetDetail | undefined;
@@ -77,7 +85,7 @@ export function diagnose(entries: LogEntry[], opts: { windowMs?: number | null; 
       const g = network.get(key) ?? { method: d.method, url: d.url, status: d.status, failure: d.failure, count: 0 };
       g.count++;
       network.set(key, g);
-    } else if (isPageError(e) || isConsoleError(e) || isServerError(e)) {
+    } else if (isPageError(e) || isConsoleError(e) || isServerError(e) || isNativeError(e)) {
       errorCount++;
       const sig = signature(e);
       const g = groups.get(sig) ?? {
