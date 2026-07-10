@@ -67,15 +67,20 @@ export function runNativeBuild(opts: {
   buffer: LogBuffer;
   projectRoot: string;
   platform: Platform;
+  /** This pane's assigned Metro port — binds the built app to the right bundler. */
+  metroPort?: number;
   /** Test seam — defaults to node child_process spawn. */
   spawnImpl?: typeof spawn;
 }): BuildHandle {
-  const { buffer, projectRoot, platform } = opts;
-  const { cmd, args } = buildCommand(platform);
+  const { buffer, projectRoot, platform, metroPort } = opts;
+  const { cmd, args } = buildCommand(platform, { port: metroPort });
   const spawnFn = opts.spawnImpl ?? spawn;
   buffer.push("server", "build", `[devloop] building ${platform} locally: ${cmd} ${args.join(" ")}`);
 
-  const proc = spawnFn(cmd, args, { cwd: projectRoot });
+  // RCT_METRO_PORT bakes the default packager port into the app so even a later bare
+  // launch connects to this pane's Metro, not :8081.
+  const env = metroPort ? { ...process.env, RCT_METRO_PORT: String(metroPort) } : process.env;
+  const proc = spawnFn(cmd, args, { cwd: projectRoot, env });
   let partial = "";
   const onChunk = (chunk: Buffer | string) => {
     partial += chunk.toString();

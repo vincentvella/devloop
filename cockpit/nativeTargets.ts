@@ -400,7 +400,9 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     }
     // streams to the timeline; records a fingerprint on success. On completion, nudge the
     // renderer to re-detect so the staleness ⚠ badge refreshes (fingerprint is now current).
-    void runNativeBuild({ buffer, projectRoot: root, platform }).done.finally(() =>
+    // Bind the build to the pane's Metro port (if its dev server is up) so the built app
+    // connects to THIS project's bundler, not whatever holds the default :8081.
+    void runNativeBuild({ buffer, projectRoot: root, platform, metroPort: active?.metroPort }).done.finally(() =>
       getShellWin()?.webContents.send("devloop:nativeRefresh", root),
     );
     return { started: true, detail: `building ${platform} in ${root}` };

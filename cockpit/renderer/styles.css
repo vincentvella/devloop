@@ -494,27 +494,55 @@
   }
 
   .logrow {
-    display: flex;
-    gap: 6px;
+    /* block (not flex) so a long message wraps to the FULL row width — the metadata
+       leads inline and continuation lines reclaim the left gutter instead of hanging
+       under a narrow message column. */
+    display: block;
     padding: 2px 10px;
     white-space: pre-wrap;
     word-break: break-word;
     border-left: 3px solid transparent;
+    /* Cheap virtualization: the browser skips layout/paint for off-screen rows, so a
+       full 2000-entry timeline stays smooth without a JS windowing lib. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 1.35em;
+  }
+  /* Continuation of a burst (same source+pane+second) — metadata hidden; tuck it under
+     the group with a tighter top and a faint rail so it still reads as one block. */
+  .logrow.cont {
+    padding-top: 0;
+    padding-left: 12px;
+    border-left-color: #21262d;
   }
   .logrow .ts {
     color: #586069;
-    flex: none;
+    margin-right: 6px;
   }
   .logrow .tag {
     color: var(--color-dim);
-    flex: none;
+    margin-right: 6px;
   }
   .logrow .tgt {
     color: #6e7681;
-    flex: none;
+    margin-right: 6px;
   }
-  .logrow .msg {
-    flex: 1;
+  /* Dim the os_log subsystem prefix ([com.apple.…]) so the real message stands out. */
+  .logrow .subsys {
+    color: #586069;
+  }
+  /* ×N badge for a collapsed run of identical lines. */
+  .logrow .dup {
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: #21262d;
+    color: var(--color-dim);
+    font-size: 0.85em;
+    white-space: nowrap;
+  }
+  /* Routine native chatter recedes; errors/warnings (below) still pop. */
+  .logrow.quiet .msg {
+    color: #8b949e;
   }
   .logrow.server .tag {
     color: var(--color-info);
@@ -587,6 +615,7 @@
     padding: 4px 6px;
   }
   .logrow .msg.clamp {
+    display: block; /* block sizing for max-height now that the row is block, not flex */
     max-height: 4.5em;
     overflow: hidden;
     cursor: pointer;
