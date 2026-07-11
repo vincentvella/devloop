@@ -61,15 +61,25 @@ export async function ensureDaemon(timeoutMs = 20_000): Promise<DaemonState> {
  * the process then lives until the stdio client disconnects (then it closes its daemon
  * session — graceful per-client teardown — and exits, leaving the daemon running).
  */
+/** The proxy's tools/list + tools/call handlers, forwarding to the daemon `client`.
+ *  Extracted so the forwarding (incl. the arguments-default) is unit-testable without a
+ *  live stdio/HTTP round-trip — the bridge itself needs real transports. */
+export function daemonProxyHandlers(client: Pick<Client, "listTools" | "callTool">) {
+  return {
+    listTools: () => client.listTools(),
+    callTool: (req: { params: { name: string; arguments?: unknown } }) =>
+      client.callTool({ name: req.params.name, arguments: (req.params.arguments ?? {}) as Record<string, unknown> }),
+  };
+}
+
 export async function bridgeStdioToDaemon(url: string): Promise<void> {
   const client = new Client({ name: "devloop-bridge", version: VERSION }, { capabilities: {} });
   await client.connect(new StreamableHTTPClientTransport(new URL(url)));
 
   const proxy = new Server({ name: "devloop-mcp", version: VERSION }, { capabilities: { tools: {} } });
-  proxy.setRequestHandler(ListToolsRequestSchema, async () => await client.listTools());
-  proxy.setRequestHandler(CallToolRequestSchema, async (req) =>
-    client.callTool({ name: req.params.name, arguments: (req.params.arguments ?? {}) as Record<string, unknown> }),
-  );
+  const h = daemonProxyHandlers(client);
+  proxy.setRequestHandler(ListToolsRequestSchema, h.listTools);
+  proxy.setRequestHandler(CallToolRequestSchema, (req) => h.callTool(req));
 
   let closing = false;
   const teardown = async () => {
