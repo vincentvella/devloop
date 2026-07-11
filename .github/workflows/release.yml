@@ -77,7 +77,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24.18.0
-      - run: npm install -g npm@latest # Trusted Publishing needs npm >= 11.5.1
       - run: bun install --frozen-lockfile
       - run: bun run mcp:build
       - name: Publish to npm (OIDC; skip if this version is already published)
@@ -85,9 +84,22 @@ jobs:
           V=$(node -p "require('./package.json').version")
           if npm view "devloop-mcp@$V" version >/dev/null 2>&1; then
             echo "devloop-mcp@$V already on npm — skipping publish."
-          else
-            npm publish --access public
+            exit 0
           fi
+          # `npm install -g npm@latest` (needed for Trusted Publishing — npm >= 11.5.1)
+          # intermittently leaves the global npm missing `sigstore`, which provenance
+          # requires → "Cannot find module 'sigstore'" and a failed release (hit on
+          # v0.10.0). Reinstall + publish with retries so a flaky self-install self-heals
+          # instead of needing a manual re-run. The already-published guard above keeps
+          # it idempotent if an attempt partially succeeds.
+          for attempt in 1 2 3; do
+            echo "::group::npm publish attempt $attempt"
+            if npm install -g npm@latest && npm publish --access public; then
+              echo "::endgroup::"; echo "published devloop-mcp@$V on attempt $attempt"; exit 0
+            fi
+            echo "::endgroup::"; echo "attempt $attempt failed — retrying in 5s"; sleep 5
+          done
+          echo "npm publish failed after 3 attempts"; exit 1
 
   # Publish server.json to the official MCP Registry via GitHub Actions OIDC —
   # no token/secret (the io.github.vincentvella namespace is authorized by the
