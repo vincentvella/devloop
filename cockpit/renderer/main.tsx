@@ -467,17 +467,31 @@ const KEYMAP: Record<string, string> = {
  */
 function AndroidMirror(): ReactNode {
   const imgRef = useRef<HTMLImageElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const waitRef = useRef<HTMLDivElement>(null);
   const sizeRef = useRef<{ width: number; height: number }>({ width: 1080, height: 2400 });
 
   useEffect(() => {
-    const offSize = dl().onAndroidSize((s) => (sizeRef.current = s));
+    // Shape the mirror to the AUTHORITATIVE device size (`wm size`), not the screencap
+    // PNG's intrinsic dimensions (which can differ from the real display and stretch the
+    // frame). The stage <div> carries the aspect ratio — divs honor `aspect-ratio`
+    // predictably, unlike a replaced <img> with auto width/height — and the frame fills
+    // it, so the mirror is always the true device shape (and taps map 1:1 to the box).
+    const applyAspect = (s: { width: number; height: number }) => {
+      if (stageRef.current && s.width > 0 && s.height > 0)
+        stageRef.current.style.aspectRatio = `${s.width} / ${s.height}`;
+    };
+    applyAspect(sizeRef.current); // seed with the default until `wm size` arrives
+    const offSize = dl().onAndroidSize((s) => {
+      sizeRef.current = s;
+      applyAspect(s);
+    });
     const offFrame = dl().onAndroidFrame((b64) => {
       const img = imgRef.current;
       if (!img) return;
       img.src = `data:image/png;base64,${b64}`;
       if (waitRef.current) waitRef.current.style.display = "none";
-      img.style.display = "block";
+      if (stageRef.current) stageRef.current.style.display = "block";
     });
     return () => {
       offSize();
@@ -506,7 +520,9 @@ function AndroidMirror(): ReactNode {
   };
   return (
     <div className="android-mirror" tabIndex={0} onKeyDown={onKeyDown} title="click to tap · type to send keys">
-      <img ref={imgRef} className="android-frame" style={{ display: "none" }} onClick={onClick} draggable={false} />
+      <div ref={stageRef} className="android-stage" style={{ display: "none" }}>
+        <img ref={imgRef} className="android-frame" onClick={onClick} draggable={false} />
+      </div>
       <div ref={waitRef} className="android-waiting">
         connecting to device…
       </div>
