@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureDaemon, findDaemon } from "../src/daemonClient.ts";
+import { daemonProxyHandlers, ensureDaemon, findDaemon } from "../src/daemonClient.ts";
 
 let dir: string;
 const realHome = process.env.DEVLOOP_HOME;
@@ -95,4 +95,25 @@ test("ensureDaemon throws on timeout when the daemon never comes up", async () =
   } finally {
     process.argv[1] = realArgv1;
   }
+});
+
+test("daemonProxyHandlers forwards tools/list + tools/call to the daemon client", async () => {
+  const calls: unknown[] = [];
+  const client = {
+    listTools: async () => ({ tools: [{ name: "browser_navigate" }] }),
+    callTool: async (args: unknown) => {
+      calls.push(args);
+      return { content: [] };
+    },
+  };
+  const h = daemonProxyHandlers(client as unknown as Parameters<typeof daemonProxyHandlers>[0]);
+
+  expect(await h.listTools()).toEqual({ tools: [{ name: "browser_navigate" }] });
+
+  await h.callTool({ params: { name: "diagnose", arguments: { app: "x" } } });
+  expect(calls[0]).toEqual({ name: "diagnose", arguments: { app: "x" } });
+
+  // Missing arguments must default to {} (the daemon's tool layer expects an object).
+  await h.callTool({ params: { name: "dev_status" } });
+  expect(calls[1]).toEqual({ name: "dev_status", arguments: {} });
 });

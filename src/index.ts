@@ -22,6 +22,7 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { PuppeteerBrowserController } from "./browser.ts";
+import { errorText } from "./crashReport.ts";
 import { DevServer } from "./devServer.ts";
 import { LogBuffer } from "./logBuffer.ts";
 import { buildMcpServer } from "./mcpServer.ts";
@@ -93,6 +94,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  process.stderr.write(`[devloop] fatal: ${err?.stack ?? err}\n`);
+  // errorText keeps the message even if a global stack formatter drops it from .stack.
+  process.stderr.write(`[devloop] fatal: ${errorText(err)}\n`);
   process.exit(1);
 });
