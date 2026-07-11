@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.10.1] - 2026-07-11
+
+### Fixed
+- The Android device mirror no longer stretches — it renders at the device's true aspect ratio (from `wm size`), letterboxed to fit the pane.
+- The fatal-error log keeps the error message even when source-map tooling reformats the stack trace (the same hardening crash reports got in 0.10.0).
+
+### Tooling
+- Unit tests for the shared-mode daemon bridge, the Android mirror, and the daemon client.
+- The release npm-publish step retries through the intermittent `sigstore` self-install failure, so a flaky publish no longer needs a manual re-run.
+
 ## [0.10.0] - 2026-07-10
 
 ### Added
@@ -330,7 +340,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/vincentvella/devloop/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/vincentvella/devloop/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/vincentvella/devloop/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/vincentvella/devloop/compare/v0.8.0...v0.9.0
