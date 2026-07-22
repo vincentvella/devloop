@@ -32,6 +32,11 @@
       "matchUpdateTypes": ["major"],
       "automerge": false,
       "addLabels": ["major"]
+    },
+    {
+      "description": "Never rewrite the published `engines` floor. It's a compatibility contract with consumers of `npx devloop-mcp`, derived from our runtime deps (puppeteer >=22.12.0) — not from whatever node CI happens to pin. #22 raised it to >=24.18.0 as a side effect of pinning the CI runner, silently dropping support for node 22 LTS.",
+      "matchDepTypes": ["engines"],
+      "enabled": false
     }
   ],
   "vulnerabilityAlerts": { "labels": ["security"], "automerge": false }
