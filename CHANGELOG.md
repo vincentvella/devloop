@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.10.2] - 2026-07-22
+
+### Fixed
+- **`npx devloop-mcp` installs on node 22 LTS again.** The published `engines.node` floor had been raised to `>=24.18.0` as a side effect of a dependency bot pinning the CI runner, telling node 22 and 23 users the package was unsupported. The floor now tracks what the shipped bundle actually needs (`>=22.12.0`, from puppeteer) — verified by running the built bundle under node 22.12.0 end to end, including a real Chrome launch.
+
+### Changed
+- The cockpit now runs on **Electron 43** (newer Chromium). Storage clearing drops the `websql` bucket, which Chromium itself removed — the same set of data is still cleared.
+
+### Tooling
+- Typechecking moves to **TypeScript 7**, the native compiler port. No source changes were needed; `tsc` is only ever run with `--noEmit`, so this swaps the typechecker and nothing else.
+- `@types/node` now tracks the `engines` floor (22.x) instead of drifting ahead of it, so the typechecker can't accept APIs that would crash on the oldest supported node.
+- The dependency audit gate is scoped to high+ severity. `bun audit` has no workspace filter, so an unfixable low in the (never-published) marketing site's tree was failing CI on every PR.
+- `sharp` is pinned past the libvips CVEs (GHSA-f88m-g3jw-g9cj) via an override — neither Next 15 nor 16 can resolve the fixed line on its own. Site-only; not part of the published package.
+- Renovate no longer rewrites the published `engines` contract, and is capped to 22.x for `@types/node`.
+- Biome 2.5.4, postcss 8.5.20.
+
 ## [0.10.1] - 2026-07-11
 
 ### Fixed
@@ -340,7 +356,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/vincentvella/devloop/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/vincentvella/devloop/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/vincentvella/devloop/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/vincentvella/devloop/compare/v0.9.0...v0.9.1

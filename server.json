@@ -7,14 +7,14 @@
     "url": "https://github.com/vincentvella/devloop",
     "source": "github"
   },
-  "version": "0.10.1",
+  "version": "0.10.2",
   "websiteUrl": "https://devloop.build",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "devloop-mcp",
-      "version": "0.10.1",
+      "version": "0.10.2",
       "transport": {
         "type": "stdio"
       }
