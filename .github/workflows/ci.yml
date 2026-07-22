@@ -18,7 +18,11 @@ jobs:
       - name: Lint + format check (Biome)
         run: bun run check
       - name: Audit runtime dependencies (what `npx devloop-mcp` ships)
-        run: bun audit --prod # devDeps (electron/build chain, MCP SDK) carry unfixable transitive advisories; scope the gate to runtime
+        # devDeps (electron/build chain, MCP SDK) carry unfixable transitive advisories; scope the gate to runtime.
+        # `bun audit` has no workspace filter, so this also sees the private, never-published devloop-site
+        # workspace. Gate on high+ so an unfixable low in the marketing site's tree (e.g. mermaid → dompurify,
+        # no upstream fix as of 2026-07) can't block every PR to the published package.
+        run: bun audit --prod --audit-level=high
       - name: Typecheck (core + renderer)
         run: bun run typecheck
       - name: Unit tests
