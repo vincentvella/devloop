@@ -52,7 +52,8 @@
     "web"
   ],
   "overrides": {
-    "postcss": "^8.5.20"
+    "postcss": "^8.5.20",
+    "sharp": "^0.35.3"
   },
   "scripts": {
     "start": "bun run src/index.ts",
