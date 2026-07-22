@@ -382,7 +382,6 @@ export class ElectronBrowserController implements IBrowserController {
       "indexdb",
       "cachestorage",
       "serviceworkers",
-      "websql",
       "shadercache",
       "filesystem",
     ];
