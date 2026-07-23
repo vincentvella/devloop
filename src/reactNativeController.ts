@@ -25,6 +25,7 @@ import {
   inspectorListUrl,
   isErrorConsoleType,
   type RemoteObject,
+  resolvePoint,
   selectHermesTarget,
 } from "./reactNative.ts";
 import { NET_INTERCEPTOR_JS, parseNetMarker } from "./reactNativeNet.ts";
@@ -307,16 +308,11 @@ export class ReactNativeController implements IBrowserController {
 
   /** Resolve a target to a tappable point: a "pt:x,y" ref, else an a11y name from snapshot. */
   private async pointFor(selector: string): Promise<{ x: number; y: number }> {
-    const pt = pointFromRef(selector);
-    if (pt) return pt;
+    // Fast path: a literal ref needs no snapshot round-trip.
+    const literal = pointFromRef(selector);
+    if (literal) return literal;
     const snap = await this.snapshot();
-    const node = snap.nodes.find((n) => n.name === selector) ?? snap.nodes.find((n) => n.name.includes(selector));
-    const p = node && pointFromRef(node.ref);
-    if (!p)
-      throw new Error(
-        `no native element matching "${selector}" (use a "pt:x,y" ref from browser_snapshot, or its accessibility label)`,
-      );
-    return p;
+    return resolvePoint(selector, snap.nodes);
   }
 
   async snapshot(_limit?: number): Promise<PageSnapshot> {

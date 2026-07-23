@@ -5,6 +5,49 @@
  * `scripts/rn-harness.ts` against a running sim (CI has no simulator).
  */
 
+import { pointFromRef } from "./idb.ts";
+import type { SnapNode } from "./pageSnapshot.ts";
+
+/**
+ * Resolve a selector to a tappable point over a native a11y snapshot.
+ *
+ * Order: a literal `pt:x,y` ref → an exact accessibility-name match → a substring
+ * match. Ambiguity is an error, not a silent guess: if more than one node matches
+ * (multiple exact names, or a substring that hits several), we refuse rather than
+ * tap whichever happens to be first in the tree — a wrong tap with no signal is
+ * worse than a clear failure. Callers pass a `pt:x,y` ref (from browser_snapshot)
+ * or a specific label to disambiguate.
+ */
+export function resolvePoint(selector: string, nodes: SnapNode[]): { x: number; y: number } {
+  const literal = pointFromRef(selector);
+  if (literal) return literal;
+
+  const exact = nodes.filter((n) => n.name === selector);
+  const matches = exact.length ? exact : nodes.filter((n) => n.name.includes(selector));
+
+  if (matches.length === 0) {
+    throw new Error(
+      `no native element matching "${selector}" (use a "pt:x,y" ref from browser_snapshot, or its accessibility label)`,
+    );
+  }
+  if (matches.length > 1) {
+    const sample = matches
+      .slice(0, 4)
+      .map((n) => JSON.stringify(n.name))
+      .join(", ");
+    const how = exact.length ? "exactly match" : `contain "${selector}"`;
+    throw new Error(
+      `"${selector}" is ambiguous — ${matches.length} elements ${how} (${sample}${matches.length > 4 ? ", …" : ""}); use a "pt:x,y" ref from browser_snapshot or a more specific label`,
+    );
+  }
+
+  const p = pointFromRef(matches[0]!.ref);
+  if (!p) {
+    throw new Error(`native element "${selector}" has no tappable point ref ("${matches[0]!.ref}")`);
+  }
+  return p;
+}
+
 /** A target descriptor as returned by Metro's inspector proxy `/json/list`. */
 export interface InspectorTarget {
   id?: string;

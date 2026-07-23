@@ -268,7 +268,7 @@ export const TOOLS = [
     purpose:
       "Return ALL events (server + browser) within +/- windowMs of a timestamp, time-ordered — the correlation tool.",
     behavior:
-      "E.g. the browser console error and the backend stack trace from the same moment. Timestamps come from the `ts` field on any event.",
+      "E.g. the browser console error and the backend stack trace from the same moment. Includes every network request in the window — successful ones too, not just failures — so a 200 that returned bad data is visible here. Timestamps come from the `ts` field on any event.",
     annotations: { readOnlyHint: true, openWorldHint: false },
     params: {
       ts: { type: "number", description: "Center timestamp (ms since epoch).", required: true },
