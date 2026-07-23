@@ -12,6 +12,7 @@
  */
 
 import { PuppeteerBrowserController } from "./browser.ts";
+import { advertisedUrl, daemonConfigFromEnv, shouldScheduleIdleShutdown } from "./daemonConfig.ts";
 import { clearDaemonState, httpReachable, pidAlive, readDaemonState, writeDaemonState } from "./daemonState.ts";
 import { DevServer } from "./devServer.ts";
 import { startHttpMcp } from "./httpMcp.ts";
@@ -22,14 +23,15 @@ import { configureTools } from "./toolLayer.ts";
 const log = (m: string) => process.stderr.write(`[devloop-daemon] ${m}\n`);
 
 export async function runDaemon(): Promise<void> {
-  const buffer = new LogBuffer(Number(process.env.DEVLOOP_LOG_CAPACITY ?? 5000));
+  const cfg = daemonConfigFromEnv(process.env);
+  const buffer = new LogBuffer(cfg.logCapacity);
   const devServer = new DevServer(buffer);
   const browser = new PuppeteerBrowserController(buffer, {
-    headless: process.env.DEVLOOP_HEADLESS !== "false", // default headless for a daemon
-    executablePath: process.env.DEVLOOP_CHROME_PATH,
-    networkErrorThreshold: Number(process.env.DEVLOOP_NET_THRESHOLD ?? 400),
-    actionTimeoutMs: Number(process.env.DEVLOOP_ACTION_TIMEOUT ?? 10_000),
-    navTimeoutMs: Number(process.env.DEVLOOP_NAV_TIMEOUT ?? 30_000),
+    headless: cfg.headless,
+    executablePath: cfg.chromePath,
+    networkErrorThreshold: cfg.netThreshold,
+    actionTimeoutMs: cfg.actionTimeoutMs,
+    navTimeoutMs: cfg.navTimeoutMs,
   });
   configureTools({ buffer, browser, devServer });
 
@@ -38,37 +40,30 @@ export async function runDaemon(): Promise<void> {
   } catch (err) {
     log(`WARN: browser failed to launch, browser tools will error: ${err}`);
   }
-  if (process.env.DEVLOOP_DEV_CMD) {
+  if (cfg.devCmd) {
     try {
-      devServer.start(process.env.DEVLOOP_DEV_CMD, process.env.DEVLOOP_DEV_CWD ?? process.cwd());
+      devServer.start(cfg.devCmd, cfg.devCwd ?? process.cwd());
     } catch (err) {
       log(`WARN: DEVLOOP_DEV_CMD auto-start failed: ${err}`);
     }
   }
 
-  const port = Number(process.env.DEVLOOP_HTTP_PORT ?? 7333);
-
   // Optional idle-shutdown: exit once the last client disconnects (off by default).
-  const idleMs = Number(process.env.DEVLOOP_DAEMON_IDLE_MS ?? 0);
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
-
-  // Loopback-only by default; set DEVLOOP_HTTP_HOST=0.0.0.0 to deliberately expose a
-  // shared daemon to the local network (understand the exposure before doing so).
-  const host = process.env.DEVLOOP_HTTP_HOST || "127.0.0.1";
 
   const { server, port: bound } = await startHttpMcp({
     buildServer: () => buildMcpServer("devloop-daemon"),
-    port,
-    host,
+    port: cfg.port,
+    host: cfg.host,
     log,
     onSessionsChanged: (count) => {
       if (idleTimer) {
         clearTimeout(idleTimer);
         idleTimer = undefined;
       }
-      if (idleMs > 0 && count === 0) {
-        log(`no clients connected — idle shutdown in ${idleMs}ms`);
-        idleTimer = setTimeout(() => void shutdown(), idleMs);
+      if (shouldScheduleIdleShutdown(cfg.idleMs, count)) {
+        log(`no clients connected — idle shutdown in ${cfg.idleMs}ms`);
+        idleTimer = setTimeout(() => void shutdown(), cfg.idleMs);
       }
     },
   });
@@ -77,7 +72,7 @@ export async function runDaemon(): Promise<void> {
   writeDaemonState({
     pid: process.pid,
     port: bound,
-    url: `http://${host === "0.0.0.0" ? "localhost" : host}:${bound}/mcp`,
+    url: advertisedUrl(cfg.host, bound),
     startedAt: new Date().toISOString(),
   });
   log("daemon ready — connect MCP clients via HTTP/SSE at /mcp");
