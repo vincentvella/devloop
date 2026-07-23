@@ -116,12 +116,33 @@ export class LogBuffer {
 
   /** Entries within +/- windowMs of timestamp `ts`, across all sources, time-ordered. */
   around(ts: number, windowMs: number, source?: LogSource, targets?: string[]): LogEntry[] {
-    return this.entries.filter(
-      (e) =>
-        Math.abs(e.ts - ts) <= windowMs &&
-        (!source || e.source === source) &&
-        (!targets || (!!e.target && targets.includes(e.target))),
-    );
+    const inWindow = (e: LogEntry) =>
+      Math.abs(e.ts - ts) <= windowMs &&
+      (!source || e.source === source) &&
+      (!targets || (!!e.target && targets.includes(e.target)));
+
+    const seen = new Set<number>();
+    const out: LogEntry[] = [];
+    for (const e of this.entries) {
+      if (inWindow(e)) {
+        seen.add(e.seq);
+        out.push(e);
+      }
+    }
+    // Also fold in sub-threshold network events, which live only in the netRing
+    // (timeline=false, e.g. a successful 200). Correlation is the whole point of
+    // this call — a request that returned bad data at the moment of interest must
+    // not be invisible just because it didn't fail. Timeline network events share
+    // their seq across both rings, so dedupe on it.
+    for (const e of this.netRing) {
+      if (!seen.has(e.seq) && inWindow(e)) {
+        seen.add(e.seq);
+        out.push(e);
+      }
+    }
+    // Merging two rings breaks insertion order; restore the documented time order.
+    out.sort((a, b) => a.ts - b.ts || a.seq - b.seq);
+    return out;
   }
 
   clear(): void {

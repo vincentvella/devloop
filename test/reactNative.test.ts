@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { SnapNode } from "../src/pageSnapshot.ts";
 import {
   connectFailureMessage,
   consoleArgsToText,
@@ -6,8 +7,11 @@ import {
   type InspectorTarget,
   inspectorListUrl,
   isErrorConsoleType,
+  resolvePoint,
   selectHermesTarget,
 } from "../src/reactNative.ts";
+
+const node = (name: string, ref: string): SnapNode => ({ ref, role: "button", name, tag: "native" });
 
 test("connectFailureMessage distinguishes a busy/owned target from no target (#23)", () => {
   // saw a target but couldn't attach → another debugger likely owns it
@@ -88,4 +92,33 @@ test("errorStackFromArgs extracts an Error object's stack, else null", () => {
 test("inspectorListUrl builds /json/list from a metro base", () => {
   expect(inspectorListUrl("http://localhost:8082")).toBe("http://localhost:8082/json/list");
   expect(inspectorListUrl("http://localhost:8082/")).toBe("http://localhost:8082/json/list");
+});
+
+test("resolvePoint: literal pt:x,y ref wins without consulting the snapshot", () => {
+  expect(resolvePoint("pt:12,34", [])).toEqual({ x: 12, y: 34 });
+});
+
+test("resolvePoint: exact a11y-name match beats a substring superset", () => {
+  const nodes = [node("Save draft", "pt:10,10"), node("Save", "pt:20,20")];
+  // "Save" must hit the exact node, not the first substring match "Save draft".
+  expect(resolvePoint("Save", nodes)).toEqual({ x: 20, y: 20 });
+});
+
+test("resolvePoint: unique substring match resolves", () => {
+  const nodes = [node("Submit order", "pt:30,40"), node("Cancel", "pt:0,0")];
+  expect(resolvePoint("Submit", nodes)).toEqual({ x: 30, y: 40 });
+});
+
+test("resolvePoint: ambiguous substring match throws instead of tapping the first (the footgun)", () => {
+  const nodes = [node("Save draft", "pt:10,10"), node("Save changes", "pt:20,20")];
+  expect(() => resolvePoint("Save", nodes)).toThrow(/ambiguous — 2 elements/);
+});
+
+test("resolvePoint: multiple exact matches are ambiguous too", () => {
+  const nodes = [node("OK", "pt:1,1"), node("OK", "pt:2,2")];
+  expect(() => resolvePoint("OK", nodes)).toThrow(/ambiguous/);
+});
+
+test("resolvePoint: no match throws a helpful not-found error", () => {
+  expect(() => resolvePoint("Nope", [node("Yes", "pt:1,1")])).toThrow(/no native element matching "Nope"/);
 });

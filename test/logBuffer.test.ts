@@ -79,6 +79,27 @@ test("around returns entries within the window, filtered by source/targets", () 
   expect(b.around(ts - 10_000_000, 10).length).toBe(0); // far outside window
 });
 
+test("around folds in sub-threshold network events (netRing-only) without dupes", () => {
+  const b = new LogBuffer(100);
+  b.push("browser", "pageerror", "boom", undefined, "pane-1"); // on the timeline
+  b.network("500 GET /api/boom", { kind: "network" }, "pane-1", true); // failure → both rings
+  b.network("200 GET /api/ok", { kind: "network" }, "pane-1", false); // success → netRing only
+  const ts = Date.now();
+
+  const all = b.around(ts, 5000);
+  // pageerror + the 500 + the sub-threshold 200 — the 200 was previously invisible here.
+  expect(all.length).toBe(3);
+  expect(all.some((e) => e.line === "200 GET /api/ok")).toBe(true);
+  // The 500 lives in both rings but must appear exactly once (deduped by seq).
+  expect(all.filter((e) => e.line === "500 GET /api/boom").length).toBe(1);
+
+  // source filter still excludes network (source="browser") when scoped to server.
+  expect(b.around(ts, 5000, "server").length).toBe(0);
+  // time-ordered by ts then seq.
+  const seqs = all.map((e) => e.seq);
+  expect(seqs).toEqual([...seqs].sort((x, y) => x - y));
+});
+
 test("onPush notifies live, unsubscribe stops it, clear empties", () => {
   const b = new LogBuffer(100);
   const seen: string[] = [];
