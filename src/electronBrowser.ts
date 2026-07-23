@@ -23,7 +23,7 @@ export interface ElectronBrowserOptions {
   actionTimeoutMs: number;
 }
 
-interface RemoteObject {
+export interface RemoteObject {
   type: string;
   subtype?: string;
   value?: unknown;
@@ -40,17 +40,7 @@ export class ElectronBrowserController implements IBrowserController {
   private inflight = 0;
   private lastActivity = 0;
   private lastDocStatus: number | null = null;
-  private readonly requests = new Map<
-    string,
-    {
-      url: string;
-      method: string;
-      postData?: string;
-      headers?: Record<string, string>;
-      type?: string;
-      startedAt: number;
-    }
-  >();
+  private readonly requests = new Map<string, ReqRecord>();
   /** Network entries awaiting their response body (fetched on loadingFinished). */
   private readonly pendingBodies = new Map<string, LogEntry>();
   private listening = false;
@@ -105,12 +95,8 @@ export class ElectronBrowserController implements IBrowserController {
   private onCdp(method: string, params: any): void {
     switch (method) {
       case "Runtime.consoleAPICalled": {
-        const rendered = (params.args as RemoteObject[]).map(renderRemote).join(" ");
-        if (rendered.includes("Electron Security Warning")) break; // dev-only nag, not the app's
-        this.emit("console", `[${params.type}] ${rendered}`, {
-          type: params.type,
-          args: (params.args as RemoteObject[]).map((a) => (a.value !== undefined ? a.value : a.description)),
-        });
+        const c = renderConsole(params);
+        if (c) this.emit("console", c.line, c.detail); // null = suppressed security nag
         break;
       }
       case "Runtime.exceptionThrown": {
@@ -139,27 +125,9 @@ export class ElectronBrowserController implements IBrowserController {
         if (params.type === "Document") this.lastDocStatus = status;
         const onTimeline = status >= this.opts.networkErrorThreshold;
         const req = this.requests.get(params.requestId);
-        const detail: NetDetail = {
-          kind: "network",
-          url: params.response.url,
-          status,
-          statusText: params.response.statusText,
-          method: req?.method,
-          resourceType: params.type ?? req?.type,
-          mimeType: params.response.mimeType,
-          startedAt: req?.startedAt,
-          durationMs: req ? Date.now() - req.startedAt : undefined,
-          requestHeaders: req?.headers,
-          responseHeaders: params.response.headers,
-          requestBody: cap(req?.postData),
-        };
+        const { line, detail } = buildResponseDetail(params, req, Date.now());
         // Ring always (full capture, #26); timeline + body-fetch only for the curated subset.
-        const entry = this.buffer.network(
-          `${status} ${req?.method ?? ""} ${params.response.url}`.trim(),
-          detail,
-          this.id,
-          onTimeline,
-        );
+        const entry = this.buffer.network(line, detail, this.id, onTimeline);
         if (onTimeline) this.pendingBodies.set(params.requestId, entry); // body fetched on loadingFinished
         break;
       }
@@ -179,17 +147,8 @@ export class ElectronBrowserController implements IBrowserController {
         this.lastActivity = Date.now();
         const req = this.requests.get(params.requestId);
         this.requests.delete(params.requestId);
-        this.emit("network", `FAILED ${req?.method ?? ""} ${req?.url ?? params.requestId} — ${params.errorText}`, {
-          kind: "network",
-          url: req?.url ?? params.requestId,
-          method: req?.method,
-          resourceType: req?.type,
-          startedAt: req?.startedAt,
-          durationMs: req ? Date.now() - req.startedAt : undefined,
-          requestHeaders: req?.headers,
-          requestBody: cap(req?.postData),
-          failure: params.errorText,
-        } satisfies NetDetail);
+        const { line, detail } = buildFailureDetail(params, req, Date.now());
+        this.emit("network", line, detail);
         this.pendingBodies.delete(params.requestId);
         break;
       }
@@ -385,13 +344,7 @@ export class ElectronBrowserController implements IBrowserController {
       "shadercache",
       "filesystem",
     ];
-    let origin: string | undefined;
-    try {
-      const u = new URL(this.wc.getURL());
-      if (u.protocol.startsWith("http")) origin = u.origin;
-    } catch {
-      /* opaque origin */
-    }
+    const origin = originForClear(this.wc.getURL());
     await ses.clearStorageData(opts.allOrigins || !origin ? { storages } : { origin, storages });
     await ses.clearCache();
     try {
@@ -451,13 +404,101 @@ export class ElectronBrowserController implements IBrowserController {
   }
 }
 
+/** A pending request tracked between requestWillBeSent and its response/failure. */
+export interface ReqRecord {
+  url: string;
+  method: string;
+  postData?: string;
+  headers?: Record<string, string>;
+  type?: string;
+  startedAt: number;
+}
+
 /** Cap a body to keep the buffer light; mark truncation. */
-function cap(s: string | undefined, n = 2000): string | undefined {
+export function cap(s: string | undefined, n = 2000): string | undefined {
   if (s == null) return undefined;
   return s.length > n ? `${s.slice(0, n)}…(${s.length - n} more)` : s;
 }
 
-function renderRemote(o: RemoteObject): string {
+/**
+ * Which origin to scope a storage clear to. http/https → that origin (scoped
+ * clear); anything else (file:, about:blank, opaque, or an unparseable URL) →
+ * undefined, meaning "clear all origins". Pure over the URL string.
+ */
+export function originForClear(url: string): string | undefined {
+  try {
+    const u = new URL(url);
+    return u.protocol.startsWith("http") ? u.origin : undefined;
+  } catch {
+    return undefined; // opaque / unparseable
+  }
+}
+
+/**
+ * Render a CDP consoleAPICalled event into a timeline line + detail, or null to
+ * suppress it (Electron's dev-only security nag, which isn't the app's output).
+ */
+export function renderConsole(params: {
+  type: string;
+  args: RemoteObject[];
+}): { line: string; detail: { type: string; args: unknown[] } } | null {
+  const args = params.args ?? [];
+  const rendered = args.map(renderRemote).join(" ");
+  if (rendered.includes("Electron Security Warning")) return null;
+  return {
+    line: `[${params.type}] ${rendered}`,
+    detail: { type: params.type, args: args.map((a) => (a.value !== undefined ? a.value : a.description)) },
+  };
+}
+
+/** Build the timeline line + NetDetail for a responseReceived event. */
+export function buildResponseDetail(
+  params: any,
+  req: ReqRecord | undefined,
+  now: number,
+): { line: string; detail: NetDetail } {
+  const status: number = params.response.status;
+  const detail: NetDetail = {
+    kind: "network",
+    url: params.response.url,
+    status,
+    statusText: params.response.statusText,
+    method: req?.method,
+    resourceType: params.type ?? req?.type,
+    mimeType: params.response.mimeType,
+    startedAt: req?.startedAt,
+    durationMs: req ? now - req.startedAt : undefined,
+    requestHeaders: req?.headers,
+    responseHeaders: params.response.headers,
+    requestBody: cap(req?.postData),
+  };
+  return { line: `${status} ${req?.method ?? ""} ${params.response.url}`.trim(), detail };
+}
+
+/** Build the timeline line + NetDetail for a loadingFailed event. */
+export function buildFailureDetail(
+  params: any,
+  req: ReqRecord | undefined,
+  now: number,
+): { line: string; detail: NetDetail } {
+  const url = req?.url ?? params.requestId;
+  return {
+    line: `FAILED ${req?.method ?? ""} ${url} — ${params.errorText}`,
+    detail: {
+      kind: "network",
+      url,
+      method: req?.method,
+      resourceType: req?.type,
+      startedAt: req?.startedAt,
+      durationMs: req ? now - req.startedAt : undefined,
+      requestHeaders: req?.headers,
+      requestBody: cap(req?.postData),
+      failure: params.errorText,
+    } satisfies NetDetail,
+  };
+}
+
+export function renderRemote(o: RemoteObject): string {
   if (o.value !== undefined) return typeof o.value === "string" ? o.value : JSON.stringify(o.value);
   if (o.unserializableValue) return o.unserializableValue;
   // Objects/arrays arrive as a CDP preview (no by-value serialization). Render it
