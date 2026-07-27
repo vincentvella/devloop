@@ -8,7 +8,7 @@
     "render": "remotion render DevloopHero ../web/public/demo.mp4 --codec h264 && remotion render DevloopHero ../web/public/demo.webm --codec vp8 && remotion still DevloopHero ../web/public/demo-poster.png --frame 300"
   },
   "dependencies": {
-    "@remotion/cli": "^4.0.485",
+    "@remotion/cli": "^4.0.499",
     "remotion": "^4.0.485",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
