@@ -111,7 +111,7 @@
     "playwright-core": "^1.61.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "serve-sim": "0.1.44",
+    "serve-sim": "0.1.45",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "zustand": "^5.0.14"

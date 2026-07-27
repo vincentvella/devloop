@@ -28,7 +28,7 @@
         "playwright-core": "^1.61.1",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
-        "serve-sim": "0.1.44",
+        "serve-sim": "0.1.45",
         "tailwindcss": "^4.3.3",
         "typescript": "^7.0.2",
         "zustand": "^5.0.14",
@@ -1153,7 +1153,7 @@
 
     "serialize-error": ["serialize-error@7.0.1", "", { "dependencies": { "type-fest": "^0.13.1" } }, "sha512-8I8TjW5KMOKsZQTvoxjuSIa7foAwPWGOts+6o7sgjz41/qMD9VQHEDxi6PBvK2l0MXUmqZyNpUK+T2tQaaElvw=="],
 
-    "serve-sim": ["serve-sim@0.1.44", "", { "dependencies": { "inspect-webkit": "^0.0.5", "sonner": "^2.0.7", "ws": "^8.21.0" }, "bin": { "serve-sim": "dist/serve-sim.js" } }, "sha512-wu7+qewcYcaZd5ljv8udIyKXVzbU3DXXaXRoIvodmC1qZfhsDfBLdiCFOmHoZQFnL2P11eFkvb1yXi7IBgQ4nw=="],
+    "serve-sim": ["serve-sim@0.1.45", "", { "dependencies": { "inspect-webkit": "^0.0.5", "sonner": "^2.0.7", "ws": "^8.21.0" }, "bin": { "serve-sim": "dist/serve-sim.js" } }, "sha512-I9YBJRz7DETanzh6hRD1yaVcUPO+xe4egjGNArk22mO7SIWZVCunHVTwpAbriP7H0aZMIKfQyVpuqvYonuKxBw=="],
 
     "serve-static": ["serve-static@2.2.1", "", { "dependencies": { "encodeurl": "^2.0.0", "escape-html": "^1.0.3", "parseurl": "^1.3.3", "send": "^1.2.0" } }, "sha512-xRXBn0pPqQTVQiC8wyQrKs2MOlX24zQ0POGaj0kultvoOCstBQM5yvOhAVSUwOMjQtTvsPWoNCHfPGwaaQJhTw=="],
 
