@@ -92,7 +92,7 @@
     "puppeteer": "^25.2.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.4",
+    "@biomejs/biome": "^2.5.5",
     "@jridgewell/gen-mapping": "^0.3.13",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-dialog": "^1.1.18",
