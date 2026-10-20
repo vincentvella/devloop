@@ -3,11 +3,12 @@
  *
  * Proves: a `--shared` stdio launch with no daemon running auto-spawns one and
  * bridges to it; a second `--shared` launch reuses the SAME daemon (one pid); and
- * `daemon --status` / `daemon --stop` work. Run: `bun run scripts/test-daemon-autoconnect.ts`
+ * `daemon --status` / `daemon --stop` work. Then the default (no flag): two launches in a
+ * project dir share ONE per-project daemon, separate from the global one. Run: `bun run scripts/test-daemon-autoconnect.ts`
  * (headless; needs the dist build — runs `bun run mcp:build` first).
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -34,8 +35,8 @@ const readPid = (): number | undefined => {
   }
 };
 
-async function sharedClient(name: string): Promise<Client> {
-  const transport = new StdioClientTransport({ command: "node", args: [ENTRY, "--shared"], env: ENV });
+async function sharedClient(name: string, args = ["--shared"], cwd?: string): Promise<Client> {
+  const transport = new StdioClientTransport({ command: "node", args: [ENTRY, ...args], env: ENV, cwd });
   const client = new Client({ name, version: "0" }, { capabilities: {} });
   await client.connect(transport);
   return client;
@@ -89,6 +90,38 @@ async function main(): Promise<void> {
   await new Promise((r) => setTimeout(r, 800));
   const status2 = execFileSync("node", [ENTRY, "daemon", "--status"], { env: ENV, encoding: "utf8" });
   check("daemon --status reports not running after stop", /not running/.test(status2), status2.trim());
+
+  // 5) Default (no flag): sessions in a project dir share that project's daemon.
+  const PROJECT = realpathSync(mkdtempSync(join(tmpdir(), "devloop-project-"))); // cwd is always the real path
+  const scopedPid = (): number | undefined => {
+    const d = join(HOME, "daemons");
+    const files = existsSync(d) ? readdirSync(d) : [];
+    return files.length === 1 ? JSON.parse(readFileSync(join(d, files[0]!), "utf8")).pid : undefined;
+  };
+  const c = await sharedClient("c", [], PROJECT);
+  check("default launch connects + lists tools", (await c.listTools()).tools.length > 0);
+  const pidC = scopedPid();
+  check("default launch wrote a per-project daemon state", !!pidC);
+  check("global daemon slot stays empty", !existsSync(stateFile));
+  await c.close().catch(() => {});
+  const d = await sharedClient("d", [], PROJECT);
+  await d.listTools();
+  check("a restarted session reuses the project's daemon", !!pidC && scopedPid() === pidC, `pid ${pidC}`);
+  await d.close().catch(() => {});
+  const run = (a: string[]) => execFileSync("node", [ENTRY, ...a], { env: ENV, cwd: PROJECT, encoding: "utf8" });
+  const status3 = run(["daemon", "--status"]);
+  check("daemon --status in the project finds its daemon", status3.includes(`for ${PROJECT}`), status3.trim());
+  check("daemon --stop in the project stops it", /stopped/.test(run(["daemon", "--stop"])));
+
+  // 6) Concurrent launches in a fresh project must start ONE daemon, not one each.
+  const RACE = realpathSync(mkdtempSync(join(tmpdir(), "devloop-race-")));
+  const racers = await Promise.all(["r1", "r2", "r3"].map((n) => sharedClient(n, [], RACE)));
+  const daemons = execFileSync("pgrep", ["-f", `${ENTRY} daemon`], { encoding: "utf8" })
+    .trim()
+    .split("\n");
+  check("3 simultaneous launches started exactly one daemon", daemons.length === 1, `${daemons.length} daemon(s)`);
+  await Promise.all(racers.map((r) => r.close().catch(() => {})));
+  execFileSync("node", [ENTRY, "daemon", "--stop"], { env: ENV, cwd: RACE });
 
   const failed = checks.filter(([, ok]) => !ok).length;
   process.stdout.write(`\n${checks.length - failed}/${checks.length} checks passed\n`);

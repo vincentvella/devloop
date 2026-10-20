@@ -5,19 +5,54 @@
  * tools/list + tools/call to the daemon over HTTP. So many sessions share one browser,
  * one dev server, one timeline — the daemon (#22) story, made seamless.
  *
- * Opt-in only (--shared or DEVLOOP_DAEMON=1); the default per-session behavior in
- * src/index.ts is untouched. Bridging always falls back to local on any failure.
+ * The default since 0.11: each stdio launch bridges to a per-project daemon (keyed by
+ * its cwd), so restarting a session reuses the same Chrome instead of opening another.
+ * `--shared` / DEVLOOP_DAEMON=1 picks one global daemon; `--local` / DEVLOOP_DAEMON=0
+ * keeps the old one-browser-per-session behavior. Bridging always falls back to local
+ * on any failure.
  */
 import { type SpawnOptions, spawn } from "node:child_process";
+import { resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { clearDaemonState, type DaemonState, httpReachable, pidAlive, readDaemonState } from "./daemonState.ts";
+import {
+  acquireSpawnLock,
+  clearDaemonState,
+  type DaemonState,
+  daemonScope,
+  httpReachable,
+  pidAlive,
+  readDaemonState,
+} from "./daemonState.ts";
 import { VERSION } from "./version.ts";
 
 const log = (m: string) => process.stderr.write(`[devloop] ${m}\n`);
+
+/** How a stdio launch runs: its own browser, or bridged to a daemon (`scope` undefined = global). */
+export type LaunchMode = { kind: "local" } | { kind: "shared"; scope?: string };
+
+export function launchMode(args: string[], env: Record<string, string | undefined>, cwd: string): LaunchMode {
+  if (args.includes("--local") || env.DEVLOOP_DAEMON === "0") return { kind: "local" };
+  const explicit = env.DEVLOOP_DAEMON_SCOPE ? resolve(env.DEVLOOP_DAEMON_SCOPE) : undefined;
+  if (args.includes("--shared") || env.DEVLOOP_DAEMON === "1") return { kind: "shared", scope: explicit };
+  return { kind: "shared", scope: explicit ?? resolve(env.DEVLOOP_DEV_CWD || cwd) };
+}
+
+/** Idle exit for an auto-spawned daemon, so Chrome closes once every session is gone. */
+export const AUTO_DAEMON_IDLE_MS = 10 * 60_000;
+
+/** Env for an auto-spawned daemon: keep stdio's visible-by-default browser (the daemon
+ *  itself defaults headless) and give it an idle exit unless one was configured. */
+export function daemonSpawnEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    DEVLOOP_HEADLESS: env.DEVLOOP_HEADLESS === "true" ? "true" : "false",
+    DEVLOOP_DAEMON_IDLE_MS: env.DEVLOOP_DAEMON_IDLE_MS || String(AUTO_DAEMON_IDLE_MS),
+  };
+}
 
 /** Find a live daemon via the state file, clearing it if the process is dead/unreachable. */
 export async function findDaemon(): Promise<DaemonState | undefined> {
@@ -31,27 +66,45 @@ export async function findDaemon(): Promise<DaemonState | undefined> {
   return s;
 }
 
-/** Spawn a detached daemon and wait until its state file is live. Throws on timeout. */
+/**
+ * Find this scope's daemon, spawning a detached one if none is running, and wait until
+ * its state file is live. Concurrent launches race for a spawn lock: the winner spawns,
+ * the rest wait for its daemon (or take over the lock if the winner dies). Throws on timeout.
+ */
 export async function ensureDaemon(timeoutMs = 20_000): Promise<DaemonState> {
-  const existing = await findDaemon();
-  if (existing) return existing;
-
   const self = process.argv[1];
-  if (!self) throw new Error("cannot resolve the devloop entry script to spawn a daemon");
-  log("shared mode: no daemon found, starting one…");
-  const spawnOpts: SpawnOptions = {
-    detached: true, // outlive this session
-    stdio: "ignore",
-    env: process.env,
-  };
-  const child = spawn(process.execPath, [self, "daemon"], spawnOpts);
-  child.unref();
-
+  const scope = daemonScope();
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const s = await findDaemon();
-    if (s) return s;
-    await new Promise((r) => setTimeout(r, 300));
+  let release: (() => void) | undefined;
+  let waitLogged = false;
+  try {
+    while (Date.now() < deadline) {
+      const s = await findDaemon();
+      if (s) return s;
+      if (!release) {
+        release = acquireSpawnLock(timeoutMs);
+        if (release) {
+          // The previous holder may have finished between our probe and taking the lock.
+          const raced = await findDaemon();
+          if (raced) return raced;
+          if (!self) throw new Error("cannot resolve the devloop entry script to spawn a daemon");
+          log(`shared mode: no daemon found${scope ? ` for ${scope}` : ""}, starting one…`);
+          const spawnOpts: SpawnOptions = {
+            detached: true, // outlive this session
+            stdio: "ignore",
+            env: daemonSpawnEnv(process.env),
+            cwd: scope, // a scoped daemon's dev_start defaults to its project
+          };
+          spawn(process.execPath, [self, "daemon"], spawnOpts).unref();
+        } else if (!waitLogged) {
+          waitLogged = true;
+          log("shared mode: another session is starting the daemon, waiting…");
+        }
+      }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  } finally {
+    release?.();
   }
   throw new Error(`daemon did not come up within ${timeoutMs}ms`);
 }
