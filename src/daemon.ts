@@ -30,6 +30,15 @@ import { configureTools } from "./toolLayer.ts";
 const log = (m: string) => process.stderr.write(`[devloop-daemon] ${m}\n`);
 
 export async function runDaemon(): Promise<void> {
+  // Never run two daemons for one scope (they'd fight over the state file, each with its
+  // own Chrome). The spawn lock prevents this for auto-starts; this also covers manual runs.
+  const rival = readDaemonState();
+  if (rival && rival.pid !== process.pid && pidAlive(rival.pid) && (await httpReachable(rival.url))) {
+    log(
+      `a daemon is already running${rival.scope ? ` for ${rival.scope}` : ""} (pid ${rival.pid}, ${rival.url}) — exiting`,
+    );
+    process.exit(0);
+  }
   const cfg = daemonConfigFromEnv(process.env);
   const buffer = new LogBuffer(cfg.logCapacity);
   const devServer = new DevServer(buffer);

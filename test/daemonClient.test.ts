@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -94,6 +94,31 @@ test("ensureDaemon throws on timeout when the daemon never comes up", async () =
     await expect(ensureDaemon(150)).rejects.toThrow(/did not come up/i);
   } finally {
     process.argv[1] = realArgv1;
+  }
+});
+
+test("concurrent ensureDaemon calls spawn exactly one daemon", async () => {
+  // A fake daemon: counts its own launches, advertises a live URL, then stays up briefly.
+  const srv = await liveServer();
+  const counter = join(dir, "spawns");
+  const fake = join(dir, "fake-daemon.js");
+  writeFileSync(
+    fake,
+    `const fs = require("node:fs");
+     fs.appendFileSync(${JSON.stringify(counter)}, "x");
+     fs.writeFileSync(${JSON.stringify(statePath())}, JSON.stringify({ pid: process.pid, port: 1, url: ${JSON.stringify(srv.url)} }));
+     setTimeout(() => {}, 3000);`,
+  );
+  const realArgv1 = process.argv[1];
+  process.argv[1] = fake;
+  try {
+    const states = await Promise.all([ensureDaemon(5000), ensureDaemon(5000), ensureDaemon(5000)]);
+    expect(readFileSync(counter, "utf8")).toBe("x"); // one spawn, not three
+    expect(new Set(states.map((s) => s.pid)).size).toBe(1);
+    process.kill(states[0]!.pid, "SIGTERM");
+  } finally {
+    process.argv[1] = realArgv1;
+    srv.close();
   }
 });
 

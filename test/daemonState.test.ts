@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { daemonStateFile, httpReachable, pidAlive, readDaemonState, writeDaemonState } from "../src/daemonState.ts";
+import {
+  acquireSpawnLock,
+  daemonStateFile,
+  httpReachable,
+  pidAlive,
+  readDaemonState,
+  writeDaemonState,
+} from "../src/daemonState.ts";
 
 describe("pidAlive", () => {
   test("alive when the signal-0 probe succeeds (self)", () => {
@@ -129,5 +136,59 @@ describe("httpReachable", () => {
       for (const s of sockets) s.destroy();
       server.close();
     }
+  });
+});
+
+describe("acquireSpawnLock", () => {
+  let dir: string;
+  const realHome = process.env.DEVLOOP_HOME;
+  const lockFile = () => `${daemonStateFile()}.lock`;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "devloop-lock-"));
+    process.env.DEVLOOP_HOME = dir;
+  });
+  afterEach(() => {
+    if (realHome === undefined) delete process.env.DEVLOOP_HOME;
+    else process.env.DEVLOOP_HOME = realHome;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("exclusive while held; free again once released", () => {
+    const release = acquireSpawnLock(60_000);
+    expect(release).toBeDefined();
+    expect(acquireSpawnLock(60_000)).toBeUndefined(); // held by a live pid (us)
+    release?.();
+    expect(existsSync(lockFile())).toBe(false);
+    const again = acquireSpawnLock(60_000);
+    expect(again).toBeDefined();
+    again?.();
+  });
+
+  test("breaks a lock whose holder is dead", () => {
+    writeFileSync(lockFile(), JSON.stringify({ pid: 999999 }));
+    const kill = spyOn(process, "kill").mockImplementation(() => {
+      const e = new Error("ESRCH") as NodeJS.ErrnoException;
+      e.code = "ESRCH";
+      throw e;
+    });
+    const release = acquireSpawnLock(60_000);
+    kill.mockRestore();
+    expect(release).toBeDefined();
+    release?.();
+  });
+
+  test("breaks a lock older than staleMs even if the holder looks alive", () => {
+    writeFileSync(lockFile(), JSON.stringify({ pid: process.pid }));
+    const old = new Date(Date.now() - 120_000);
+    utimesSync(lockFile(), old, old);
+    const release = acquireSpawnLock(60_000);
+    expect(release).toBeDefined();
+    release?.();
+  });
+
+  test("an unreadable (mid-write) fresh lock is respected", () => {
+    writeFileSync(lockFile(), "");
+    expect(acquireSpawnLock(60_000)).toBeUndefined();
   });
 });

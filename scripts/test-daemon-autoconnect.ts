@@ -113,6 +113,16 @@ async function main(): Promise<void> {
   check("daemon --status in the project finds its daemon", status3.includes(`for ${PROJECT}`), status3.trim());
   check("daemon --stop in the project stops it", /stopped/.test(run(["daemon", "--stop"])));
 
+  // 6) Concurrent launches in a fresh project must start ONE daemon, not one each.
+  const RACE = realpathSync(mkdtempSync(join(tmpdir(), "devloop-race-")));
+  const racers = await Promise.all(["r1", "r2", "r3"].map((n) => sharedClient(n, [], RACE)));
+  const daemons = execFileSync("pgrep", ["-f", `${ENTRY} daemon`], { encoding: "utf8" })
+    .trim()
+    .split("\n");
+  check("3 simultaneous launches started exactly one daemon", daemons.length === 1, `${daemons.length} daemon(s)`);
+  await Promise.all(racers.map((r) => r.close().catch(() => {})));
+  execFileSync("node", [ENTRY, "daemon", "--stop"], { env: ENV, cwd: RACE });
+
   const failed = checks.filter(([, ok]) => !ok).length;
   process.stdout.write(`\n${checks.length - failed}/${checks.length} checks passed\n`);
   process.exit(failed ? 1 : 0);

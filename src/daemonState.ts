@@ -6,7 +6,7 @@
  * each project finds its own. Pure Node; mirrors registry.ts's lazy DEVLOOP_HOME resolution.
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -48,6 +48,47 @@ export function clearDaemonState(): void {
   } catch {
     /* already gone */
   }
+}
+
+/**
+ * Take the exclusive "I'm starting this scope's daemon" lock — a file created with
+ * O_EXCL beside the state file — so concurrent launches for one project spawn ONE
+ * daemon. Returns a release fn, or undefined while another live process holds it.
+ * A lock whose holder is dead, or older than `staleMs`, is broken and retaken.
+ */
+export function acquireSpawnLock(staleMs: number): (() => void) | undefined {
+  const file = `${daemonStateFile()}.lock`;
+  mkdirSync(dirname(file), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(file, JSON.stringify({ pid: process.pid }), { flag: "wx" });
+      return () => {
+        try {
+          unlinkSync(file);
+        } catch {
+          /* already gone */
+        }
+      };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+    let pid: unknown;
+    let ageMs = 0;
+    try {
+      ageMs = Date.now() - statSync(file).mtimeMs;
+      pid = JSON.parse(readFileSync(file, "utf8")).pid;
+    } catch {
+      /* vanished, or caught mid-write — judge by age alone */
+    }
+    const holderDead = typeof pid === "number" && !pidAlive(pid);
+    if (!holderDead && ageMs <= staleMs) return undefined;
+    try {
+      unlinkSync(file);
+    } catch {
+      /* someone else broke it first */
+    }
+  }
+  return undefined;
 }
 
 /** Is a process alive? (signal 0 probes without killing.) */

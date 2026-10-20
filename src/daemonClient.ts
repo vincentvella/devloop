@@ -19,6 +19,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import {
+  acquireSpawnLock,
   clearDaemonState,
   type DaemonState,
   daemonScope,
@@ -65,29 +66,45 @@ export async function findDaemon(): Promise<DaemonState | undefined> {
   return s;
 }
 
-/** Spawn a detached daemon and wait until its state file is live. Throws on timeout. */
+/**
+ * Find this scope's daemon, spawning a detached one if none is running, and wait until
+ * its state file is live. Concurrent launches race for a spawn lock: the winner spawns,
+ * the rest wait for its daemon (or take over the lock if the winner dies). Throws on timeout.
+ */
 export async function ensureDaemon(timeoutMs = 20_000): Promise<DaemonState> {
-  const existing = await findDaemon();
-  if (existing) return existing;
-
   const self = process.argv[1];
-  if (!self) throw new Error("cannot resolve the devloop entry script to spawn a daemon");
   const scope = daemonScope();
-  log(`shared mode: no daemon found${scope ? ` for ${scope}` : ""}, starting one…`);
-  const spawnOpts: SpawnOptions = {
-    detached: true, // outlive this session
-    stdio: "ignore",
-    env: daemonSpawnEnv(process.env),
-    cwd: scope, // a scoped daemon's dev_start defaults to its project
-  };
-  const child = spawn(process.execPath, [self, "daemon"], spawnOpts);
-  child.unref();
-
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const s = await findDaemon();
-    if (s) return s;
-    await new Promise((r) => setTimeout(r, 300));
+  let release: (() => void) | undefined;
+  let waitLogged = false;
+  try {
+    while (Date.now() < deadline) {
+      const s = await findDaemon();
+      if (s) return s;
+      if (!release) {
+        release = acquireSpawnLock(timeoutMs);
+        if (release) {
+          // The previous holder may have finished between our probe and taking the lock.
+          const raced = await findDaemon();
+          if (raced) return raced;
+          if (!self) throw new Error("cannot resolve the devloop entry script to spawn a daemon");
+          log(`shared mode: no daemon found${scope ? ` for ${scope}` : ""}, starting one…`);
+          const spawnOpts: SpawnOptions = {
+            detached: true, // outlive this session
+            stdio: "ignore",
+            env: daemonSpawnEnv(process.env),
+            cwd: scope, // a scoped daemon's dev_start defaults to its project
+          };
+          spawn(process.execPath, [self, "daemon"], spawnOpts).unref();
+        } else if (!waitLogged) {
+          waitLogged = true;
+          log("shared mode: another session is starting the daemon, waiting…");
+        }
+      }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  } finally {
+    release?.();
   }
   throw new Error(`daemon did not come up within ${timeoutMs}ms`);
 }
