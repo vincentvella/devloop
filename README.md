@@ -233,7 +233,7 @@ Then, in any project: *"dev_start and repro a navigate to /projects"*. `dev_star
 
 ## Daemon mode (shared HTTP/SSE)
 
-Instead of every agent/session spawning its own stdio server (its own browser + timeline), run **one long-running daemon** they all connect to over HTTP/SSE — many clients, one Devloop instance (one browser, one dev server, one correlated timeline):
+Run **one long-running daemon** yourself (stdio launches already do this per project; see *Shared mode* below) they all connect to over HTTP/SSE — many clients, one Devloop instance (one browser, one dev server, one correlated timeline):
 
 ```sh
 devloop-mcp daemon                 # headless; serves MCP at http://localhost:7333/mcp
@@ -251,16 +251,18 @@ devloop-mcp daemon --stop          # SIGTERM the running daemon
 DEVLOOP_DAEMON_IDLE_MS=60000 devloop-mcp daemon   # auto-exit 60s after the last client disconnects
 ```
 
-### Shared mode — auto-connect from stdio (no separate daemon step)
+### Shared mode — on by default for stdio
 
-Don't want to manage a daemon by hand? Launch the **stdio** server in shared mode and it will **bridge to a daemon automatically** — connecting to a running one, or spawning + detaching one if none exists — instead of starting its own browser. So every session transparently shares one browser/timeline:
+You don't need to run a daemon yourself. A plain stdio launch (`npx -y devloop-mcp`) **bridges to a daemon for its project**: it connects to the one already running for that directory, or spawns and detaches one if there isn't one. Restarting Claude Code, `/mcp` reconnects, and new sessions in the same repo therefore **reuse the same Chrome** instead of opening another one. Two repos open at once get separate daemons, so their dev servers and timelines don't collide.
+
+The stdio process becomes a thin proxy: it speaks stdio to the client and forwards tools to the daemon over HTTP. An auto-spawned daemon keeps stdio's visible browser (`DEVLOOP_HEADLESS=true` to hide it), runs in the project directory, and **exits 10 minutes after its last session disconnects** (`DEVLOOP_DAEMON_IDLE_MS` to change that). Run `devloop-mcp daemon --status` / `--stop` inside the project to manage that project's daemon. If anything goes wrong (the daemon won't start, etc.), the session **falls back to a normal local instance**, so it never just dies.
 
 ```sh
-claude mcp add devloop --scope user -- npx -y devloop-mcp --shared
-# or set DEVLOOP_DAEMON=1 in the MCP server env
+npx -y devloop-mcp --shared   # or DEVLOOP_DAEMON=1: one global daemon shared by every project
+npx -y devloop-mcp --local    # or DEVLOOP_DAEMON=0: the old behavior, one browser per session
 ```
 
-The stdio process becomes a thin proxy (it speaks stdio to the client, forwarding tools to the daemon over HTTP). The daemon advertises itself in `$DEVLOOP_HOME/daemon.json` so other sessions find it. If anything goes wrong (daemon won't start, etc.) it **falls back to a normal local instance**, so a session never just dies. Without `--shared` / `DEVLOOP_DAEMON=1`, behavior is unchanged: one browser per session.
+The global daemon advertises itself in `$DEVLOOP_HOME/daemon.json`, and per-project daemons in `$DEVLOOP_HOME/daemons/`.
 
 ## When MCP is blocked (enterprise sandbox) — drive Devloop via [mcporter](https://mcporter.sh)
 

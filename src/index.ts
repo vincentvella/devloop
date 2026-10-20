@@ -9,20 +9,26 @@
  *
  * stdout is reserved for the MCP protocol. Everything human-facing → stderr.
  *
- * Shared mode (opt-in: `--shared` or DEVLOOP_DAEMON=1): instead of spawning its own
- * browser, the stdio launch bridges to a long-running daemon (auto-spawning one if
- * none is running) so many sessions share one browser/timeline (#round2.1). Falls
- * back to a local instance on any failure. Subcommands: `daemon`, `daemon --status`,
- * `daemon --stop`.
+ * Shared mode (the default): instead of spawning its own browser, the stdio launch
+ * bridges to a long-running daemon for its project (auto-spawning one if none is
+ * running), so restarted sessions reuse one browser/timeline (#round2.1). `--shared` /
+ * DEVLOOP_DAEMON=1 uses one global daemon instead; `--local` / DEVLOOP_DAEMON=0 runs
+ * a browser per session. Falls back to a local instance on any failure. Subcommands:
+ * `daemon`, `daemon --status`, `daemon --stop` (these act on the current directory's
+ * daemon if it has one, else the global one).
  *
  * Config via env: DEVLOOP_HEADLESS, DEVLOOP_CHROME_PATH, DEVLOOP_NET_THRESHOLD,
  * DEVLOOP_ACTION_TIMEOUT, DEVLOOP_NAV_TIMEOUT, DEVLOOP_LOG_CAPACITY, and the
  * optional boot auto-start DEVLOOP_DEV_CMD / DEVLOOP_DEV_CWD.
  */
 
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { PuppeteerBrowserController } from "./browser.ts";
 import { errorText } from "./crashReport.ts";
+import { bridgeStdioToDaemon, ensureDaemon, launchMode } from "./daemonClient.ts";
+import { daemonStateFile } from "./daemonState.ts";
 import { DevServer } from "./devServer.ts";
 import { LogBuffer } from "./logBuffer.ts";
 import { buildMcpServer } from "./mcpServer.ts";
@@ -69,18 +75,23 @@ async function main(): Promise<void> {
 
   if (args.includes("daemon")) {
     const daemon = await import("./daemon.ts"); // long-running shared HTTP/SSE server (#22)
+    const here = resolve(process.cwd());
+    if ((args.includes("--status") || args.includes("--stop")) && !process.env.DEVLOOP_DAEMON_SCOPE) {
+      if (existsSync(daemonStateFile(here))) process.env.DEVLOOP_DAEMON_SCOPE = here; // this project's daemon
+    }
     if (args.includes("--status")) return daemon.daemonStatus();
     if (args.includes("--stop")) return daemon.daemonStop();
     return daemon.runDaemon();
   }
 
-  // Shared mode (opt-in): bridge this stdio session to a daemon instead of spawning a
-  // second browser. Auto-spawns a daemon if none is running; on any failure, fall back
-  // to a normal local stdio instance so the session never just dies.
-  const shared = args.includes("--shared") || process.env.DEVLOOP_DAEMON === "1";
-  if (shared) {
+  // Shared mode (default): bridge this stdio session to its project's daemon instead of
+  // spawning another browser. Auto-spawns a daemon if none is running; on any failure,
+  // fall back to a normal local stdio instance so the session never just dies.
+  const mode = launchMode(args, process.env, process.cwd());
+  if (mode.kind === "shared") {
+    if (mode.scope) process.env.DEVLOOP_DAEMON_SCOPE = mode.scope;
+    else delete process.env.DEVLOOP_DAEMON_SCOPE;
     try {
-      const { ensureDaemon, bridgeStdioToDaemon } = await import("./daemonClient.ts");
       const state = await ensureDaemon();
       await bridgeStdioToDaemon(state.url);
       return;

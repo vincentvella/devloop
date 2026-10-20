@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { httpReachable, pidAlive, readDaemonState } from "../src/daemonState.ts";
+import { daemonStateFile, httpReachable, pidAlive, readDaemonState, writeDaemonState } from "../src/daemonState.ts";
 
 describe("pidAlive", () => {
   test("alive when the signal-0 probe succeeds (self)", () => {
@@ -64,6 +64,25 @@ describe("readDaemonState", () => {
   test("wrong field types → undefined", () => {
     writeState(JSON.stringify({ pid: "1", port: 7333, url: "http://x" }));
     expect(readDaemonState()).toBeUndefined();
+  });
+
+  test("a scoped daemon gets its own state file, distinct per project", () => {
+    const a = daemonStateFile("/work/a");
+    expect(a).not.toBe(daemonStateFile("/work/b"));
+    expect(a).not.toBe(daemonStateFile(undefined));
+    expect(a.startsWith(join(dir, "daemons"))).toBe(true);
+  });
+
+  test("DEVLOOP_DAEMON_SCOPE routes read/write to the project's file, not the global one", () => {
+    const s = { pid: 7, port: 7334, url: "http://127.0.0.1:7334/mcp", startedAt: "x", scope: "/work/a" };
+    process.env.DEVLOOP_DAEMON_SCOPE = "/work/a";
+    try {
+      writeDaemonState(s);
+      expect(readDaemonState()).toEqual(s);
+    } finally {
+      delete process.env.DEVLOOP_DAEMON_SCOPE;
+    }
+    expect(readDaemonState()).toBeUndefined(); // global slot untouched
   });
 
   test("valid state → parsed object", () => {

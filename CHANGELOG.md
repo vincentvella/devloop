@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Changed
+- **Restarting a session no longer opens another Chrome.** A plain stdio launch now bridges to a per-project daemon by default, so new sessions, Claude Code restarts and `/mcp` reconnects in the same repo reuse one browser, one dev server and one timeline. Different repos get separate daemons. An auto-spawned daemon keeps the visible browser and exits 10 minutes after its last session (`DEVLOOP_DAEMON_IDLE_MS`). `--local` / `DEVLOOP_DAEMON=0` restores one browser per session; `--shared` / `DEVLOOP_DAEMON=1` still means one global daemon, which is now visible by default when auto-spawned (`DEVLOOP_HEADLESS=true` to hide it).
+- `devloop-mcp daemon --status` / `--stop` act on the current directory's daemon when it has one, and otherwise on the global one.
 
 ## [0.10.2] - 2026-07-22
 

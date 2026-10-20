@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { daemonProxyHandlers, ensureDaemon, findDaemon } from "../src/daemonClient.ts";
+import { daemonProxyHandlers, daemonSpawnEnv, ensureDaemon, findDaemon, launchMode } from "../src/daemonClient.ts";
 
 let dir: string;
 const realHome = process.env.DEVLOOP_HOME;
@@ -116,4 +116,31 @@ test("daemonProxyHandlers forwards tools/list + tools/call to the daemon client"
   // Missing arguments must default to {} (the daemon's tool layer expects an object).
   await h.callTool({ params: { name: "dev_status" } });
   expect(calls[1]).toEqual({ name: "dev_status", arguments: {} });
+});
+
+test("launchMode defaults to a daemon scoped to the session's project", () => {
+  expect(launchMode([], {}, "/work/app")).toEqual({ kind: "shared", scope: "/work/app" });
+  expect(launchMode([], { DEVLOOP_DEV_CWD: "/work/other" }, "/work/app")).toEqual({
+    kind: "shared",
+    scope: "/work/other",
+  });
+  expect(launchMode([], { DEVLOOP_DAEMON_SCOPE: "/pinned" }, "/work/app")).toEqual({
+    kind: "shared",
+    scope: "/pinned",
+  });
+});
+
+test("launchMode: --shared / DEVLOOP_DAEMON=1 → global daemon; --local / DEVLOOP_DAEMON=0 → local", () => {
+  expect(launchMode(["--shared"], {}, "/work/app")).toEqual({ kind: "shared", scope: undefined });
+  expect(launchMode([], { DEVLOOP_DAEMON: "1" }, "/work/app")).toEqual({ kind: "shared", scope: undefined });
+  expect(launchMode(["--local"], {}, "/work/app")).toEqual({ kind: "local" });
+  expect(launchMode([], { DEVLOOP_DAEMON: "0" }, "/work/app")).toEqual({ kind: "local" });
+});
+
+test("daemonSpawnEnv keeps stdio's visible browser and adds an idle exit unless configured", () => {
+  expect(daemonSpawnEnv({})).toMatchObject({ DEVLOOP_HEADLESS: "false", DEVLOOP_DAEMON_IDLE_MS: "600000" });
+  expect(daemonSpawnEnv({ DEVLOOP_HEADLESS: "true", DEVLOOP_DAEMON_IDLE_MS: "5000" })).toMatchObject({
+    DEVLOOP_HEADLESS: "true",
+    DEVLOOP_DAEMON_IDLE_MS: "5000",
+  });
 });

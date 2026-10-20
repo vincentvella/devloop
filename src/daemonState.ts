@@ -1,25 +1,34 @@
 /**
  * Daemon discovery state — a tiny JSON file the daemon writes on boot so stdio
  * clients (and `daemon --status` / `--stop`) can find a running instance without
- * guessing ports. Lives at $DEVLOOP_HOME/daemon.json (default ~/.devloop). Pure
- * Node; mirrors registry.ts's lazy DEVLOOP_HOME resolution.
+ * guessing ports. Lives at $DEVLOOP_HOME/daemon.json (default ~/.devloop), or — for a
+ * per-project daemon (DEVLOOP_DAEMON_SCOPE set) — $DEVLOOP_HOME/daemons/<hash>.json, so
+ * each project finds its own. Pure Node; mirrors registry.ts's lazy DEVLOOP_HOME resolution.
  */
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export interface DaemonState {
   pid: number;
   port: number;
   url: string; // the MCP endpoint, e.g. http://localhost:7333/mcp
   startedAt: string; // ISO timestamp
+  scope?: string; // the project directory a per-project daemon serves; absent = global
 }
 
 const dir = (): string => process.env.DEVLOOP_HOME ?? join(homedir(), ".devloop");
-export const daemonStateFile = (): string => join(dir(), "daemon.json");
+/** The project directory this process's daemon is scoped to, or undefined for the global one. */
+export const daemonScope = (): string | undefined => process.env.DEVLOOP_DAEMON_SCOPE || undefined;
+
+export const daemonStateFile = (scope = daemonScope()): string =>
+  scope
+    ? join(dir(), "daemons", `${createHash("sha256").update(scope).digest("hex").slice(0, 16)}.json`)
+    : join(dir(), "daemon.json");
 
 export function writeDaemonState(s: DaemonState): void {
-  mkdirSync(dir(), { recursive: true });
+  mkdirSync(dirname(daemonStateFile()), { recursive: true });
   writeFileSync(daemonStateFile(), JSON.stringify(s, null, 2));
 }
 

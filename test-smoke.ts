@@ -6,7 +6,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const transport = new StdioClientTransport({
   command: "bun",
-  args: ["run", "src/index.ts"],
+  args: ["run", "src/index.ts", "--local"], // the per-session (non-daemon) path
   env: { ...process.env, DEVLOOP_HEADLESS: "true" } as Record<string, string>,
 });
 const client = new Client({ name: "smoke", version: "0" }, { capabilities: {} });

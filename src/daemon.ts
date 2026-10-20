@@ -13,7 +13,14 @@
 
 import { PuppeteerBrowserController } from "./browser.ts";
 import { advertisedUrl, daemonConfigFromEnv, shouldScheduleIdleShutdown } from "./daemonConfig.ts";
-import { clearDaemonState, httpReachable, pidAlive, readDaemonState, writeDaemonState } from "./daemonState.ts";
+import {
+  clearDaemonState,
+  daemonScope,
+  httpReachable,
+  pidAlive,
+  readDaemonState,
+  writeDaemonState,
+} from "./daemonState.ts";
 import { DevServer } from "./devServer.ts";
 import { startHttpMcp } from "./httpMcp.ts";
 import { LogBuffer } from "./logBuffer.ts";
@@ -74,6 +81,7 @@ export async function runDaemon(): Promise<void> {
     port: bound,
     url: advertisedUrl(cfg.host, bound),
     startedAt: new Date().toISOString(),
+    scope: daemonScope(),
   });
   log("daemon ready — connect MCP clients via HTTP/SSE at /mcp");
 
@@ -93,7 +101,8 @@ export async function runDaemon(): Promise<void> {
 export async function daemonStatus(): Promise<void> {
   const s = readDaemonState();
   if (s && pidAlive(s.pid) && (await httpReachable(s.url))) {
-    process.stdout.write(`devloop daemon running — pid ${s.pid}, ${s.url} (since ${s.startedAt})\n`);
+    const scope = s.scope ? ` for ${s.scope}` : "";
+    process.stdout.write(`devloop daemon running${scope} — pid ${s.pid}, ${s.url} (since ${s.startedAt})\n`);
   } else {
     if (s) clearDaemonState(); // stale
     process.stdout.write("devloop daemon not running\n");
