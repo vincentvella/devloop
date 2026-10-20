@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.11.2] - 2026-10-20
+
 ### Fixed
 - **Chrome no longer opens when a session starts.** The browser now launches on the first browser tool call (`browser_navigate`, `browser_snapshot`, `repro`, …), not at startup. Before, every new daemon opened a window right away, so starting Claude Code with sessions in several projects popped one window per project even if none of them used the browser. Sessions that never touch the browser now open no window at all. A launch failure now shows up on the browser tool call that triggered it, and the next call retries.
 
@@ -380,7 +384,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.11.2...HEAD
+[0.11.2]: https://github.com/vincentvella/devloop/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/vincentvella/devloop/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/vincentvella/devloop/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/vincentvella/devloop/compare/v0.10.1...v0.10.2
