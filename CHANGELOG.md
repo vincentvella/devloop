@@ -7,10 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.11.0] - 2026-10-20
+
 ### Changed
 - **Restarting a session no longer opens another Chrome.** A plain stdio launch now bridges to a per-project daemon by default, so new sessions, Claude Code restarts and `/mcp` reconnects in the same repo reuse one browser, one dev server and one timeline. Different repos get separate daemons. An auto-spawned daemon keeps the visible browser and exits 10 minutes after its last session (`DEVLOOP_DAEMON_IDLE_MS`). `--local` / `DEVLOOP_DAEMON=0` restores one browser per session; `--shared` / `DEVLOOP_DAEMON=1` still means one global daemon, which is now visible by default when auto-spawned (`DEVLOOP_HEADLESS=true` to hide it).
 - Sessions starting at the same moment in one project start a single daemon. A spawn lock elects one launcher and the others wait for its daemon. A daemon also refuses to start if a live one already serves its project, which catches a second manual `devloop-mcp daemon` too.
 - `devloop-mcp daemon --status` / `--stop` act on the current directory's daemon when it has one, and otherwise on the global one.
+
+### Fixed
+- **`get_logs_around` now includes successful network responses.** Requests below `DEVLOOP_NET_THRESHOLD` (for example a 200 that returned bad data) were left out of the correlation window. They are now merged in, deduplicated and kept in time order.
+- **Native tap no longer guesses on ambiguous selectors.** A selector like "Save" used to tap the first substring match in the tree ("Save draft") without telling you. An exact name now beats a substring, and more than one match fails with the candidates listed. This applies to every native click, type, scroll and press.
+
+### Security
+- The marketing site's `next` is now 15.5.28, which covers the Server Actions SSRF/DoS advisories and two critical RCE advisories (GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4). `sharp` is pinned to ^0.35.5 (libheif/librsvg) and `source-map-js` to ^1.2.2 (GHSA-68fv-2mgg-jv7q). These are site-only and dev tooling; the published package is unaffected.
+
+### Tooling
+- The daemon's `DEVLOOP_*` env parsing is extracted with NaN guards, so a typo like `DEVLOOP_HTTP_PORT=abc` falls back to the default instead of becoming `NaN`. The cockpit's CDP console and network rendering is extracted too, and both now have unit tests.
+- Routine dependency updates (Biome 2.5.12, Remotion, React types, serve-sim, postcss).
 
 ## [0.10.2] - 2026-07-22
 
@@ -359,7 +374,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/vincentvella/devloop/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/vincentvella/devloop/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/vincentvella/devloop/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/vincentvella/devloop/compare/v0.9.1...v0.10.0
