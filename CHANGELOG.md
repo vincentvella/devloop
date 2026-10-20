@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet._
 
+## [0.11.1] - 2026-10-20
+
+### Fixed
+- **The macOS cockpit installer builds again.** GitHub's `macos-latest` runner moved to the macOS 26 image, where code signing failed while unlocking electron-builder's temporary keychain. That left 0.11.0 without a macOS installer or a GitHub Release. The release build is now pinned to `macos-15`. There are no changes to the MCP server itself; 0.11.0 on npm is functionally identical.
+
 ## [0.11.0] - 2026-10-20
 
 ### Changed
@@ -374,7 +379,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/vincentvella/devloop/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/vincentvella/devloop/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/vincentvella/devloop/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/vincentvella/devloop/compare/v0.10.0...v0.10.1
