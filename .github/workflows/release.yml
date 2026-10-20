@@ -28,7 +28,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        # macos-15, not -latest: on the macos-26 image electron-builder's temp signing
+        # keychain fails to unlock (SecKeychainUnlock: passphrase not correct), which
+        # broke the v0.11.0 installer. Revisit when electron-builder supports macOS 26.
+        os: [macos-15, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     needs: verify-version
     steps:
