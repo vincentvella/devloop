@@ -51,11 +51,7 @@ export async function runDaemon(): Promise<void> {
   });
   configureTools({ buffer, browser, devServer });
 
-  try {
-    await browser.start();
-  } catch (err) {
-    log(`WARN: browser failed to launch, browser tools will error: ${err}`);
-  }
+  // Chrome is launched lazily by the first browser tool call (see browser.ts ensureLivePage).
   if (cfg.devCmd) {
     try {
       devServer.start(cfg.devCmd, cfg.devCwd ?? process.cwd());

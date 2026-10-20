@@ -7,7 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Fixed
+- **Chrome no longer opens when a session starts.** The browser now launches on the first browser tool call (`browser_navigate`, `browser_snapshot`, `repro`, …), not at startup. Before, every new daemon opened a window right away, so starting Claude Code with sessions in several projects popped one window per project even if none of them used the browser. Sessions that never touch the browser now open no window at all. A launch failure now shows up on the browser tool call that triggered it, and the next call retries.
 
 ## [0.11.1] - 2026-10-20
 
