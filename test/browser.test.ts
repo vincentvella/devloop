@@ -1,4 +1,5 @@
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
+import puppeteer from "puppeteer";
 import { PuppeteerBrowserController } from "../src/browser.ts";
 import { LogBuffer } from "../src/logBuffer.ts";
 
@@ -156,6 +157,56 @@ test("response body decoding flags binary payloads instead of dumping bytes", as
   });
   const e = buffer.netEntries().find((x) => (x.detail as Any).status === 500);
   expect((e!.detail as Any).responseBody).toMatch(/<binary 4 bytes>/);
+});
+
+// --- lazy launch: no Chrome until a browser tool is used ---
+
+test("Chrome is not launched until the first browser call, then launched once", async () => {
+  const page = makePage();
+  const launch = spyOn(puppeteer, "launch").mockImplementation(async () => makeBrowser([page]));
+  try {
+    const ctrl = makeCtrl(new LogBuffer(50));
+    expect(launch).not.toHaveBeenCalled(); // constructing the controller opens nothing
+
+    await ctrl.navigate("http://h/app");
+    expect(launch).toHaveBeenCalledTimes(1);
+    expect(page.goto).toHaveBeenCalled();
+
+    await ctrl.navigate("http://h/other");
+    expect(launch).toHaveBeenCalledTimes(1); // reused, not relaunched
+  } finally {
+    launch.mockRestore();
+  }
+});
+
+test("concurrent first browser calls share a single launch", async () => {
+  const launch = spyOn(puppeteer, "launch").mockImplementation(async () => {
+    await new Promise((r) => setTimeout(r, 20));
+    return makeBrowser([makePage()]);
+  });
+  try {
+    const ctrl = makeCtrl(new LogBuffer(50));
+    await Promise.all([ctrl.navigate("http://h/a"), ctrl.navigate("http://h/b"), ctrl.navigate("http://h/c")]);
+    expect(launch).toHaveBeenCalledTimes(1);
+  } finally {
+    launch.mockRestore();
+  }
+});
+
+test("a failed launch surfaces on the browser call and is retried on the next one", async () => {
+  let calls = 0;
+  const launch = spyOn(puppeteer, "launch").mockImplementation(async () => {
+    if (++calls === 1) throw new Error("no chrome binary");
+    return makeBrowser([makePage()]);
+  });
+  try {
+    const ctrl = makeCtrl(new LogBuffer(50));
+    await expect(ctrl.navigate("http://h/a")).rejects.toThrow(/no chrome binary/);
+    await ctrl.navigate("http://h/a");
+    expect(launch).toHaveBeenCalledTimes(2);
+  } finally {
+    launch.mockRestore();
+  }
 });
 
 // --- withRecovery: self-healing on stale-target errors ---

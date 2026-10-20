@@ -54,11 +54,7 @@ async function runStdio(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  try {
-    await browser.start();
-  } catch (err) {
-    process.stderr.write(`[devloop] WARN: browser failed to launch, browser tools will error: ${err}\n`);
-  }
+  // Chrome is launched lazily by the first browser tool call (see browser.ts ensureLivePage).
   if (process.env.DEVLOOP_DEV_CMD) {
     try {
       devServer.start(process.env.DEVLOOP_DEV_CMD, process.env.DEVLOOP_DEV_CWD ?? process.cwd());

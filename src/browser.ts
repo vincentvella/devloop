@@ -51,8 +51,19 @@ export class PuppeteerBrowserController implements IBrowserController {
     private readonly opts: BrowserOptions,
   ) {}
 
+  /** In-flight launch, so concurrent first calls share one Chrome instead of racing. */
+  private launching?: Promise<void>;
+
+  /** Launch Chrome. Idempotent; callers normally rely on the lazy launch in ensureLivePage. */
   async start(): Promise<void> {
     if (this.browser) return;
+    this.launching ??= this.launch().finally(() => {
+      this.launching = undefined;
+    });
+    return this.launching;
+  }
+
+  private async launch(): Promise<void> {
     this.browser = await puppeteer.launch({
       headless: this.opts.headless,
       executablePath: this.opts.executablePath,
@@ -84,10 +95,16 @@ export class PuppeteerBrowserController implements IBrowserController {
     this.page = page;
   }
 
-  /** Return a live page, re-acquiring (and re-wiring) one if the target was lost. */
+  /** Return a live page — launching Chrome on first use, or re-acquiring one if the target was lost. */
   private async ensureLivePage(): Promise<Page> {
     if (this.page && !this.page.isClosed()) return this.page;
-    if (!this.browser) throw new Error("browser not started");
+    if (!this.browser) {
+      // Lazy: Chrome opens on the first browser tool call, not when a session starts,
+      // so sessions that never touch the browser never pop a window.
+      await this.start();
+      if (this.page && !this.page.isClosed()) return this.page;
+      if (!this.browser) throw new Error("browser failed to launch");
+    }
     const existing = (await this.browser.pages()).find((p) => !p.isClosed());
     const page = existing ?? (await this.browser.newPage());
     await this.setupPage(page);
