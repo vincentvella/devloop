@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- _Nothing yet._
+### Changed
+- **The cockpit's Android screen is now a real live stream.** It uses Expo's serve-emu (scrcpy H.264, up to 60fps) with `@expo/hub-client`'s device view, replacing the `adb screencap` mirror that polled about 3 frames a second. Taps, swipes, scrolling and typing go over the same connection instead of one `adb shell input` call each. It works on emulators and USB devices and needs only `adb`: the scrcpy server ships inside the app, checked against scrcpy's published checksum, so nothing downloads at runtime.
+- The stream server only listens on `127.0.0.1` and needs a per-session token that only the cockpit window holds, so other local pages can't see or drive the device.
+- Closing the Android target stops the scrcpy server on the device.
 
 ## [0.11.2] - 2026-10-20
 

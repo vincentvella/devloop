@@ -91,8 +91,11 @@
     "android:smoke": "bun run app:build && node test/gui/scenarios/androidLive.ts"
   },
   "dependencies": {
+    "@expo/hub-client": "1.8.0",
     "@jridgewell/trace-mapping": "^0.3.31",
-    "puppeteer": "^25.16.0"
+    "expo-device-hub": "0.18.0",
+    "puppeteer": "^25.16.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

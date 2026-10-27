@@ -35,7 +35,7 @@ The cockpit also drives **Expo/React Native** projects, not just web. Open a nat
 - **JS console + errors over CDP** via Metro's Hermes inspector (both platforms) — with **source-mapped** stacks (your bundled `index.bundle:1:…` resolves to original `.tsx`).
 - **RN network capture** — an injected `XMLHttpRequest` hook turns the app's fetch/XHR traffic into the same `network` timeline rows as web (so `get_network` / `export_har` / the network chip work for native too).
 - **Native device logs** merged onto the timeline as a `native` source — iOS `simctl log stream`, Android `logcat`.
-- A **live, interactive device embedded in the pane** — iOS via [serve-sim](https://github.com/EvanBacon/serve-sim) (MJPEG, tap/scroll/type), Android via a polled `screencap` mirror (~2fps) with click→tap + key input. Screenshots on both.
+- A **live, interactive device embedded in the pane** — iOS via [serve-sim](https://github.com/EvanBacon/serve-sim) (MJPEG, tap/scroll/type), Android via Expo's [serve-emu](https://github.com/expo/expo-device-hub/tree/main/packages/serve-emu) (scrcpy H.264, up to 60fps, with tap/swipe/scroll/type). Screenshots on both.
 - **Agent-drivable interactions** — `browser_snapshot` reads the native accessibility tree (iOS via [idb](https://fbidb.io)'s UIKit a11y tree; Android via `uiautomator dump`) and `browser_click`/`type`/`scroll`/`press` drive the device by an element's `pt:x,y` ref (from the snapshot) or its label — replayable through `repro`, openable over MCP via `native_open` / `native_build`. The same agent tools as web, mapped onto native.
 
 All of it lands on the same correlated timeline, app-scoped — the web dev-loop experience, for a native app. (macOS + Apple Silicon for the embedded iOS simulator; Android works wherever the Android SDK + an emulator do.)
@@ -87,7 +87,7 @@ stdout is reserved for the MCP protocol in stdio mode; all human-facing output g
 - **Browser substrates** — a shared controller interface with two web implementations (**Puppeteer/Chrome** for headless; **Electron `WebContentsView`** panes over CDP in the cockpit) and a native one (**React Native** over Hermes/Metro). Shared page-action + accessibility-snapshot logic and device/throttle emulation sit above them.
 - **Native targets** — an RN controller (JS/errors/network over Metro CDP) delegates taps + snapshots to a **`NativeDriver`** (idb on iOS, adb on Android); native logs (simctl / logcat), screenshots + live mirrors, build orchestration (`expo run`), and a readiness preflight round it out.
 - **State & isolation** — an on-disk registry (projects / session / panes), per-project session partitions, and Chrome-extension management.
-- **Cockpit (Electron)** — the desktop shell: a pane manager (per-project partitions, native routing), the React UI (timeline, browser bar, repro builder, target switch, Android mirror), the vendored serve-sim iOS mirror, the in-store "Add to Devloop" injection, and the in-app updater.
+- **Cockpit (Electron)** — the desktop shell: a pane manager (per-project partitions, native routing), the React UI (timeline, browser bar, repro builder, target switch, Android mirror), the vendored serve-sim iOS mirror and serve-emu Android stream, the in-store "Add to Devloop" injection, and the in-app updater.
 
 ## Install
 

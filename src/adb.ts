@@ -199,15 +199,3 @@ export const usableSerials = (stdout: string): string[] =>
   parseAdbDevices(stdout)
     .filter((d) => d.state === "device")
     .map((d) => d.serial);
-
-/** Parse `adb shell wm size` → device pixels (prefers an Override over Physical size). */
-export function parseWmSize(stdout: string): { width: number; height: number } | null {
-  let phys: { width: number; height: number } | null = null;
-  let over: { width: number; height: number } | null = null;
-  for (const m of stdout.matchAll(/(Physical|Override) size:\s*(\d+)x(\d+)/gi)) {
-    const size = { width: +m[2]!, height: +m[3]! };
-    if (/override/i.test(m[1]!)) over = size;
-    else phys = size;
-  }
-  return over ?? phys;
-}

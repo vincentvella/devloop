@@ -11,7 +11,6 @@ import { promisify } from "node:util";
 import type { BrowserWindow } from "electron";
 import { usableSerials } from "../src/adb.ts";
 import { adbBinary } from "../src/androidLog.ts";
-import { AndroidScreenStream, deviceSize } from "../src/androidMirror.ts";
 import { resolveAppId, resolveAppScheme } from "../src/appIdentity.ts";
 import { projectInputsHash, readAppJsonPlatforms, resolvedExpoPlatforms } from "../src/expoConfig.ts";
 import { idbButtonArgs } from "../src/idb.ts";
@@ -40,6 +39,7 @@ import { getNativeCache, getProjectFingerprint, setNativeCache } from "../src/re
 import { detectTargetKind } from "../src/target.ts";
 import type { BrowserManager } from "./browserManager.ts";
 import type { NativeObservability } from "./nativeObservability.ts";
+import type { ServeEmu } from "./serveEmu.ts";
 import type { ServeSim } from "./serveSim.ts";
 
 const execFileP = promisify(execFile);
@@ -48,12 +48,20 @@ export interface NativeTargetsDeps {
   getManager: () => BrowserManager;
   getShellWin: () => BrowserWindow | undefined;
   serveSim: ServeSim;
+  serveEmu: ServeEmu;
   observability: NativeObservability;
   buffer: LogBuffer;
   log: (m: string) => void;
 }
 
 export type NativeTargets = ReturnType<typeof createNativeTargets>;
+
+/** Where the renderer's `@expo/hub-client` connects for the Android screen (see serveEmu.ts). */
+export interface AndroidStreamInfo {
+  baseUrl: string;
+  token: string;
+  serial: string;
+}
 
 /** The reliable Metro origin for a pane: its assigned `metroPort` (from assignMetroPort),
  *  falling back to the pane URL — which can go stale for native panes after a server
@@ -64,7 +72,7 @@ function paneMetroBase(pane: { metroPort?: number; url?: string } | undefined): 
 }
 
 export function createNativeTargets(deps: NativeTargetsDeps) {
-  const { getManager, getShellWin, serveSim, observability, buffer, log } = deps;
+  const { getManager, getShellWin, serveSim, serveEmu, observability, buffer, log } = deps;
 
   /** Probe native-interaction readiness (idb CLI + companion + a booted sim). */
   function probeNativeEnv(): NativeEnvProbe {
@@ -140,7 +148,12 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     }
   }
 
-  let androidStream: AndroidScreenStream | undefined;
+  /** The live Android stream the renderer's DeviceScreen connects to (null when closed). */
+  let androidStream: AndroidStreamInfo | null = null;
+  const publishAndroidStream = (info: AndroidStreamInfo | null) => {
+    androidStream = info;
+    getShellWin()?.webContents.send("devloop:androidStream", info);
+  };
 
   // --- native target control (shared by the renderer IPCs + the native_* MCP tools) ---
 
@@ -229,23 +242,21 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
       getManager().setNativeController(active.id, rn);
     }
     getManager().setAndroidActive(true);
-    const size = await deviceSize(serial).catch(() => null);
-    getShellWin()?.webContents.send("devloop:androidSize", size ?? { width: 1080, height: 2400 });
-    androidStream?.stop();
     if (!process.env.DEVLOOP_NO_ANDROID_STREAM) {
-      androidStream = new AndroidScreenStream({
-        serial,
-        onFrame: (b64) => getShellWin()?.webContents.send("devloop:androidFrame", b64),
-      });
-      androidStream.start();
+      try {
+        publishAndroidStream({ ...(await serveEmu.ensure()), serial });
+      } catch (e) {
+        // Taps/logs/JS still work through adb + CDP; only the live screen is missing.
+        log(`android: screen stream unavailable (${(e as Error).message})`);
+      }
     }
     log(`android: mirroring ${serial}${metroBase ? ` (JS=${metroBase})` : ""}`);
     return { ok: true, serial };
   }
 
   async function doCloseAndroid(): Promise<void> {
-    androidStream?.stop();
-    androidStream = undefined;
+    publishAndroidStream(null);
+    await serveEmu.stop();
     getManager().setAndroidActive(false);
     observability.detachAll();
     const active = getManager()
@@ -469,6 +480,7 @@ export function createNativeTargets(deps: NativeTargetsDeps) {
     doCloseSimulator,
     doOpenAndroid,
     doCloseAndroid,
+    getAndroidStream: () => androidStream,
     doNativeBuild,
     doctor,
     probeNativeEnv,

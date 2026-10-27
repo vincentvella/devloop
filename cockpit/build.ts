@@ -9,6 +9,7 @@
  * unstyled), concurrent builds don't race, and a failed build leaves `out/` intact.
  */
 import { cpSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { stageServeEmu } from "./stageServeEmu.ts";
 
 const STAGE = `out.next.${process.pid}`; // pid-unique so concurrent builds never collide
 const PREV = `out.prev.${process.pid}`;
@@ -69,6 +70,10 @@ const tw = Bun.spawnSync([
   "--minify",
 ]);
 if (tw.exitCode !== 0) fail(new TextDecoder().decode(tw.stderr));
+
+// serve-emu (Android streaming): its vendored dist + deps + the checksum-pinned
+// scrcpy-server, left unpacked by electron-builder (see cockpit/stageServeEmu.ts).
+await stageServeEmu(`${STAGE}/serve-emu`).catch((e) => fail(String(e)));
 
 // Atomic swap: replace out/ via renames (µs window) instead of an in-place rebuild,
 // so a running app / the watcher never sees a partial out/. PREV is pid-unique so

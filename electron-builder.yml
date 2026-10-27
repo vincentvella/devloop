@@ -20,6 +20,10 @@ files:
   - package.json
 
 asar: true
+# serve-emu (Android streaming) loads from a real path and adb pushes its scrcpy-server
+# binary to the device, so it can't live inside the asar archive.
+asarUnpack:
+  - out/serve-emu/**
 
 mac:
   icon: assets/icon.icns

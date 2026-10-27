@@ -6,7 +6,6 @@
  */
 import { writeFileSync } from "node:fs";
 import { app, type BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { adbKeyeventArgs, adbTapArgs, adbTextArgs, androidKeycodeFor } from "../src/adb.ts";
 import { bundleToHtml } from "../src/bundle.ts";
 import { blankIssueUrl } from "../src/crashReport.ts";
 import { projectName } from "../src/devServer.ts";
@@ -33,7 +32,6 @@ export interface RegisterIpcDeps {
   buffer: LogBuffer;
   getManager: () => BrowserManager;
   getShellWin: () => BrowserWindow | undefined;
-  log: (m: string) => void;
   getUpdater: () => Updater | undefined;
   exts: ExtensionManager;
   native: NativeTargets;
@@ -47,7 +45,7 @@ export interface RegisterIpcDeps {
 
 // --- IPC for the timeline renderer ----------------------------------------
 export function registerIpc(deps: RegisterIpcDeps): void {
-  const { buffer, getManager, getShellWin, log, getUpdater, exts, native } = deps;
+  const { buffer, getManager, getShellWin, getUpdater, exts, native } = deps;
   const { listProjects, addProject, getProject, getSession, setSession } = deps;
 
   ipcMain.handle("devloop:getLogs", (_e, opts) => buffer.query(opts ?? {}));
@@ -108,25 +106,9 @@ export function registerIpc(deps: RegisterIpcDeps): void {
     await native.doCloseAndroid();
     return { ok: true };
   });
-  // Input from the mirror's click/key layer → adb. Coordinates arrive in device px.
-  ipcMain.handle("devloop:androidTap", async (_e, x: number, y: number) => {
-    const serial = native.firstAndroidSerial();
-    if (serial)
-      await native.runAdb(adbTapArgs(serial, x, y)).catch((e) => log(`android tap failed: ${(e as Error).message}`));
-  });
-  ipcMain.handle("devloop:androidText", async (_e, text: string) => {
-    const serial = native.firstAndroidSerial();
-    if (serial && text)
-      await native.runAdb(adbTextArgs(serial, text)).catch((e) => log(`android text failed: ${(e as Error).message}`));
-  });
-  ipcMain.handle("devloop:androidKey", async (_e, key: string) => {
-    const serial = native.firstAndroidSerial();
-    const code = androidKeycodeFor(key);
-    if (serial && code != null)
-      await native
-        .runAdb(adbKeyeventArgs(serial, code))
-        .catch((e) => log(`android key failed: ${(e as Error).message}`));
-  });
+  // The live Android stream (serve-emu endpoint + token + serial), for a mirror that
+  // mounts after openAndroid already published it. Input goes over its WebSocket.
+  ipcMain.handle("devloop:androidStream", () => native.getAndroidStream());
 
   // Per-pane dev lifecycle (top-bar controls act on the active pane).
   ipcMain.handle("devloop:devStatus", () => getManager().devStatus());

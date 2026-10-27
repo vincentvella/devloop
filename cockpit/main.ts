@@ -27,6 +27,8 @@ import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions, nati
 // so we can't use it. Packaged: <app.asar>/out via getAppPath(). Dev (`electron
 // out/main.cjs`): the dir of the script Electron actually ran.
 const BASE = app.isPackaged ? join(app.getAppPath(), "out") : dirname(resolve(process.argv[1] ?? "."));
+// serve-emu is unpacked (electron-builder asarUnpack) so its files are real paths on disk.
+const SERVE_EMU_DIR = join(BASE, "serve-emu").replace(/app\.asar(?=[\\/])/, "app.asar.unpacked");
 
 import { buildIssueUrl, errorText, REPO } from "../src/crashReport.ts";
 import type { DevServerLike } from "../src/devServer.ts";
@@ -45,6 +47,7 @@ import { registerIpc } from "./ipc.ts";
 import { NativeObservability } from "./nativeObservability.ts";
 import { createNativeTargets } from "./nativeTargets.ts";
 import { runSelfTest } from "./selftest/index.ts";
+import { ServeEmu } from "./serveEmu.ts";
 import { ServeSim } from "./serveSim.ts";
 import { initAutoUpdate, type Updater } from "./updater.ts";
 
@@ -58,6 +61,7 @@ let shellWin: BrowserWindow | undefined;
 let manager: BrowserManager;
 let updater: Updater | undefined;
 const serveSim = new ServeSim(log);
+const serveEmu = new ServeEmu(log, SERVE_EMU_DIR);
 const observability = new NativeObservability(buffer, log);
 
 /**
@@ -276,6 +280,7 @@ async function main() {
     getManager: () => manager,
     getShellWin: () => shellWin,
     serveSim,
+    serveEmu,
     observability,
     buffer,
     log,
@@ -308,7 +313,6 @@ async function main() {
     buffer,
     getManager: () => manager,
     getShellWin: () => shellWin,
-    log,
     getUpdater: () => updater,
     exts,
     native,
@@ -396,6 +400,7 @@ function cleanup(): void {
   try {
     observability.detachAll(); // stop RN controllers + native log streams
     serveSim.stop(); // stop the serve-sim process
+    void serveEmu.stop(); // stop Android streaming (scrcpy on the device) + its server
   } catch (e) {
     log(`cleanup observability: ${e}`);
   }
