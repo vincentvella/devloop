@@ -14,7 +14,7 @@
 import { type SpawnOptions, spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -109,11 +109,6 @@ export async function ensureDaemon(timeoutMs = 20_000): Promise<DaemonState> {
   throw new Error(`daemon did not come up within ${timeoutMs}ms`);
 }
 
-/**
- * Run this process as a stdio→HTTP proxy to the daemon at `url`. Returns once wired;
- * the process then lives until the stdio client disconnects (then it closes its daemon
- * session — graceful per-client teardown — and exits, leaving the daemon running).
- */
 /** The proxy's tools/list + tools/call handlers, forwarding to the daemon `client`.
  *  Extracted so the forwarding (incl. the arguments-default) is unit-testable without a
  *  live stdio/HTTP round-trip — the bridge itself needs real transports. */
@@ -125,13 +120,181 @@ export function daemonProxyHandlers(client: Pick<Client, "listTools" | "callTool
   };
 }
 
-export async function bridgeStdioToDaemon(url: string): Promise<void> {
+/**
+ * Did this call fail before reaching a daemon? True when the daemon isn't listening
+ * (it exited) or doesn't know our session (it restarted, or reaped us as stale). Then
+ * nothing ran, so the call is safe to replay on a fresh connection.
+ */
+export function neverReachedDaemon(err: unknown): boolean {
+  if (err instanceof StreamableHTTPError) return err.code === 400 || err.code === 404;
+  for (let e = err as { code?: unknown; cause?: unknown } | undefined, i = 0; e && i < 5; e = e.cause as typeof e, i++)
+    if (e.code === "ECONNREFUSED" || e.code === "ConnectionRefused") return true; // Node / Bun fetch
+  return false;
+}
+
+/** The daemon exited while a call was in flight: it may or may not have run. */
+export class DaemonExitedError extends Error {
+  constructor() {
+    super(
+      "The devloop daemon exited during this call, so it may or may not have run. Retry it: the next call reconnects.",
+    );
+  }
+}
+
+/** One live connection to a daemon. */
+export interface DaemonConn {
+  client: Pick<Client, "listTools" | "callTool">;
+  /** End the session on the daemon (DELETE), then close. */
+  end(): Promise<void>;
+  /** Close locally only (the daemon is gone). */
+  drop(): Promise<void>;
+}
+
+/**
+ * The bridge's link to its daemon, which survives the daemon going away. A call that
+ * never reached the daemon reconnects (finding or starting one, as at launch) and is
+ * replayed once. A daemon that exits mid-call fails that call at once, instead of
+ * after the SDK's 60s request timeout, and isn't replayed: it may have half-run (a click,
+ * a navigation), so the agent decides. Its next call reconnects.
+ */
+export class DaemonLink {
+  private conn?: DaemonConn;
+  private state?: DaemonState;
+  private connecting?: Promise<DaemonConn>;
+
+  constructor(
+    private readonly deps: {
+      /** Find this scope's daemon, starting one if needed (ensureDaemon). */
+      findOrStart: () => Promise<DaemonState>;
+      connect: (url: string) => Promise<DaemonConn>;
+      alive?: (pid: number) => boolean;
+      /** How often to check the daemon is still alive while a call is in flight. */
+      pollMs?: number;
+      /** After a reconnect: the new daemon may be a different version, with other tools. */
+      onReconnect?: () => void;
+      log?: (m: string) => void;
+    },
+  ) {}
+
+  /** Connect to an already-found daemon (the launch path). */
+  async start(state: DaemonState): Promise<void> {
+    this.conn = await this.deps.connect(state.url);
+    this.state = state;
+  }
+
+  async call<T>(fn: (client: DaemonConn["client"], signal: AbortSignal) => Promise<T>): Promise<T> {
+    const conn = await this.current();
+    try {
+      return await this.watched(conn, fn);
+    } catch (err) {
+      if (!neverReachedDaemon(err)) throw err;
+      this.deps.log?.("daemon connection lost; reconnecting…");
+      return this.watched(await this.reconnect(conn), fn); // replay once
+    }
+  }
+
+  /** End our session on the daemon (bridge exit). */
+  async end(): Promise<void> {
+    await this.conn?.end().catch(() => {});
+  }
+
+  private current(): Promise<DaemonConn> {
+    return this.conn ? Promise.resolve(this.conn) : this.reconnect(undefined);
+  }
+
+  /** Replace `stale` with a fresh connection; concurrent callers share one attempt. */
+  private reconnect(stale: DaemonConn | undefined): Promise<DaemonConn> {
+    if (this.conn && this.conn !== stale) return Promise.resolve(this.conn); // someone beat us to it
+    this.connecting ??= (async () => {
+      this.conn = undefined;
+      await stale?.drop().catch(() => {});
+      const state = await this.deps.findOrStart();
+      const conn = await this.deps.connect(state.url);
+      this.conn = conn;
+      this.state = state;
+      this.deps.log?.(`reconnected to daemon at ${state.url}`);
+      this.deps.onReconnect?.();
+      return conn;
+    })().finally(() => {
+      this.connecting = undefined;
+    });
+    return this.connecting;
+  }
+
+  /** Run `fn`, aborting it if the daemon's process exits meanwhile. */
+  private async watched<T>(
+    conn: DaemonConn,
+    fn: (client: DaemonConn["client"], signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const ctl = new AbortController();
+    const pid = this.state?.pid;
+    const alive = this.deps.alive ?? pidAlive;
+    const timer =
+      pid === undefined
+        ? undefined
+        : setInterval(() => {
+            if (!alive(pid)) ctl.abort();
+          }, this.deps.pollMs ?? 500);
+    try {
+      return await fn(conn.client, ctl.signal);
+    } catch (err) {
+      if (!ctl.signal.aborted) throw err;
+      if (this.conn === conn) this.conn = undefined; // the next call reconnects
+      await conn.drop().catch(() => {});
+      throw new DaemonExitedError();
+    } finally {
+      clearInterval(timer);
+    }
+  }
+}
+
+/** Open an MCP client session to the daemon at `url`. */
+async function connectToDaemon(url: string): Promise<DaemonConn> {
   const client = new Client({ name: "devloop-bridge", version: VERSION }, { capabilities: {} });
+  client.onerror = () => {}; // the SSE stream erroring when a daemon exits; calls report it
   const transport = new StreamableHTTPClientTransport(new URL(url));
   await client.connect(transport);
+  return {
+    client,
+    // End our session on the daemon (DELETE) so it can idle out. close() alone doesn't.
+    end: async () => {
+      await transport.terminateSession().catch(() => {});
+      await client.close();
+    },
+    drop: () => client.close(),
+  };
+}
 
-  const proxy = new Server({ name: "devloop-mcp", version: VERSION }, { capabilities: { tools: {} } });
-  const h = daemonProxyHandlers(client);
+/**
+ * Run this process as a stdio→HTTP proxy to the daemon in `state`. Returns once wired;
+ * the process then lives until the stdio client disconnects (then it closes its daemon
+ * session — graceful per-client teardown — and exits, leaving the daemon running). If
+ * the daemon goes away meanwhile, the link reconnects (see DaemonLink).
+ */
+export async function bridgeStdioToDaemon(state: DaemonState): Promise<void> {
+  const proxy = new Server(
+    { name: "devloop-mcp", version: VERSION },
+    { capabilities: { tools: { listChanged: true } } },
+  );
+  const link = new DaemonLink({
+    findOrStart: () => ensureDaemon(),
+    connect: connectToDaemon,
+    onReconnect: () => void proxy.sendToolListChanged().catch(() => {}),
+    log: (m) => log(`shared mode: ${m}`),
+  });
+  await link.start(state);
+
+  const h = daemonProxyHandlers({
+    listTools: () => link.call((c) => c.listTools()),
+    callTool: (params) =>
+      link
+        .call((c, signal) => c.callTool(params, undefined, { signal }))
+        // A tool result the agent reads, not a protocol error: it should decide on a retry.
+        .catch((err) => {
+          if (!(err instanceof DaemonExitedError)) throw err;
+          return { isError: true, content: [{ type: "text" as const, text: err.message }] };
+        }),
+  });
   proxy.setRequestHandler(ListToolsRequestSchema, h.listTools);
   proxy.setRequestHandler(CallToolRequestSchema, (req) => h.callTool(req));
 
@@ -139,9 +302,7 @@ export async function bridgeStdioToDaemon(url: string): Promise<void> {
   const teardown = async () => {
     if (closing) return;
     closing = true;
-    // End our session on the daemon (DELETE) so it can idle out. close() alone doesn't.
-    await transport.terminateSession().catch(() => {});
-    await client.close().catch(() => {});
+    await link.end();
     process.exit(0);
   };
   // The MCP client disconnecting closes our stdin; mirror that into a clean teardown.
@@ -151,5 +312,5 @@ export async function bridgeStdioToDaemon(url: string): Promise<void> {
   process.on("SIGTERM", teardown);
 
   await proxy.connect(new StdioServerTransport());
-  log(`shared mode: bridged to daemon at ${url}`);
+  log(`shared mode: bridged to daemon at ${state.url}`);
 }

@@ -89,7 +89,7 @@ async function main(): Promise<void> {
     else delete process.env.DEVLOOP_DAEMON_SCOPE;
     try {
       const state = await ensureDaemon();
-      await bridgeStdioToDaemon(state.url);
+      await bridgeStdioToDaemon(state);
       return;
     } catch (err) {
       process.stderr.write(

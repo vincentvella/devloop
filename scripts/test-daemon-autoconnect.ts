@@ -5,7 +5,7 @@
  * bridges to it; a second `--shared` launch reuses the SAME daemon (one pid); and
  * `daemon --status` / `daemon --stop` work. Then the default (no flag): two launches in a
  * project dir share ONE per-project daemon, separate from the global one; and a daemon
- * exits once its last session ends. Run: `bun run scripts/test-daemon-autoconnect.ts`
+ * exits once its last session ends; and a bridge reconnects when its daemon dies. Run: `bun run scripts/test-daemon-autoconnect.ts`
  * (headless; needs the dist build — runs `bun run mcp:build` first).
  */
 import { execFileSync, spawnSync } from "node:child_process";
@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const checks: [string, boolean][] = [];
 const check = (name: string, ok: boolean, detail = "") => {
@@ -146,6 +147,51 @@ async function main(): Promise<void> {
   })();
   check("the daemon exits after its last session ends", !!idlePid && !idleAlive, `pid ${idlePid}`);
   if (idleAlive) process.kill(idlePid!, "SIGTERM");
+
+  // 8) The bridge survives its daemon: it reconnects (starting a new one) and replays a
+  //    call that never reached the daemon; a daemon dying mid-call fails that call fast.
+  const RC_HOME = mkdtempSync(join(tmpdir(), "devloop-reconnect-"));
+  const RC_ENV = { ...ENV, DEVLOOP_HOME: RC_HOME, DEVLOOP_HTTP_PORT: "7367" };
+  const RC = realpathSync(mkdtempSync(join(tmpdir(), "devloop-reconnect-project-")));
+  const rcPid = (): number | undefined => {
+    const f = readdirSync(join(RC_HOME, "daemons")).find((x) => x.endsWith(".json"));
+    return f ? JSON.parse(readFileSync(join(RC_HOME, "daemons", f), "utf8")).pid : undefined;
+  };
+  const f = await sharedClient("f", [], RC, RC_ENV);
+  let listChanged = 0;
+  f.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+    listChanged++;
+  });
+  await f.listTools();
+  const rc1 = rcPid()!;
+  process.kill(rc1, "SIGKILL");
+  await new Promise((r) => setTimeout(r, 300));
+  const after = await f.callTool({ name: "get_logs", arguments: {} });
+  const rc2 = rcPid();
+  check(
+    "a call after the daemon died reconnects to a new one",
+    !after.isError && !!rc2 && rc2 !== rc1,
+    `${rc1} → ${rc2}`,
+  );
+  check("the bridge tells the client its tool list may have changed", listChanged > 0);
+  const t0 = Date.now();
+  const midCall = f.callTool({
+    name: "repro",
+    arguments: { action: { kind: "navigate", url: "data:text/html,hi" }, settleMs: 8000 },
+  });
+  await new Promise((r) => setTimeout(r, 2000));
+  process.kill(rc2!, "SIGKILL");
+  const mid = (await midCall) as { isError?: boolean; content: { text?: string }[] };
+  const took = Date.now() - t0;
+  check(
+    "a daemon dying mid-call fails that call fast, as a tool error",
+    !!mid.isError && /exited during this call/.test(mid.content[0]?.text ?? "") && took < 6000,
+    `${took}ms`,
+  );
+  check("the next call works again", !(await f.callTool({ name: "get_logs", arguments: {} })).isError);
+  await f.close().catch(() => {});
+  const rcLast = rcPid();
+  if (rcLast) execFileSync("node", [ENTRY, "daemon", "--stop"], { env: RC_ENV, cwd: RC });
 
   const failed = checks.filter(([, ok]) => !ok).length;
   process.stdout.write(`\n${checks.length - failed}/${checks.length} checks passed\n`);
