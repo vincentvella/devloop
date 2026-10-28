@@ -24,6 +24,13 @@ export interface Entry {
   detail?: ({ image?: string } & NetDetail) | undefined;
 }
 
+/** Where `@expo/hub-client` connects for the live Android screen (cockpit/serveEmu.ts). */
+export interface AndroidStreamInfo {
+  baseUrl: string;
+  token: string;
+  serial: string;
+}
+
 export interface DevStatus {
   running: boolean;
   cmd?: string;
@@ -123,9 +130,8 @@ export interface DevloopApi {
   nativeSystemLogs: (on: boolean) => Promise<void>;
   openAndroid: () => Promise<{ ok: boolean; serial?: string; summary?: string }>;
   closeAndroid: () => Promise<{ ok: boolean }>;
-  androidTap: (x: number, y: number) => Promise<void>;
-  androidText: (text: string) => Promise<void>;
-  androidKey: (key: string) => Promise<void>;
+  /** The live Android stream (serve-emu endpoint + session token + serial), or null when closed. */
+  androidStream: () => Promise<AndroidStreamInfo | null>;
   reload: (hard: boolean) => Promise<void>;
   back: () => Promise<void>;
   forward: () => Promise<void>;
@@ -169,8 +175,7 @@ export interface DevloopApi {
   onMenu: (cb: (action: string) => void) => () => void;
   onPush: (cb: (rows: Entry[]) => void) => () => void;
   onUpdate: (cb: (status: import("../../src/update.ts").UpdateStatus) => void) => () => void;
-  onAndroidFrame: (cb: (base64: string) => void) => () => void;
-  onAndroidSize: (cb: (size: { width: number; height: number }) => void) => () => void;
+  onAndroidStream: (cb: (info: AndroidStreamInfo | null) => void) => () => void;
 }
 
 declare global {

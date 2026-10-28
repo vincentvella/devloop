@@ -1,3 +1,10 @@
+import {
+  DeviceClientProvider,
+  DeviceScreen,
+  displayScreen,
+  useDeviceClient,
+  useDeviceScreenClient,
+} from "@expo/hub-client";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
@@ -32,7 +39,7 @@ import { createRoot } from "react-dom/client";
 import { buildDisplayRows, type DisplayRow, parseOsLog } from "../../src/logModel.ts";
 import { EXTRA_HINTS, keyToAction, prettyAccel, SHORTCUTS } from "../../src/shortcuts.ts";
 import { type UpdateStatus, updateStatusLabel } from "../../src/update.ts";
-import type { Entry, Pane, Project, Step } from "./global";
+import type { AndroidStreamInfo, Entry, Pane, Project, Step } from "./global";
 import { useDevloopStore } from "./store";
 
 const dl = () => window.devloop;
@@ -447,86 +454,69 @@ function LogRow({ row, onZoom }: { row: DisplayRow<Entry>; onZoom: (img: string)
   );
 }
 
-const KEYMAP: Record<string, string> = {
-  Enter: "Enter",
-  Backspace: "Backspace",
-  Tab: "Tab",
-  ArrowUp: "ArrowUp",
-  ArrowDown: "ArrowDown",
-  ArrowLeft: "ArrowLeft",
-  ArrowRight: "ArrowRight",
-  Escape: "Back",
-};
-
 /**
- * Live Android screen mirror (the parallel to serve-sim's iOS preview). Subscribes
- * to `screencap` frames and sets the <img> src IMPERATIVELY — multi-MB PNG data URLs
- * never enter React state, so a 2-3fps stream can't thrash reconciliation (an earlier
- * state-driven version OOM'd the renderer). Clicks/keys map to adb input; a click maps
- * from the rendered <img> rect back to device pixels via the reported `wm size`.
+ * Live Android screen, streamed by serve-emu (scrcpy H.264, see cockpit/serveEmu.ts)
+ * and painted by `@expo/hub-client`'s DeviceScreen, which also sends taps, swipes,
+ * scrolling and typing back over the same socket. The endpoint arrives with
+ * openAndroid, or from androidStream() if the mirror mounts afterwards; the provider's
+ * `key` gives each device/session a fresh connection.
  */
 function AndroidMirror(): ReactNode {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const waitRef = useRef<HTMLDivElement>(null);
-  const sizeRef = useRef<{ width: number; height: number }>({ width: 1080, height: 2400 });
-
+  const [stream, setStream] = useState<AndroidStreamInfo | null>(null);
   useEffect(() => {
-    // Shape the mirror to the AUTHORITATIVE device size (`wm size`), not the screencap
-    // PNG's intrinsic dimensions (which can differ from the real display and stretch the
-    // frame). The stage <div> carries the aspect ratio — divs honor `aspect-ratio`
-    // predictably, unlike a replaced <img> with auto width/height — and the frame fills
-    // it, so the mirror is always the true device shape (and taps map 1:1 to the box).
-    const applyAspect = (s: { width: number; height: number }) => {
-      if (stageRef.current && s.width > 0 && s.height > 0)
-        stageRef.current.style.aspectRatio = `${s.width} / ${s.height}`;
-    };
-    applyAspect(sizeRef.current); // seed with the default until `wm size` arrives
-    const offSize = dl().onAndroidSize((s) => {
-      sizeRef.current = s;
-      applyAspect(s);
-    });
-    const offFrame = dl().onAndroidFrame((b64) => {
-      const img = imgRef.current;
-      if (!img) return;
-      img.src = `data:image/png;base64,${b64}`;
-      if (waitRef.current) waitRef.current.style.display = "none";
-      if (stageRef.current) stageRef.current.style.display = "block";
-    });
+    let live = true;
+    void dl()
+      .androidStream()
+      .then((s) => {
+        if (live) setStream(s);
+      });
+    const off = dl().onAndroidStream(setStream);
     return () => {
-      offSize();
-      offFrame();
+      live = false;
+      off();
     };
   }, []);
-
-  const onClick = (e: React.MouseEvent) => {
-    const el = imgRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return;
-    const { width, height } = sizeRef.current;
-    const x = ((e.clientX - r.left) / r.width) * width;
-    const y = ((e.clientY - r.top) / r.height) * height;
-    void dl().androidTap(x, y);
-  };
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (KEYMAP[e.key]) {
-      e.preventDefault();
-      void dl().androidKey(KEYMAP[e.key]!);
-    } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      void dl().androidText(e.key);
-    }
-  };
   return (
-    <div className="android-mirror" tabIndex={0} onKeyDown={onKeyDown} title="click to tap · type to send keys">
-      <div ref={stageRef} className="android-stage" style={{ display: "none" }}>
-        <img ref={imgRef} className="android-frame" onClick={onClick} draggable={false} />
-      </div>
-      <div ref={waitRef} className="android-waiting">
-        connecting to device…
-      </div>
+    <div className="android-mirror">
+      {stream ? (
+        <DeviceClientProvider
+          key={`${stream.baseUrl}|${stream.serial}`}
+          platform="android"
+          options={{ baseUrl: stream.baseUrl, device: stream.serial, token: stream.token, streamMode: "h264" }}
+        >
+          <AndroidScreen />
+        </DeviceClientProvider>
+      ) : (
+        <div className="android-waiting">connecting to device…</div>
+      )}
     </div>
+  );
+}
+
+/** The device screen at its true aspect ratio, letterboxed in the pane. */
+function AndroidScreen(): ReactNode {
+  const client = useDeviceScreenClient();
+  const { status, error } = useDeviceClient();
+  const screen = displayScreen(client.screen);
+  const streaming = status === "streaming";
+  return (
+    <>
+      <div
+        className="android-stage"
+        data-status={status}
+        style={{
+          ["--ar" as string]: screen ? screen.width / screen.height : 9 / 19.5,
+          visibility: streaming ? "visible" : "hidden",
+        }}
+      >
+        <DeviceScreen client={client} />
+      </div>
+      {!streaming && (
+        <div className="android-waiting">
+          {status === "error" ? `screen stream failed: ${error ?? "unknown error"}` : "connecting to device…"}
+        </div>
+      )}
+    </>
   );
 }
 

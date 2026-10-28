@@ -12,7 +12,6 @@ import {
   parseAdbDevices,
   parseLogcatLine,
   parseUiAutomatorDump,
-  parseWmSize,
   usableSerials,
 } from "../src/adb.ts";
 
@@ -113,10 +112,4 @@ test("parseAdbDevices + usableSerials", () => {
   ]);
   expect(usableSerials(out)).toEqual(["emulator-5554"]);
   expect(parseAdbDevices("List of devices attached\n\n")).toEqual([]);
-});
-
-test("parseWmSize prefers Override over Physical", () => {
-  expect(parseWmSize("Physical size: 1080x2400")).toEqual({ width: 1080, height: 2400 });
-  expect(parseWmSize("Physical size: 1080x2400\nOverride size: 720x1600")).toEqual({ width: 720, height: 1600 });
-  expect(parseWmSize("garbage")).toBeNull();
 });

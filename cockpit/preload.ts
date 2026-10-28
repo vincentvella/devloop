@@ -26,9 +26,7 @@ contextBridge.exposeInMainWorld("devloop", {
   nativeSystemLogs: (on: boolean) => ipcRenderer.invoke("devloop:nativeSystemLogs", on),
   openAndroid: () => ipcRenderer.invoke("devloop:openAndroid"),
   closeAndroid: () => ipcRenderer.invoke("devloop:closeAndroid"),
-  androidTap: (x: number, y: number) => ipcRenderer.invoke("devloop:androidTap", x, y),
-  androidText: (text: string) => ipcRenderer.invoke("devloop:androidText", text),
-  androidKey: (key: string) => ipcRenderer.invoke("devloop:androidKey", key),
+  androidStream: () => ipcRenderer.invoke("devloop:androidStream"),
   devStart: (opts: { cmd?: string; cwd?: string }) => ipcRenderer.invoke("devloop:devStart", opts),
   devStop: () => ipcRenderer.invoke("devloop:devStop"),
   devRestart: () => ipcRenderer.invoke("devloop:devRestart"),
@@ -104,14 +102,9 @@ contextBridge.exposeInMainWorld("devloop", {
     ipcRenderer.on("devloop:update", handler);
     return () => ipcRenderer.removeListener("devloop:update", handler);
   },
-  onAndroidFrame: (cb: (base64: string) => void) => {
-    const handler = (_e: unknown, b64: string) => cb(b64);
-    ipcRenderer.on("devloop:androidFrame", handler);
-    return () => ipcRenderer.removeListener("devloop:androidFrame", handler);
-  },
-  onAndroidSize: (cb: (size: { width: number; height: number }) => void) => {
-    const handler = (_e: unknown, size: { width: number; height: number }) => cb(size);
-    ipcRenderer.on("devloop:androidSize", handler);
-    return () => ipcRenderer.removeListener("devloop:androidSize", handler);
+  onAndroidStream: (cb: (info: unknown) => void) => {
+    const handler = (_e: unknown, info: unknown) => cb(info);
+    ipcRenderer.on("devloop:androidStream", handler);
+    return () => ipcRenderer.removeListener("devloop:androidStream", handler);
   },
 });

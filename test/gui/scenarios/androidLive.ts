@@ -1,71 +1,121 @@
 /**
- * Live (not CI) cockpit check for the Android mirror — needs a booted emulator.
- * Drives the built app: openAndroid → frames flow into the renderer → tap issues →
- * closeAndroid. Run with: node test/gui/scenarios/androidLive.ts
+ * Live (not CI) cockpit check for the Android screen — needs a booted emulator.
+ * Drives the built app like a user: point the pane at the native fixture, pick the
+ * Android target, and wait for serve-emu's H.264 stream to paint in the renderer's
+ * DeviceScreen. Then closes Android and checks scrcpy stopped on the device.
+ * Run with: bun run android:smoke
  */
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { check, launchReady, results } from "../harness.ts";
+import { check, closeWrench, launchReady, NATIVE_FIXTURE, results, setDevConfig } from "../harness.ts";
+
+/** adb from the SDK (this runs under plain node, so it can't import src/androidLog.ts). */
+const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || join(homedir(), "Library", "Android", "sdk");
+const adbBinary = (): string =>
+  existsSync(join(sdk, "platform-tools", "adb")) ? join(sdk, "platform-tools", "adb") : "adb";
+
+/** scrcpy server processes on the device (serve-emu starts one per stream). */
+const scrcpyOnDevice = (): number => {
+  try {
+    const ps = execFileSync(adbBinary(), ["shell", "ps", "-A", "-o", "ARGS"], { encoding: "utf8" });
+    return ps.split("\n").filter((l) => l.includes("com.genymobile.scrcpy")).length;
+  } catch {
+    return -1;
+  }
+};
 
 const home = mkdtempSync(join(tmpdir(), "devloop-and-"));
 const userData = mkdtempSync(join(tmpdir(), "devloop-and-ud-"));
 const { app, win } = await launchReady(home, userData);
 try {
-  // Count frames as they arrive (set the listener up before opening).
-  await win.evaluate(() => {
-    (window as any).__frames = 0;
-    (window as any).devloop.onAndroidFrame(() => (window as any).__frames++);
-  });
-
   const env = await win.evaluate(() => (window as any).devloop.androidEnv());
   check("androidEnv ready (adb + booted device)", !!env?.ready, env?.summary);
 
-  const open = await win.evaluate(() => (window as any).devloop.openAndroid());
-  check("openAndroid ok", !!open?.ok, open?.serial ? `serial=${open.serial}` : open?.summary);
+  // A native pane, then the Android target (switchTarget → openAndroid → stream endpoint).
+  await setDevConfig(win, "", NATIVE_FIXTURE);
+  await closeWrench(win);
+  const sw = win.locator(".target-switch");
+  await sw.waitFor({ timeout: 20_000 });
+  await sw.locator("button.seg", { hasText: "Android" }).click();
 
-  await win.waitForTimeout(3000); // ~3s of screencap polling (~3fps)
-  const frames = await win.evaluate(() => (window as any).__frames as number);
-  check("mirror frames received in renderer", frames > 0, `${frames} frames`);
+  const stage = win.locator('.android-stage[data-status="streaming"]');
+  const t0 = Date.now();
+  const streaming = await stage
+    .waitFor({ timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  check("DeviceScreen reaches `streaming`", streaming, streaming ? `${Date.now() - t0}ms` : "timed out");
 
-  // A tap through the bridge (coords in device px) must not throw.
-  let tapOk = true;
-  try {
-    await win.evaluate(() => (window as any).devloop.androidTap(540, 1200));
-  } catch {
-    tapOk = false;
-  }
-  check("androidTap issues without error", tapOk);
-
-  // #17 on Android: a fetch in the app's JS should become a network row via the
-  // injected XHR interceptor (the same Hermes/CDP path as iOS — see reactNativeNet.ts).
-  await win.evaluate(() =>
-    (window as any).devloop.repro({
-      action: {
-        kind: "eval",
-        expression: "fetch('https://example.com/').then(function(r){return r.text()}).catch(function(){})",
-      },
-      settleMs: 1500,
-    }),
-  );
-  let netRow: { line?: string; detail?: { mimeType?: string; durationMs?: number } } | undefined;
-  for (let i = 0; i < 12 && !netRow; i++) {
-    const rows = (await win.evaluate(() => (window as any).devloop.getLogs({ stream: "network", limit: 50 }))) as {
-      line?: string;
-      detail?: { mimeType?: string; durationMs?: number };
-    }[];
-    netRow = rows.find((e) => e.line?.includes("example.com"));
-    if (!netRow) await win.waitForTimeout(400);
-  }
+  // Real frames painted: sample the stage's pixels from a main-process capture.
+  await win.waitForTimeout(1500);
+  const box = await stage.boundingBox();
+  const painted = box
+    ? await app.evaluate(
+        async ({ BrowserWindow }, rect) => {
+          const img = await BrowserWindow.getAllWindows()[0]!.webContents.capturePage(rect);
+          const { width, height } = img.getSize();
+          const px = img.toBitmap();
+          const colours = new Set<number>();
+          let lit = 0;
+          let n = 0;
+          for (let y = 0; y < height; y += 4)
+            for (let x = 0; x < width; x += 4) {
+              const i = (y * width + x) * 4;
+              const [b, g, r] = [px[i]!, px[i + 1]!, px[i + 2]!];
+              n++;
+              if (r + g + b > 60) lit++;
+              colours.add(((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4));
+            }
+          return { colours: colours.size, litPct: Math.round((100 * lit) / Math.max(n, 1)) };
+        },
+        { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) },
+      )
+    : null;
   check(
-    "RN network request captured on Android (XHR interceptor)",
-    !!netRow,
-    netRow
-      ? `${netRow.line} (${netRow.detail?.mimeType ?? "?"}, ${netRow.detail?.durationMs ?? "?"}ms)`
-      : "no network row",
+    "device frames painted in the cockpit",
+    !!painted && painted.colours > 20 && painted.litPct > 2,
+    painted ? `${painted.colours} colours, ${painted.litPct}% lit` : "no stage",
   );
+  check("scrcpy is running on the device while streaming", scrcpyOnDevice() > 0);
+  if (process.env.ANDROID_SMOKE_SHOT) await win.screenshot({ path: process.env.ANDROID_SMOKE_SHOT });
+
+  // #17 on Android: opt-in (ANDROID_SMOKE_RN=1), since it runs a fetch inside whatever
+  // React Native app Metro (:8081) has attached — possibly one you're working in.
+  if (process.env.ANDROID_SMOKE_RN === "1") {
+    // #17 on Android: a fetch in the app's JS should become a network row via the
+    // injected XHR interceptor (the same Hermes/CDP path as iOS — see reactNativeNet.ts).
+    await win.evaluate(() =>
+      (window as any).devloop.repro({
+        action: {
+          kind: "eval",
+          expression: "fetch('https://example.com/').then(function(r){return r.text()}).catch(function(){})",
+        },
+        settleMs: 1500,
+      }),
+    );
+    let netRow: { line?: string; detail?: { mimeType?: string; durationMs?: number } } | undefined;
+    for (let i = 0; i < 12 && !netRow; i++) {
+      const rows = (await win.evaluate(() => (window as any).devloop.getLogs({ stream: "network", limit: 50 }))) as {
+        line?: string;
+        detail?: { mimeType?: string; durationMs?: number };
+      }[];
+      netRow = rows.find((e) => e.line?.includes("example.com"));
+      if (!netRow) await win.waitForTimeout(400);
+    }
+    check(
+      "RN network request captured on Android (XHR interceptor)",
+      !!netRow,
+      netRow
+        ? `${netRow.line} (${netRow.detail?.mimeType ?? "?"}, ${netRow.detail?.durationMs ?? "?"}ms)`
+        : "no network row",
+    );
+  }
 
   await win.evaluate(() => (window as any).devloop.closeAndroid());
+  await win.waitForTimeout(1500);
+  check("closing Android stops scrcpy on the device", scrcpyOnDevice() === 0, `${scrcpyOnDevice()} left`);
   await app.close();
 } finally {
   await app.close().catch(() => {});
