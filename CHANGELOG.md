@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.13.0] - 2026-10-28
+
 ### Changed
 - **A session now survives its daemon going away.** Before, if the project's daemon was stopped, crashed or idled out, every devloop tool in that session failed with `fetch failed` until you ran `/mcp` to reconnect. The bridge now reconnects on the next call: it finds the project's daemon, or starts a new one, and replays the call. This also covers a daemon that restarted, or that dropped the session as stale. Claude Code is told the tool list may have changed, since the new daemon can be a newer version.
 - If the daemon exits while a call is running, that call now fails within about a second with a tool error saying it may or may not have run, instead of hanging for 60 seconds. It isn't replayed automatically, since it may have partly run (a click, a navigation). The next call reconnects.
@@ -412,7 +416,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/vincentvella/devloop/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/vincentvella/devloop/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/vincentvella/devloop/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/vincentvella/devloop/compare/v0.11.1...v0.11.2
