@@ -49,6 +49,8 @@ jobs:
         run: bun run test-smoke.ts
       - name: Daemon test (HTTP/SSE MCP, shared backend)
         run: bun run test:daemon
+      - name: Daemon auto-connect (stdio bridge, per-project scope, idle exit)
+        run: bun run test:autoconnect
       - name: mcporter toolcall smoke (real CLI path over HTTP)
         run: bun run test:mcporter
 
