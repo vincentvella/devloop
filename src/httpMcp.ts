@@ -10,6 +10,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createServer, type Server as HttpServer, type IncomingMessage } from "node:http";
+import type { AddressInfo } from "node:net";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -120,21 +121,45 @@ export async function startHttpMcp(opts: {
     return transport.handleRequest(req, res);
   });
 
-  let chosen = opts.port;
   const host = opts.host ?? "127.0.0.1";
-  const tries = opts.tries ?? 10;
-  for (let p = opts.port; p < opts.port + tries; p++) {
-    const bound = await new Promise<boolean>((resolve, reject) => {
-      const onErr = (err: NodeJS.ErrnoException) => (err.code === "EADDRINUSE" ? resolve(false) : reject(err));
-      server.once("error", onErr);
-      server.listen(p, host, () => {
-        server.removeListener("error", onErr);
-        chosen = p;
-        resolve(true);
-      });
-    });
-    if (bound) break;
-  }
-  opts.log?.(`MCP over HTTP listening on http://${host}:${chosen}/mcp`);
-  return { server, port: chosen };
+  const port = await listenOnFreePort(server, opts.port, host, opts.tries ?? 10, opts.log);
+  opts.log?.(`MCP over HTTP listening on http://${host}:${port}/mcp`);
+  return { server, port };
+}
+
+/** Try one port: true once listening, false if it's taken. Leaves no listeners behind. */
+function tryListen(server: HttpServer, port: number, host: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const onListening = () => {
+      server.removeListener("error", onError);
+      resolve(true);
+    };
+    const onError = (err: NodeJS.ErrnoException) => {
+      server.removeListener("listening", onListening);
+      if (err.code === "EADDRINUSE") resolve(false);
+      else reject(err);
+    };
+    server.once("listening", onListening);
+    server.once("error", onError);
+    server.listen(port, host);
+  });
+}
+
+/**
+ * Bind `port`, else the next free one within `tries`, else any free port the OS picks.
+ * Returns the port actually bound. Every caller advertises this port (the daemon's state
+ * file, the cockpit's MCP URL), so it must never be one that another process holds.
+ */
+export async function listenOnFreePort(
+  server: HttpServer,
+  port: number,
+  host: string,
+  tries: number,
+  log?: (m: string) => void,
+): Promise<number> {
+  const bound = () => (server.address() as AddressInfo).port; // real port, also when asked for 0
+  for (let p = port; p < port + tries; p++) if (await tryListen(server, p, host)) return bound();
+  log?.(`ports ${port}–${port + tries - 1} are all in use; binding a free port instead`);
+  await tryListen(server, 0, host);
+  return bound();
 }
