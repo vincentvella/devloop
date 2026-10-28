@@ -7,10 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.12.0] - 2026-10-27
+
 ### Changed
 - **The cockpit's Android screen is now a real live stream.** It uses Expo's serve-emu (scrcpy H.264, up to 60fps) with `@expo/hub-client`'s device view, replacing the `adb screencap` mirror that polled about 3 frames a second. Taps, swipes, scrolling and typing go over the same connection instead of one `adb shell input` call each. It works on emulators and USB devices and needs only `adb`: the scrcpy server ships inside the app, checked against scrcpy's published checksum, so nothing downloads at runtime.
 - The stream server only listens on `127.0.0.1` and needs a per-session token that only the cockpit window holds, so other local pages can't see or drive the device.
 - Closing the Android target stops the scrcpy server on the device.
+
+### Security
+- **zod moves to 4.6.7**, clearing GHSA-mrhx-c7xc-m3w5 (every zod below 4.6.6). It reached the published package through `@modelcontextprotocol/sdk` (now ^1.32.2) and Puppeteer's `chromium-bidi`, so Puppeteer moves to ^25.16.0, which drives Chrome 156.
+- The marketing site's `dompurify` (via mermaid) is pinned to ^3.4.17 for GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr. This is site-only; the published package is unaffected.
+
+### Dependencies
+- `serve-sim` 0.1.48 (iOS simulator streaming in the cockpit) and `electron-updater` ^6.8.11. Remotion tooling updated to ^4.0.538 (dev only).
 
 ## [0.11.2] - 2026-10-20
 
@@ -387,7 +398,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/vincentvella/devloop/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/vincentvella/devloop/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/vincentvella/devloop/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/vincentvella/devloop/compare/v0.10.2...v0.11.0
