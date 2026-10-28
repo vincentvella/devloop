@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- _Nothing yet._
+
+## [0.12.1] - 2026-10-28
+
 ### Fixed
 - **Auto-spawned daemons now actually exit when idle.** The 10-minute idle exit almost never fired, so daemons (and their Chrome) piled up, one per project, for days. Three gaps are closed:
   - A session's bridge now ends its daemon session when it exits. The MCP SDK's `close()` doesn't send the DELETE, so every session ever opened still counted as connected.
   - A session whose client was killed (no DELETE at all) is closed once its event stream has been gone for 30 seconds.
   - The countdown starts when the daemon starts, so a daemon whose spawning session never connected still exits.
 - **A daemon or cockpit no longer claims a port another devloop already holds.** When 7333 and the next nine ports were all taken (for example by ten projects' daemons at once), startup gave up but still reported 7333. A daemon then wrote that URL to its state file, so its sessions bridged into another project's daemon, with that project's browser and dev server. It now binds a free port the OS picks and reports that one. The failed attempts also no longer leak `listening` handlers.
+
+### Tooling
+- CI now runs the daemon auto-connect suite, including a check that a daemon exits after its last session ends.
 
 ## [0.12.0] - 2026-10-27
 
@@ -403,7 +410,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/release pipeline that builds all installers and publishes via GitHub Actions.
 - Devloop branding: logo, icon, and wordmark.
 
-[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/vincentvella/devloop/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/vincentvella/devloop/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/vincentvella/devloop/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/vincentvella/devloop/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/vincentvella/devloop/compare/v0.11.0...v0.11.1
