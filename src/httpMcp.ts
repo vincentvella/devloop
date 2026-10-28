@@ -44,6 +44,49 @@ export function readBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
+/**
+ * Closes sessions whose client has gone away without a DELETE (killed, crashed, or an
+ * SDK client that only `close()`d). An MCP client holds a GET SSE stream open for its
+ * session's lifetime and reconnects it within seconds if it drops, so a session with no
+ * open stream for `graceMs` is dead. Sessions that never opened a stream are left alone.
+ */
+export class StreamReaper {
+  private readonly open = new Map<string, number>();
+  private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  constructor(
+    private readonly graceMs: number,
+    private readonly expire: (sessionId: string) => void,
+  ) {}
+
+  opened(id: string): void {
+    clearTimeout(this.timers.get(id));
+    this.timers.delete(id);
+    this.open.set(id, (this.open.get(id) ?? 0) + 1);
+  }
+
+  closed(id: string): void {
+    const was = this.open.get(id);
+    if (was === undefined) return; // already forgotten (its stream closes after a DELETE)
+    const n = was - 1;
+    this.open.set(id, n);
+    if (n > 0 || this.timers.has(id)) return;
+    const timer = setTimeout(() => {
+      this.forget(id);
+      this.expire(id);
+    }, this.graceMs);
+    timer.unref?.();
+    this.timers.set(id, timer);
+  }
+
+  /** The session ended on its own (DELETE, or expired): drop its bookkeeping. */
+  forget(id: string): void {
+    clearTimeout(this.timers.get(id));
+    this.timers.delete(id);
+    this.open.delete(id);
+  }
+}
+
 export interface HttpMcp {
   server: HttpServer;
   /** The port actually bound (may differ from the requested one if it was taken). */
@@ -68,8 +111,14 @@ export async function startHttpMcp(opts: {
   log?: (m: string) => void;
   /** Called with the live session count whenever a session opens or closes (for idle-shutdown). */
   onSessionsChanged?: (count: number) => void;
+  /** How long a session may go without its GET stream before it's closed as dead (default 30s). */
+  streamGraceMs?: number;
 }): Promise<HttpMcp> {
   const transports = new Map<string, StreamableHTTPServerTransport>();
+  const reaper = new StreamReaper(opts.streamGraceMs ?? 30_000, (id) => {
+    opts.log?.(`session ${id.slice(0, 8)} lost its client; closing it`);
+    void transports.get(id)?.close();
+  });
 
   const server = createServer(async (req, res) => {
     if (!req.url?.startsWith("/mcp")) {
@@ -100,7 +149,9 @@ export async function startHttpMcp(opts: {
           },
         });
         transport.onclose = () => {
-          if (transport!.sessionId) transports.delete(transport!.sessionId);
+          const id = transport!.sessionId;
+          if (!id || !transports.delete(id)) return; // already closed (DELETE, then reaped)
+          reaper.forget(id);
           opts.onSessionsChanged?.(transports.size);
         };
         await opts.buildServer().connect(transport);
@@ -117,6 +168,10 @@ export async function startHttpMcp(opts: {
     if (!transport) {
       res.statusCode = 400;
       return res.end("invalid session");
+    }
+    if (req.method === "GET" && sid) {
+      reaper.opened(sid);
+      res.once("close", () => reaper.closed(sid));
     }
     return transport.handleRequest(req, res);
   });

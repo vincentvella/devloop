@@ -62,22 +62,23 @@ export async function runDaemon(): Promise<void> {
 
   // Optional idle-shutdown: exit once the last client disconnects (off by default).
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const onSessionsChanged = (count: number) => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = undefined;
+    }
+    if (shouldScheduleIdleShutdown(cfg.idleMs, count)) {
+      log(`no clients connected — idle shutdown in ${cfg.idleMs}ms`);
+      idleTimer = setTimeout(() => void shutdown(), cfg.idleMs);
+    }
+  };
 
   const { server, port: bound } = await startHttpMcp({
     buildServer: () => buildMcpServer("devloop-daemon"),
     port: cfg.port,
     host: cfg.host,
     log,
-    onSessionsChanged: (count) => {
-      if (idleTimer) {
-        clearTimeout(idleTimer);
-        idleTimer = undefined;
-      }
-      if (shouldScheduleIdleShutdown(cfg.idleMs, count)) {
-        log(`no clients connected — idle shutdown in ${cfg.idleMs}ms`);
-        idleTimer = setTimeout(() => void shutdown(), cfg.idleMs);
-      }
-    },
+    onSessionsChanged,
   });
 
   // Advertise ourselves so stdio clients (and --status/--stop) can find us.
@@ -89,6 +90,7 @@ export async function runDaemon(): Promise<void> {
     scope: daemonScope(),
   });
   log("daemon ready — connect MCP clients via HTTP/SSE at /mcp");
+  onSessionsChanged(0); // start counting now: the session that spawned us may never connect
 
   const shutdown = async () => {
     if (idleTimer) clearTimeout(idleTimer);
