@@ -127,7 +127,8 @@ export function daemonProxyHandlers(client: Pick<Client, "listTools" | "callTool
 
 export async function bridgeStdioToDaemon(url: string): Promise<void> {
   const client = new Client({ name: "devloop-bridge", version: VERSION }, { capabilities: {} });
-  await client.connect(new StreamableHTTPClientTransport(new URL(url)));
+  const transport = new StreamableHTTPClientTransport(new URL(url));
+  await client.connect(transport);
 
   const proxy = new Server({ name: "devloop-mcp", version: VERSION }, { capabilities: { tools: {} } });
   const h = daemonProxyHandlers(client);
@@ -138,7 +139,9 @@ export async function bridgeStdioToDaemon(url: string): Promise<void> {
   const teardown = async () => {
     if (closing) return;
     closing = true;
-    await client.close().catch(() => {}); // DELETE the session on the daemon
+    // End our session on the daemon (DELETE) so it can idle out. close() alone doesn't.
+    await transport.terminateSession().catch(() => {});
+    await client.close().catch(() => {});
     process.exit(0);
   };
   // The MCP client disconnecting closes our stdin; mirror that into a clean teardown.

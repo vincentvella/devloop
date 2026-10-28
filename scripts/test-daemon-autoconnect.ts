@@ -4,7 +4,8 @@
  * Proves: a `--shared` stdio launch with no daemon running auto-spawns one and
  * bridges to it; a second `--shared` launch reuses the SAME daemon (one pid); and
  * `daemon --status` / `daemon --stop` work. Then the default (no flag): two launches in a
- * project dir share ONE per-project daemon, separate from the global one. Run: `bun run scripts/test-daemon-autoconnect.ts`
+ * project dir share ONE per-project daemon, separate from the global one; and a daemon
+ * exits once its last session ends. Run: `bun run scripts/test-daemon-autoconnect.ts`
  * (headless; needs the dist build — runs `bun run mcp:build` first).
  */
 import { execFileSync, spawnSync } from "node:child_process";
@@ -35,8 +36,8 @@ const readPid = (): number | undefined => {
   }
 };
 
-async function sharedClient(name: string, args = ["--shared"], cwd?: string): Promise<Client> {
-  const transport = new StdioClientTransport({ command: "node", args: [ENTRY, ...args], env: ENV, cwd });
+async function sharedClient(name: string, args = ["--shared"], cwd?: string, env = ENV): Promise<Client> {
+  const transport = new StdioClientTransport({ command: "node", args: [ENTRY, ...args], env, cwd });
   const client = new Client({ name, version: "0" }, { capabilities: {} });
   await client.connect(transport);
   return client;
@@ -122,6 +123,29 @@ async function main(): Promise<void> {
   check("3 simultaneous launches started exactly one daemon", daemons.length === 1, `${daemons.length} daemon(s)`);
   await Promise.all(racers.map((r) => r.close().catch(() => {})));
   execFileSync("node", [ENTRY, "daemon", "--stop"], { env: ENV, cwd: RACE });
+
+  // 7) An auto-spawned daemon exits once its last session ends (here a 2s idle limit).
+  const IDLE_HOME = mkdtempSync(join(tmpdir(), "devloop-idle-"));
+  const IDLE_ENV = { ...ENV, DEVLOOP_HOME: IDLE_HOME, DEVLOOP_HTTP_PORT: "7365", DEVLOOP_DAEMON_IDLE_MS: "2000" };
+  const IDLE = realpathSync(mkdtempSync(join(tmpdir(), "devloop-idle-project-")));
+  const e = await sharedClient("e", [], IDLE, IDLE_ENV);
+  await e.listTools();
+  const idleFiles = readdirSync(join(IDLE_HOME, "daemons")).filter((f) => f.endsWith(".json"));
+  const idlePid: number | undefined = idleFiles[0]
+    ? JSON.parse(readFileSync(join(IDLE_HOME, "daemons", idleFiles[0]), "utf8")).pid
+    : undefined;
+  await e.close().catch(() => {});
+  await new Promise((r) => setTimeout(r, 5000));
+  const idleAlive = (() => {
+    try {
+      process.kill(idlePid!, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  check("the daemon exits after its last session ends", !!idlePid && !idleAlive, `pid ${idlePid}`);
+  if (idleAlive) process.kill(idlePid!, "SIGTERM");
 
   const failed = checks.filter(([, ok]) => !ok).length;
   process.stdout.write(`\n${checks.length - failed}/${checks.length} checks passed\n`);

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { listenOnFreePort, readBody } from "../src/httpMcp.ts";
+import { listenOnFreePort, readBody, StreamReaper } from "../src/httpMcp.ts";
 
 /** A minimal IncomingMessage stand-in: emit data/end/error, track destroy(). */
 function mockReq(): { req: IncomingMessage; destroyed: () => boolean } {
@@ -95,4 +95,46 @@ test("listenOnFreePort binds an OS-chosen port when the whole range is taken, ne
     server.close();
     held.close();
   }
+});
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+test("StreamReaper expires a session once its stream has been gone for the grace period", async () => {
+  const expired: string[] = [];
+  const r = new StreamReaper(20, (id) => expired.push(id));
+  r.opened("a");
+  r.closed("a");
+  expect(expired).toEqual([]); // not yet: the client may be reconnecting
+  await sleep(40);
+  expect(expired).toEqual(["a"]);
+});
+
+test("StreamReaper keeps a session whose client reconnects within the grace period", async () => {
+  const expired: string[] = [];
+  const r = new StreamReaper(30, (id) => expired.push(id));
+  r.opened("a");
+  r.closed("a");
+  await sleep(10);
+  r.opened("a"); // the SDK client's SSE reconnect
+  await sleep(50);
+  expect(expired).toEqual([]);
+});
+
+test("StreamReaper waits for the last of several streams, and forget() cancels", async () => {
+  const expired: string[] = [];
+  const r = new StreamReaper(20, (id) => expired.push(id));
+  r.opened("a");
+  r.opened("a");
+  r.closed("a");
+  await sleep(40);
+  expect(expired).toEqual([]); // one stream still open
+  r.closed("a");
+  r.forget("a"); // e.g. the client DELETEd its session meanwhile
+  r.opened("b");
+  r.closed("b");
+  r.opened("c");
+  r.forget("c"); // DELETEd: its stream closes afterwards, which must not expire it again
+  r.closed("c");
+  await sleep(40);
+  expect(expired).toEqual(["b"]);
 });
