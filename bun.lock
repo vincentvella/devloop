@@ -5,7 +5,7 @@
     "": {
       "name": "devloop-mcp",
       "dependencies": {
-        "@expo/hub-client": "1.8.0",
+        "@expo/hub-client": "1.8.1",
         "@jridgewell/trace-mapping": "^0.3.31",
         "expo-device-hub": "0.18.0",
         "puppeteer": "^25.16.0",
@@ -109,7 +109,7 @@
 
     "@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
 
-    "@expo/hub-client": ["@expo/hub-client@1.8.0", "", { "dependencies": { "use-sync-external-store": "^1.7.0" }, "peerDependencies": { "react": ">=18.0.0" } }, "sha512-I9JokBdOrC8+GYvlS6krYaqoKYYvmOgMfD+VieLgDqSpJNr4z5O8t9hpLaz7zg32+lFSQ2Mrta7OZoC2OEa/dw=="],
+    "@expo/hub-client": ["@expo/hub-client@1.8.1", "", { "dependencies": { "use-sync-external-store": "^1.7.0" }, "peerDependencies": { "react": ">=18.0.0" } }, "sha512-YTNbbYl5YI9mBt5LRkC/nL/c47OhoBXfHDTEJISkmdd2Ojth39Yq7kvTsR71c9TJ6HMn92RrKta0fwfxRzufHA=="],
 
     "@fastify/busboy": ["@fastify/busboy@3.2.4", "", {}, "sha512-lQS8xcXT54rdJb+wlG/Q7SMSdtkZEpLPHooSDUZyyZm9LJD7X1kONPhVoPaHq+dsPtWUGGLIz9gBNhs9qKbylw=="],
 
